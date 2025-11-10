@@ -1,3 +1,4 @@
+// app/user/certificates/page.tsx
 "use client";
 
 import { useState } from "react";
@@ -105,14 +106,12 @@ export default function UserCertificates() {
 
   const handleDownload = (certificateId: number) => {
     console.log(`Downloading certificate ${certificateId}`);
+    // Logic untuk download sertifikat
   };
 
   const handleShare = (certificateId: number) => {
     console.log(`Sharing certificate ${certificateId}`);
-  };
-
-  const handleVerify = (certificateCode: string) => {
-    console.log(`Verifying certificate ${certificateCode}`);
+    // Logic untuk share sertifikat
   };
 
   return (
@@ -226,7 +225,7 @@ export default function UserCertificates() {
                     <Button
                       size="sm"
                       onClick={() => handleDownload(cert.id)}
-                      className="bg-[#005EB8] hover:bg-[#004A93]"
+                      className="bg-[#005EB8] hover:bg-[#004A93] w-full"
                     >
                       <Download className="h-4 w-4" />
                     </Button>
@@ -234,16 +233,19 @@ export default function UserCertificates() {
                       size="sm"
                       variant="outline"
                       onClick={() => handleShare(cert.id)}
+                      className="w-full"
                     >
                       <Share className="h-4 w-4" />
                     </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleVerify(cert.certificateCode)}
-                    >
-                      <Eye className="h-4 w-4" />
-                    </Button>
+                    <Link href={`/user/certificates/${cert.id}`} className="w-full">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="w-full"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                    </Link>
                   </div>
 
                   <div className="pt-2">

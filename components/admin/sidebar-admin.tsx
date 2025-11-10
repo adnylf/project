@@ -1,58 +1,70 @@
-// SidebarUser.tsx
+// SidebarAdmin.tsx
 'use client';
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { 
   X, 
-  Menu,
-  Home,
-  LayoutGrid,
-  UserCircle,
-  Settings,
-  CreditCard,
-  FileCheck
+  Menu, 
+  Home, 
+  BookOpen, // Untuk Courses
+  BarChart3, // Untuk Reports
+  Users,
+  Users2, // Untuk Mentors
+  CreditCard, // Untuk Transactions
+  Award, // Untuk Certificates
+  Settings
 } from 'lucide-react';
 
 const menuItems = [
   {
     label: 'Dashboard',
     icon: Home,
-    link: '/user/dashboard',
+    link: '/admin/dashboard',
   },
   {
     label: 'Courses',
-    icon: LayoutGrid,
-    link: '/user/courses',
+    icon: BookOpen,
+    link: '/admin/courses',
+  },
+  {
+    label: 'Reports',
+    icon: BarChart3,
+    link: '/admin/reports',
+  },
+  {
+    label: 'Users',
+    icon: Users,
+    link: '/admin/users',
+  },
+  {
+    label: 'Mentors',
+    icon: Users2,
+    link: '/admin/mentors',
+  },
+  {
+    label: 'Transactions',
+    icon: CreditCard,
+    link: '/admin/transactions',
   },
   {
     label: 'Certificates',
-    icon: FileCheck,
-    link: '/user/certificates',
-  },
-  {
-    label: 'Profile',
-    icon: UserCircle,
-    link: '/user/profile',
+    icon: Award,
+    link: '/admin/certificates',
   },
   {
     label: 'Settings',
     icon: Settings,
-    link: '/user/settings',
-  },
-  {
-    label: 'Transaction',
-    icon: CreditCard,
-    link: '/user/transaction',
+    link: '/admin/settings',
   },
 ];
 
-interface SidebarUserProps {
+interface SidebarAdminProps {
   isOpen: boolean;
   toggleSidebar: () => void;
 }
 
-export default function SidebarUser({ isOpen, toggleSidebar }: SidebarUserProps) {
+export default function SidebarAdmin({ isOpen, toggleSidebar }: SidebarAdminProps) {
   const pathname = usePathname();
 
   return (
@@ -74,7 +86,7 @@ export default function SidebarUser({ isOpen, toggleSidebar }: SidebarUserProps)
           {/* Header Sidebar - hanya muncul ketika sidebar terbuka */}
           {isOpen && (
             <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700 h-16">
-              <span className="text-xl font-bold text-gray-900 dark:text-white">Menu</span>
+              <span className="text-xl font-bold text-gray-900 dark:text-white">Admin Menu</span>
               <button
                 onClick={toggleSidebar}
                 className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"

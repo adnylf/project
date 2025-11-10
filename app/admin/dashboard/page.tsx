@@ -1,303 +1,410 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Users, BookOpen, DollarSign, TrendingUp, Award, UserCheck, MoveVertical as MoreVertical } from 'lucide-react';
+import {
+  Users,
+  UserCheck,
+  BookOpen,
+  BarChart3,
+  TrendingUp,
+  Eye,
+  MoreHorizontal,
+  Search,
+  Download
+} from 'lucide-react';
+import AdminLayout from '@/components/admin/admin-layout';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { Input } from '@/components/ui/input';
 
-const recentUsers = [
-  { id: 1, name: 'Ahmad Hidayat', email: 'ahmad@email.com', role: 'Siswa', status: 'Aktif', joined: '2024-01-15' },
-  { id: 2, name: 'Sarah Putri', email: 'sarah@email.com', role: 'Mentor', status: 'Aktif', joined: '2024-01-14' },
-  { id: 3, name: 'Budi Santoso', email: 'budi@email.com', role: 'Siswa', status: 'Aktif', joined: '2024-01-13' },
-  { id: 4, name: 'Linda Wijaya', email: 'linda@email.com', role: 'Mentor', status: 'Pending', joined: '2024-01-12' },
+// Data dummy
+const platformStats = {
+  totalUsers: 12580,
+  totalMentors: 245,
+  activeCourses: 189,
+  totalRevenue: 1250000000,
+  newUsersThisMonth: 324,
+  pendingMentors: 12,
+  pendingCourses: 8
+};
+
+const popularCourses = [
+  {
+    id: 1,
+    title: 'Dasar-Dasar Pemrograman Web',
+    mentor: 'Ahmad Hidayat',
+    students: 1250,
+    revenue: 15000000,
+    rating: 4.8,
+    status: 'active',
+    category: 'Programming'
+  },
+  {
+    id: 2,
+    title: 'JavaScript Advanced',
+    mentor: 'Sarah Johnson',
+    students: 890,
+    revenue: 12000000,
+    rating: 4.7,
+    status: 'active',
+    category: 'Programming'
+  },
+  {
+    id: 3,
+    title: 'UI/UX Design Fundamentals',
+    mentor: 'Maria Garcia',
+    students: 650,
+    revenue: 9500000,
+    rating: 4.9,
+    status: 'active',
+    category: 'Design'
+  },
+  {
+    id: 4,
+    title: 'Python Data Science',
+    mentor: 'David Lee',
+    students: 780,
+    revenue: 11200000,
+    rating: 4.8,
+    status: 'active',
+    category: 'Programming'
+  },
+  {
+    id: 5,
+    title: 'Mobile App Development',
+    mentor: 'John Smith',
+    students: 420,
+    revenue: 6800000,
+    rating: 4.6,
+    status: 'active',
+    category: 'Programming'
+  }
 ];
 
-const recentCourses = [
-  { id: 1, title: 'Web Development Basics', mentor: 'Dr. Ahmad Fauzi', students: 1250, status: 'Aktif' },
-  { id: 2, title: 'Graphic Design 101', mentor: 'Sarah Putri', students: 890, status: 'Aktif' },
-  { id: 3, title: 'Digital Marketing', mentor: 'Maya Kusuma', students: 1500, status: 'Review' },
+const recentActivities = [
+  {
+    id: 1,
+    user: 'Ahmad Fauzi',
+    action: 'mendaftar kursus',
+    course: 'Web Development Basics',
+    time: '2 jam yang lalu'
+  },
+  {
+    id: 2,
+    mentor: 'Sarah Johnson',
+    action: 'membuat kursus baru',
+    course: 'Advanced React Patterns',
+    time: '4 jam yang lalu'
+  },
+  {
+    id: 3,
+    user: 'Maria Chen',
+    action: 'menyelesaikan kursus',
+    course: 'UI/UX Design Fundamentals',
+    time: '5 jam yang lalu'
+  },
+  {
+    id: 4,
+    mentor: 'David Lee',
+    action: 'mengupdate kursus',
+    course: 'Python Data Science',
+    time: '1 hari yang lalu'
+  },
+  {
+    id: 5,
+    user: 'John Doe',
+    action: 'memberikan review',
+    course: 'JavaScript Advanced',
+    time: '1 hari yang lalu'
+  }
 ];
 
 export default function AdminDashboard() {
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('id-ID', {
+      style: 'currency',
+      currency: 'IDR',
+      minimumFractionDigits: 0,
+    }).format(amount);
+  };
+
+  const formatNumber = (num: number) => {
+    if (num >= 1000000) {
+      return (num / 1000000).toFixed(1) + 'jt';
+    } else if (num >= 1000) {
+      return (num / 1000).toFixed(1) + 'k';
+    }
+    return num.toString();
+  };
+
+  const getStatusBadge = (status: string) => {
+    if (status === 'active') {
+      return <Badge className="bg-[#008A00]">Aktif</Badge>;
+    }
+    return <Badge>Unknown</Badge>;
+  };
+
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-8 animate-fadeIn">
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-            Dashboard Admin
-          </h1>
-          <p className="text-gray-600 dark:text-gray-400">
-            Kelola platform dan pantau aktivitas sistem
-          </p>
+    <AdminLayout>
+      <div className="space-y-8">
+        {/* Header Section */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 animate-fadeIn">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
+              Admin Dashboard
+            </h1>
+            <p className="text-gray-600 dark:text-gray-400">
+              Ringkasan aktivitas platform: user, mentor, kursus, dan pendapatan
+            </p>
+          </div>
+          <div className="flex gap-3">
+            <Button variant="outline" className="border-gray-300 dark:border-gray-600">
+              <Download className="h-4 w-4 mr-2" />
+              Export Report
+            </Button>
+          </div>
         </div>
 
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <Card className="stat-card animate-scaleIn">
+        {/* Stats Cards */}
+        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 animate-scaleIn">
             <CardContent className="p-6">
               <div className="flex items-center justify-between mb-4">
-                <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                  <Users className="h-6 w-6 text-primary" />
+                <div className="h-12 w-12 rounded-full bg-[#005EB8]/10 flex items-center justify-center">
+                  <Users className="h-6 w-6 text-[#005EB8]" />
                 </div>
-                <TrendingUp className="h-5 w-5 text-success" />
+                <TrendingUp className="h-5 w-5 text-[#008A00]" />
               </div>
               <div className="space-y-1">
-                <p className="text-2xl font-bold text-gray-900 dark:text-white">10,245</p>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Total Pengguna</p>
-                <p className="text-xs text-success">+12% dari bulan lalu</p>
+                <p className="text-3xl font-bold text-gray-900 dark:text-white">
+                  {isClient ? formatNumber(platformStats.totalUsers) : platformStats.totalUsers.toLocaleString()}
+                </p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Total Users</p>
+              </div>
+              <div className="mt-2 flex items-center gap-1">
+                <span className="text-xs text-[#008A00]">+{platformStats.newUsersThisMonth} bulan ini</span>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="stat-card animate-scaleIn delay-100">
+          <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 animate-scaleIn delay-100">
             <CardContent className="p-6">
               <div className="flex items-center justify-between mb-4">
-                <div className="h-12 w-12 rounded-full bg-success/10 flex items-center justify-center">
-                  <BookOpen className="h-6 w-6 text-success" />
+                <div className="h-12 w-12 rounded-full bg-[#008A00]/10 flex items-center justify-center">
+                  <UserCheck className="h-6 w-6 text-[#008A00]" />
                 </div>
-                <TrendingUp className="h-5 w-5 text-success" />
+                <TrendingUp className="h-5 w-5 text-[#008A00]" />
               </div>
               <div className="space-y-1">
-                <p className="text-2xl font-bold text-gray-900 dark:text-white">542</p>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Total Kursus</p>
-                <p className="text-xs text-success">+8% dari bulan lalu</p>
+                <p className="text-3xl font-bold text-gray-900 dark:text-white">
+                  {platformStats.totalMentors}
+                </p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Total Mentors</p>
+              </div>
+              <div className="mt-2">
+                <Badge variant="outline" className="text-xs bg-[#F4B400]/10 text-[#F4B400] border-[#F4B400]/20">
+                  {platformStats.pendingMentors} pending
+                </Badge>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="stat-card animate-scaleIn delay-200">
+          <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 animate-scaleIn delay-200">
             <CardContent className="p-6">
               <div className="flex items-center justify-between mb-4">
-                <div className="h-12 w-12 rounded-full bg-accent/10 flex items-center justify-center">
-                  <DollarSign className="h-6 w-6 text-accent" />
+                <div className="h-12 w-12 rounded-full bg-[#F4B400]/10 flex items-center justify-center">
+                  <BookOpen className="h-6 w-6 text-[#F4B400]" />
                 </div>
-                <TrendingUp className="h-5 w-5 text-success" />
+                <TrendingUp className="h-5 w-5 text-[#008A00]" />
               </div>
               <div className="space-y-1">
-                <p className="text-2xl font-bold text-gray-900 dark:text-white">1.2B</p>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Total Pendapatan</p>
-                <p className="text-xs text-success">+15% dari bulan lalu</p>
+                <p className="text-3xl font-bold text-gray-900 dark:text-white">
+                  {platformStats.activeCourses}
+                </p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Active Courses</p>
+              </div>
+              <div className="mt-2">
+                <Badge variant="outline" className="text-xs bg-[#F4B400]/10 text-[#F4B400] border-[#F4B400]/20">
+                  {platformStats.pendingCourses} pending
+                </Badge>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="stat-card animate-scaleIn delay-300">
+          <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 animate-scaleIn delay-300">
             <CardContent className="p-6">
               <div className="flex items-center justify-between mb-4">
-                <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                  <Award className="h-6 w-6 text-primary" />
+                <div className="h-12 w-12 rounded-full bg-[#008A00]/10 flex items-center justify-center">
+                  <BarChart3 className="h-6 w-6 text-[#008A00]" />
                 </div>
-                <TrendingUp className="h-5 w-5 text-success" />
+                <TrendingUp className="h-5 w-5 text-[#008A00]" />
               </div>
               <div className="space-y-1">
-                <p className="text-2xl font-bold text-gray-900 dark:text-white">8,542</p>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Sertifikat Diterbitkan</p>
-                <p className="text-xs text-success">+20% dari bulan lalu</p>
+                <p className="text-3xl font-bold text-gray-900 dark:text-white">
+                  {isClient ? formatNumber(platformStats.totalRevenue) : formatCurrency(platformStats.totalRevenue)}
+                </p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Total Revenue</p>
+              </div>
+              <div className="mt-2 flex items-center gap-1">
+                <span className="text-xs text-[#008A00]">+15% dari bulan lalu</span>
               </div>
             </CardContent>
           </Card>
         </div>
 
-        <div className="grid lg:grid-cols-2 gap-8 mb-8">
-          <Card className="main-card animate-fadeSlide">
+        {/* Main Content */}
+        <div className="grid lg:grid-cols-2 gap-8">
+          {/* Popular Courses Table */}
+          <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 animate-fadeSlide">
             <CardHeader>
-              <CardTitle>Pengguna Terbaru</CardTitle>
-              <CardDescription>Daftar pengguna yang baru bergabung</CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-xl font-bold">Kursus Populer</CardTitle>
+                  <CardDescription>
+                    5 kursus dengan performa terbaik
+                  </CardDescription>
+                </div>
+                <Button variant="outline" size="sm" className="border-gray-300 dark:border-gray-600">
+                  <Eye className="h-4 w-4 mr-2" />
+                  Lihat Semua
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Nama</TableHead>
-                    <TableHead>Role</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Aksi</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {recentUsers.map((user) => (
-                    <TableRow key={user.id} className="table-row">
-                      <TableCell>
-                        <div>
-                          <p className="font-medium text-gray-900 dark:text-white">{user.name}</p>
-                          <p className="text-sm text-gray-600 dark:text-gray-400">{user.email}</p>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{user.role}</Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={user.status === 'Aktif' ? 'default' : 'secondary'}
-                          className={user.status === 'Aktif' ? 'bg-success' : ''}
-                        >
-                          {user.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button variant="ghost" size="sm">
-                          <MoreVertical className="h-4 w-4" />
-                        </Button>
-                      </TableCell>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Kursus</TableHead>
+                      <TableHead>Mentor</TableHead>
+                      <TableHead>Siswa</TableHead>
+                      <TableHead>Rating</TableHead>
+                      <TableHead>Status</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {popularCourses.map((course) => (
+                      <TableRow key={course.id} className="table-row">
+                        <TableCell>
+                          <div>
+                            <p className="font-medium text-gray-900 dark:text-white">
+                              {course.title}
+                            </p>
+                            <p className="text-xs text-gray-600 dark:text-gray-400">
+                              {course.category}
+                            </p>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-sm">
+                          {course.mentor}
+                        </TableCell>
+                        <TableCell className="font-medium">
+                          {isClient ? formatNumber(course.students) : course.students.toLocaleString()}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1">
+                            <span className="text-[#F4B400]">⭐</span>
+                            <span className="font-medium">{course.rating}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>{getStatusBadge(course.status)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             </CardContent>
           </Card>
 
-          <Card className="main-card animate-fadeSlide delay-200">
+          {/* Recent Activities */}
+          <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 animate-fadeSlide delay-100">
             <CardHeader>
-              <CardTitle>Kursus Terbaru</CardTitle>
-              <CardDescription>Kursus yang baru ditambahkan</CardDescription>
+              <CardTitle className="text-xl font-bold">Aktivitas Terbaru</CardTitle>
+              <CardDescription>
+                Aktivitas terbaru di platform
+              </CardDescription>
             </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Kursus</TableHead>
-                    <TableHead>Siswa</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Aksi</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {recentCourses.map((course) => (
-                    <TableRow key={course.id} className="table-row">
-                      <TableCell>
-                        <div>
-                          <p className="font-medium text-gray-900 dark:text-white">{course.title}</p>
-                          <p className="text-sm text-gray-600 dark:text-gray-400">{course.mentor}</p>
-                        </div>
-                      </TableCell>
-                      <TableCell>{course.students}</TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={course.status === 'Aktif' ? 'default' : 'secondary'}
-                          className={course.status === 'Aktif' ? 'bg-success' : course.status === 'Review' ? 'bg-accent' : ''}
-                        >
-                          {course.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button variant="ghost" size="sm">
-                          <MoreVertical className="h-4 w-4" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+            <CardContent className="p-0">
+              <div className="max-h-[400px] overflow-y-auto p-6 space-y-4">
+                {recentActivities.map((activity) => (
+                  <div
+                    key={activity.id}
+                    className="p-4 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-750 transition-colors duration-200"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <p className="text-sm text-gray-900 dark:text-white mb-1">
+                          <span className="font-medium">
+                            {activity.user || activity.mentor}
+                          </span>{' '}
+                          {activity.action}
+                        </p>
+                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                          {activity.course}
+                        </p>
+                        <p className="text-xs text-gray-500 dark:text-gray-500">
+                          {activity.time}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </CardContent>
           </Card>
         </div>
 
-        <div className="grid lg:grid-cols-3 gap-8">
-          <Card className="main-card animate-fadeSlide delay-100">
-            <CardHeader>
-              <CardTitle>Distribusi Pengguna</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600 dark:text-gray-400">Siswa</span>
-                  <span className="font-semibold text-gray-900 dark:text-white">8,542 (83%)</span>
-                </div>
-                <div className="h-2 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
-                  <div className="h-full bg-primary rounded-full" style={{ width: '83%' }}></div>
+        {/* Revenue Chart Section */}
+        <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 animate-fadeSlide delay-200">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-xl font-bold">Revenue Trend</CardTitle>
+                <CardDescription>
+                  Perkembangan pendapatan 6 bulan terakhir
+                </CardDescription>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                  <Input
+                    placeholder="Filter..."
+                    className="pl-10 w-[200px]"
+                  />
                 </div>
               </div>
-
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600 dark:text-gray-400">Mentor</span>
-                  <span className="font-semibold text-gray-900 dark:text-white">1,523 (15%)</span>
-                </div>
-                <div className="h-2 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
-                  <div className="h-full bg-success rounded-full" style={{ width: '15%' }}></div>
-                </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="h-80 flex items-center justify-center bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+              <div className="text-center">
+                <BarChart3 className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+                <p className="text-gray-600 dark:text-gray-400 mb-2">
+                  Chart Revenue akan ditampilkan di sini
+                </p>
+                <p className="text-sm text-gray-500 dark:text-gray-500">
+                  Integrasi dengan chart library (Chart.js/Recharts)
+                </p>
               </div>
-
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600 dark:text-gray-400">Admin</span>
-                  <span className="font-semibold text-gray-900 dark:text-white">180 (2%)</span>
-                </div>
-                <div className="h-2 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
-                  <div className="h-full bg-accent rounded-full" style={{ width: '2%' }}></div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="main-card animate-fadeSlide delay-200">
-            <CardHeader>
-              <CardTitle>Kategori Populer</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-600 dark:text-gray-400">Teknologi</span>
-                <span className="font-semibold text-gray-900 dark:text-white">245 kursus</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-600 dark:text-gray-400">Bisnis</span>
-                <span className="font-semibold text-gray-900 dark:text-white">178 kursus</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-600 dark:text-gray-400">Desain</span>
-                <span className="font-semibold text-gray-900 dark:text-white">156 kursus</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-600 dark:text-gray-400">Bahasa</span>
-                <span className="font-semibold text-gray-900 dark:text-white">132 kursus</span>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="main-card animate-fadeSlide delay-300">
-            <CardHeader>
-              <CardTitle>Aktivitas Sistem</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-start gap-3">
-                <div className="h-8 w-8 rounded-full bg-success/10 flex items-center justify-center flex-shrink-0">
-                  <UserCheck className="h-4 w-4 text-success" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900 dark:text-white">
-                    45 pengguna baru
-                  </p>
-                  <p className="text-xs text-gray-600 dark:text-gray-400">Hari ini</p>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-3">
-                <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                  <BookOpen className="h-4 w-4 text-primary" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900 dark:text-white">
-                    12 kursus baru
-                  </p>
-                  <p className="text-xs text-gray-600 dark:text-gray-400">Minggu ini</p>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-3">
-                <div className="h-8 w-8 rounded-full bg-accent/10 flex items-center justify-center flex-shrink-0">
-                  <Award className="h-4 w-4 text-accent" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900 dark:text-white">
-                    234 sertifikat
-                  </p>
-                  <p className="text-xs text-gray-600 dark:text-gray-400">Bulan ini</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
-    </div>
+    </AdminLayout>
   );
 }

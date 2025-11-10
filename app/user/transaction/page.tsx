@@ -1,3 +1,4 @@
+// app/user/transactions/page.tsx
 "use client";
 
 import { useState } from "react";
@@ -20,6 +21,7 @@ import {
   Clock,
   CreditCard,
   Receipt,
+  Eye,
 } from "lucide-react";
 import Link from "next/link";
 import UserLayout from "@/components/user/user-layout";
@@ -51,6 +53,12 @@ const transactions = [
     materialsAccessed: 12,
     canRefund: true,
     invoice: "/invoices/TRX-2024-001.pdf",
+    courseInstructor: "Dr. Ahmad Fauzi",
+    paymentDetails: {
+      cardNumber: "**** **** **** 1234",
+      bankName: "BCA",
+      paymentTime: "14:30 WIB"
+    }
   },
   {
     id: "TRX-2024-002",
@@ -63,6 +71,12 @@ const transactions = [
     materialsAccessed: 5,
     canRefund: true,
     invoice: "/invoices/TRX-2024-002.pdf",
+    courseInstructor: "Dr. Maria Chen",
+    paymentDetails: {
+      accountNumber: "1234567890",
+      bankName: "Mandiri",
+      paymentTime: "09:15 WIB"
+    }
   },
   {
     id: "TRX-2024-003",
@@ -73,8 +87,13 @@ const transactions = [
     date: "2024-10-05",
     progress: 0,
     materialsAccessed: 0,
-    canRefund: false,
+    canRefund: true,
     invoice: null,
+    courseInstructor: "Rina Wijaya",
+    paymentDetails: {
+      walletProvider: "GoPay",
+      paymentTime: "16:45 WIB"
+    }
   },
   {
     id: "TRX-2024-004",
@@ -87,6 +106,12 @@ const transactions = [
     materialsAccessed: 13,
     canRefund: false,
     invoice: "/invoices/TRX-2024-004.pdf",
+    courseInstructor: "Budi Santoso",
+    paymentDetails: {
+      cardNumber: "**** **** **** 5678",
+      bankName: "BNI",
+      paymentTime: "11:20 WIB"
+    }
   },
   {
     id: "TRX-2024-005",
@@ -100,6 +125,12 @@ const transactions = [
     materialsAccessed: 2,
     canRefund: false,
     invoice: "/invoices/TRX-2024-005.pdf",
+    courseInstructor: "Alex Johnson",
+    paymentDetails: {
+      accountNumber: "0987654321",
+      bankName: "BRI",
+      paymentTime: "13:10 WIB"
+    }
   },
   {
     id: "TRX-2024-006",
@@ -112,6 +143,12 @@ const transactions = [
     materialsAccessed: 0,
     canRefund: false,
     invoice: null,
+    courseInstructor: "Dr. David Lee",
+    paymentDetails: {
+      cardNumber: "**** **** **** 9012",
+      bankName: "BCA",
+      paymentTime: "10:05 WIB"
+    }
   },
 ];
 
@@ -159,6 +196,7 @@ export default function UserTransaction() {
 
   const handleRefundRequest = (transactionId: string) => {
     console.log(`Requesting refund for transaction: ${transactionId}`);
+    // Implement refund logic here
   };
 
   const formatCurrency = (amount: number) => {
@@ -176,6 +214,41 @@ export default function UserTransaction() {
   const totalRefunded = transactions
     .filter((t) => t.status === "refunded")
     .reduce((sum, t) => sum + t.amount, 0);
+
+  const getActionButton = (transaction: any) => {
+    switch (transaction.status) {
+      case "completed":
+        return (
+          <Link href={`/user/transactions/${transaction.id}`}>
+            <Button size="sm" variant="outline">
+              <Eye className="h-4 w-4" />
+            </Button>
+          </Link>
+        );
+      case "pending":
+        return (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => handleRefundRequest(transaction.id)}
+          >
+            <RefreshCw className="h-4 w-4" />
+          </Button>
+        );
+      case "refunded":
+        return (
+          <Link href={`/user/transactions/${transaction.id}`}>
+            <Button size="sm" variant="outline">
+              <Eye className="h-4 w-4" />
+            </Button>
+          </Link>
+        );
+      case "failed":
+        return null;
+      default:
+        return null;
+    }
+  };
 
   return (
     <UserLayout>
@@ -328,22 +401,7 @@ export default function UserTransaction() {
                       </TableCell>
                       <TableCell>{getStatusBadge(trx.status)}</TableCell>
                       <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          {trx.invoice && (
-                            <Button size="sm" variant="outline">
-                              <FileText className="h-4 w-4" />
-                            </Button>
-                          )}
-                          {trx.canRefund && trx.status === "completed" && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleRefundRequest(trx.id)}
-                            >
-                              <RefreshCw className="h-4 w-4" />
-                            </Button>
-                          )}
-                        </div>
+                        {getActionButton(trx)}
                       </TableCell>
                     </TableRow>
                   ))}
