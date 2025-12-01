@@ -1,41 +1,62 @@
-import { NextRequest } from 'next/server';
-import analyticsService from '@/services/analytics.service';
-import { successResponse, errorResponse, validationErrorResponse } from '@/utils/response.util';
-import { errorHandler } from '@/middlewares/error.middleware';
-import { authMiddleware, getAuthenticatedUser } from '@/middlewares/auth.middleware';
-import { corsMiddleware } from '@/middlewares/cors.middleware';
-import { loggingMiddleware } from '@/middlewares/logging.middleware';
-import { HTTP_STATUS } from '@/lib/constants';
+import { NextRequest } from "next/server";
+import analyticsService from "@/services/analytics.service";
+import {
+  successResponse,
+  errorResponse,
+  validationErrorResponse,
+} from "@/utils/response.util";
+import { errorHandler } from "@/middlewares/error.middleware";
+import { requireAuth } from "@/middlewares/auth.middleware";
+import { corsMiddleware } from "@/middlewares/cors.middleware";
+import { loggingMiddleware } from "@/middlewares/logging.middleware";
+import { rateLimit } from "@/middlewares/ratelimit.middleware";
+import { HTTP_STATUS } from "@/lib/constants";
 
 /**
  * POST /api/analytics/events
- * Track custom events with flexible structure
+ * Track batch events
  */
-async function handler(request: NextRequest) {
+async function handler(
+  request: NextRequest,
+  context: { user: { userId: string; email: string; role: string } }
+) {
   try {
-    // Get user (optional)
-    const user = getAuthenticatedUser(request);
+    const { user } = context;
 
     // Parse request body
-    const body = await request.json();
+    let body;
+    try {
+      body = await request.json();
+    } catch {
+      return errorResponse(
+        "Invalid JSON in request body",
+        HTTP_STATUS.BAD_REQUEST
+      );
+    }
+
     const { events } = body;
 
     // Validate events array
     if (!Array.isArray(events) || events.length === 0) {
       return validationErrorResponse({
-        events: ['Events must be a non-empty array'],
+        events: ["Events must be a non-empty array"],
       });
     }
 
     if (events.length > 100) {
-      return errorResponse('Maximum 100 events per batch', HTTP_STATUS.BAD_REQUEST);
+      return errorResponse(
+        "Maximum 100 events per batch",
+        HTTP_STATUS.BAD_REQUEST
+      );
     }
 
     // Get request metadata
     const ipAddress =
-      request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown';
-    const userAgent = request.headers.get('user-agent') || undefined;
-    const referrer = request.headers.get('referer') || undefined;
+      request.headers.get("x-forwarded-for") ||
+      request.headers.get("x-real-ip") ||
+      "unknown";
+    const userAgent = request.headers.get("user-agent") || undefined;
+    const referrer = request.headers.get("referer") || undefined;
 
     // Track all events
     const results = [];
@@ -43,14 +64,14 @@ async function handler(request: NextRequest) {
       if (!event.eventType || !event.eventData) {
         results.push({
           success: false,
-          error: 'eventType and eventData are required',
+          error: "eventType and eventData are required",
         });
         continue;
       }
 
       try {
         await analyticsService.trackEvent({
-          userId: user?.userId,
+          userId: user.userId, // Use authenticated user ID
           eventType: event.eventType,
           eventData: event.eventData,
           sessionId: event.sessionId,
@@ -68,7 +89,7 @@ async function handler(request: NextRequest) {
         results.push({
           success: false,
           eventType: event.eventType,
-          error: error instanceof Error ? error.message : 'Unknown error',
+          error: error instanceof Error ? error.message : "Unknown error",
         });
       }
     }
@@ -89,14 +110,23 @@ async function handler(request: NextRequest) {
     if (error instanceof Error) {
       return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
     }
-    return errorResponse('Failed to track events', HTTP_STATUS.INTERNAL_SERVER_ERROR);
+    return errorResponse(
+      "Failed to track events",
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
   }
 }
 
-// Apply middlewares (auth is optional)
-async function optionalAuthHandler(request: NextRequest) {
-  await authMiddleware(request);
-  return handler(request);
-}
+// Apply authentication and rate limiting
+const authenticatedHandler = requireAuth(handler);
 
-export const POST = errorHandler(loggingMiddleware(corsMiddleware(optionalAuthHandler)));
+export const POST = errorHandler(
+  loggingMiddleware(
+    corsMiddleware(
+      rateLimit({
+        windowMs: 60 * 1000, // 1 minute
+        maxRequests: 100, // 100 requests per minute
+      })(authenticatedHandler)
+    )
+  )
+);

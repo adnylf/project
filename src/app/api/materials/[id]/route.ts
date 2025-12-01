@@ -1,42 +1,46 @@
-import { NextRequest, NextResponse } from 'next/server';
-import materialService from '@/services/material.service';
-import { updateMaterialSchema } from '@/lib/validation';
+import { NextRequest, NextResponse } from "next/server";
+import materialService from "@/services/material.service";
+import { updateMaterialSchema } from "@/lib/validation";
 import {
   successResponse,
   validationErrorResponse,
   errorResponse,
   noContentResponse,
-} from '@/utils/response.util';
-import { validateData } from '@/utils/validation.util';
-import { errorHandler } from '@/middlewares/error.middleware';
-import { authMiddleware, getAuthenticatedUser } from '@/middlewares/auth.middleware';
-import { corsMiddleware } from '@/middlewares/cors.middleware';
-import { loggingMiddleware } from '@/middlewares/logging.middleware';
-import { HTTP_STATUS } from '@/lib/constants';
+} from "@/utils/response.util";
+import { validateData } from "@/utils/validation.util";
+import { errorHandler } from "@/middlewares/error.middleware";
+import { authMiddleware } from "@/middlewares/auth.middleware";
+import { corsMiddleware } from "@/middlewares/cors.middleware";
+import { loggingMiddleware } from "@/middlewares/logging.middleware";
+import { HTTP_STATUS } from "@/lib/constants";
 
-async function getHandler(request: NextRequest, context: { params: Promise<{ id: string }> }) {
+async function getHandler(
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
   try {
     const { id } = await context.params;
 
     const material = await materialService.getMaterialById(id);
 
-    return successResponse(material, 'Material retrieved successfully');
+    return successResponse(material, "Material retrieved successfully");
   } catch (error) {
     if (error instanceof Error) {
       return errorResponse(error.message, HTTP_STATUS.NOT_FOUND);
     }
-    return errorResponse('Failed to get material', HTTP_STATUS.INTERNAL_SERVER_ERROR);
+    return errorResponse(
+      "Failed to get material",
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
   }
 }
 
-async function putHandler(request: NextRequest, context: { params: Promise<{ id: string }> }) {
+async function putHandler(
+  request: NextRequest,
+  user: any,
+  context: { params: Promise<{ id: string }> }
+) {
   try {
-    const user = getAuthenticatedUser(request);
-
-    if (!user) {
-      return errorResponse('Unauthorized', HTTP_STATUS.UNAUTHORIZED);
-    }
-
     const { id } = await context.params;
 
     const body = await request.json();
@@ -54,23 +58,24 @@ async function putHandler(request: NextRequest, context: { params: Promise<{ id:
       validation.data
     );
 
-    return successResponse(material, 'Material updated successfully');
+    return successResponse(material, "Material updated successfully");
   } catch (error) {
     if (error instanceof Error) {
       return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
     }
-    return errorResponse('Failed to update material', HTTP_STATUS.INTERNAL_SERVER_ERROR);
+    return errorResponse(
+      "Failed to update material",
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
   }
 }
 
-async function deleteHandler(request: NextRequest, context: { params: Promise<{ id: string }> }) {
+async function deleteHandler(
+  request: NextRequest,
+  user: any,
+  context: { params: Promise<{ id: string }> }
+) {
   try {
-    const user = getAuthenticatedUser(request);
-
-    if (!user) {
-      return errorResponse('Unauthorized', HTTP_STATUS.UNAUTHORIZED);
-    }
-
     const { id } = await context.params;
 
     await materialService.deleteMaterial(id, user.userId, user.role);
@@ -80,27 +85,34 @@ async function deleteHandler(request: NextRequest, context: { params: Promise<{ 
     if (error instanceof Error) {
       return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
     }
-    return errorResponse('Failed to delete material', HTTP_STATUS.INTERNAL_SERVER_ERROR);
+    return errorResponse(
+      "Failed to delete material",
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
   }
 }
 
-async function authenticatedPutHandler(
+const authenticatedPutHandler = async (
   request: NextRequest,
   context: { params: Promise<{ id: string }> }
-): Promise<NextResponse> {
+): Promise<NextResponse> => {
   const authResult = await authMiddleware(request);
-  if (authResult) return authResult;
-  return putHandler(request, context);
-}
+  if (authResult instanceof NextResponse) {
+    return authResult;
+  }
+  return putHandler(request, authResult, context);
+};
 
-async function authenticatedDeleteHandler(
+const authenticatedDeleteHandler = async (
   request: NextRequest,
   context: { params: Promise<{ id: string }> }
-): Promise<NextResponse> {
+): Promise<NextResponse> => {
   const authResult = await authMiddleware(request);
-  if (authResult) return authResult;
-  return deleteHandler(request, context);
-}
+  if (authResult instanceof NextResponse) {
+    return authResult;
+  }
+  return deleteHandler(request, authResult, context);
+};
 
 export async function GET(
   req: NextRequest,

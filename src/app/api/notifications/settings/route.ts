@@ -1,135 +1,73 @@
-// ============================================
-// PATH: src/app/api/notifications/settings/route.ts
-// ============================================
-
-import { NextRequest } from 'next/server';
-import prisma from '@/lib/prisma';
-import { successResponse, validationErrorResponse, errorResponse } from '@/utils/response.util';
-import { errorHandler } from '@/middlewares/error.middleware';
-import { authMiddleware, getAuthenticatedUser } from '@/middlewares/auth.middleware';
-import { corsMiddleware } from '@/middlewares/cors.middleware';
-import { loggingMiddleware } from '@/middlewares/logging.middleware';
-import { HTTP_STATUS } from '@/lib/constants';
+import { NextRequest } from "next/server";
+import prisma from "@/lib/prisma";
+import {
+  successResponse,
+  validationErrorResponse,
+  errorResponse,
+} from "@/utils/response.util";
+import { errorHandler } from "@/middlewares/error.middleware";
+import { requireAuth } from "@/middlewares/auth.middleware";
+import { corsMiddleware } from "@/middlewares/cors.middleware";
+import { loggingMiddleware } from "@/middlewares/logging.middleware";
+import { HTTP_STATUS } from "@/lib/constants";
 
 // Type for notification settings
 interface NotificationSettings {
   id: string;
-  userId: string;
-  emailNotifications: boolean;
-  pushNotifications: boolean;
-  courseUpdates: boolean;
-  paymentNotifications: boolean;
-  certificateNotifications: boolean;
-  commentNotifications: boolean;
-  reviewNotifications: boolean;
-  createdAt: Date;
-  updatedAt: Date;
+  user_id: string;
+  email_notifications: boolean;
+  push_notifications: boolean;
+  course_updates: boolean;
+  payment_notifications: boolean;
+  certificate_notifications: boolean;
+  comment_notifications: boolean;
+  review_notifications: boolean;
+  created_at: Date;
+  updated_at: Date;
 }
 
 /**
  * GET /api/notifications/settings
  * Get notification preferences
  */
-async function getHandler(request: NextRequest) {
+async function getHandler(
+  request: NextRequest,
+  { user }: { user: { userId: string; email: string; role: string } }
+) {
   try {
-    const user = getAuthenticatedUser(request);
-
-    if (!user) {
-      return errorResponse('Unauthorized', HTTP_STATUS.UNAUTHORIZED);
-    }
-
-    // Try to get settings from userPreferences or notificationPreferences
-    let settings: NotificationSettings | null = null;
-
-    try {
-      // Try userPreferences first
-      const userPrefsTable = prisma as {
-        userPreferences?: {
-          findUnique: (args: { where: { userId: string } }) => Promise<NotificationSettings | null>;
-        };
-      };
-      if (userPrefsTable.userPreferences) {
-        settings = await userPrefsTable.userPreferences.findUnique({
-          where: { userId: user.userId },
-        });
-      }
-    } catch {
-      // Silently continue
-    }
-
-    if (!settings) {
-      try {
-        // If that fails, try notificationPreferences
-        const notifPrefsTable = prisma as {
-          notificationPreferences?: {
-            findUnique: (args: {
-              where: { userId: string };
-            }) => Promise<NotificationSettings | null>;
-          };
-        };
-        if (notifPrefsTable.notificationPreferences) {
-          settings = await notifPrefsTable.notificationPreferences.findUnique({
-            where: { userId: user.userId },
-          });
-        }
-      } catch {
-        // Silently continue
-      }
-    }
+    // Try to get settings from notification_settings table
+    let settings = await prisma.notificationSettings.findUnique({
+      where: { user_id: user.userId },
+    });
 
     // Create default settings if not exists
     if (!settings) {
-      const defaultSettings = {
-        userId: user.userId,
-        emailNotifications: true,
-        pushNotifications: true,
-        courseUpdates: true,
-        paymentNotifications: true,
-        certificateNotifications: true,
-        commentNotifications: true,
-        reviewNotifications: true,
-      };
-
-      try {
-        // Try to create in userPreferences
-        const userPrefsTable = prisma as {
-          userPreferences?: {
-            create: (args: { data: typeof defaultSettings }) => Promise<NotificationSettings>;
-          };
-        };
-        if (userPrefsTable.userPreferences) {
-          settings = await userPrefsTable.userPreferences.create({
-            data: defaultSettings,
-          });
-        }
-      } catch {
-        // If userPreferences doesn't exist, try notificationPreferences
-        try {
-          const notifPrefsTable = prisma as {
-            notificationPreferences?: {
-              create: (args: { data: typeof defaultSettings }) => Promise<NotificationSettings>;
-            };
-          };
-          if (notifPrefsTable.notificationPreferences) {
-            settings = await notifPrefsTable.notificationPreferences.create({
-              data: defaultSettings,
-            });
-          }
-        } catch {
-          return errorResponse(
-            'Notification settings table not found in database schema',
-            HTTP_STATUS.INTERNAL_SERVER_ERROR
-          );
-        }
-      }
+      settings = await prisma.notificationSettings.create({
+        data: {
+          user_id: user.userId,
+          email_notifications: true,
+          push_notifications: true,
+          course_updates: true,
+          payment_notifications: true,
+          certificate_notifications: true,
+          comment_notifications: true,
+          review_notifications: true,
+        },
+      });
     }
 
-    return successResponse(settings, 'Notification settings retrieved successfully');
+    return successResponse(
+      settings,
+      "Notification settings retrieved successfully"
+    );
   } catch (error) {
     if (error instanceof Error) {
       return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
     }
-    return errorResponse('Failed to get settings', HTTP_STATUS.INTERNAL_SERVER_ERROR);
+    return errorResponse(
+      "Failed to get settings",
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
   }
 }
 
@@ -137,133 +75,93 @@ async function getHandler(request: NextRequest) {
  * PUT /api/notifications/settings
  * Update notification preferences
  */
-async function putHandler(request: NextRequest) {
+async function putHandler(
+  request: NextRequest,
+  { user }: { user: { userId: string; email: string; role: string } }
+) {
   try {
-    const user = getAuthenticatedUser(request);
-
-    if (!user) {
-      return errorResponse('Unauthorized', HTTP_STATUS.UNAUTHORIZED);
-    }
-
     // Parse request body
     const body = await request.json();
     const {
-      emailNotifications,
-      pushNotifications,
-      courseUpdates,
-      paymentNotifications,
-      certificateNotifications,
-      commentNotifications,
-      reviewNotifications,
+      email_notifications,
+      push_notifications,
+      course_updates,
+      payment_notifications,
+      certificate_notifications,
+      comment_notifications,
+      review_notifications,
     } = body;
 
     // Validate at least one field is provided
     if (
-      emailNotifications === undefined &&
-      pushNotifications === undefined &&
-      courseUpdates === undefined &&
-      paymentNotifications === undefined &&
-      certificateNotifications === undefined &&
-      commentNotifications === undefined &&
-      reviewNotifications === undefined
+      email_notifications === undefined &&
+      push_notifications === undefined &&
+      course_updates === undefined &&
+      payment_notifications === undefined &&
+      certificate_notifications === undefined &&
+      comment_notifications === undefined &&
+      review_notifications === undefined
     ) {
       return validationErrorResponse({
-        settings: ['At least one setting must be provided'],
+        settings: ["At least one setting must be provided"],
       });
     }
 
-    // Build update data with proper typing
-    const updateData: Record<string, boolean> = {};
-    if (emailNotifications !== undefined) updateData.emailNotifications = emailNotifications;
-    if (pushNotifications !== undefined) updateData.pushNotifications = pushNotifications;
-    if (courseUpdates !== undefined) updateData.courseUpdates = courseUpdates;
-    if (paymentNotifications !== undefined) updateData.paymentNotifications = paymentNotifications;
-    if (certificateNotifications !== undefined)
-      updateData.certificateNotifications = certificateNotifications;
-    if (commentNotifications !== undefined) updateData.commentNotifications = commentNotifications;
-    if (reviewNotifications !== undefined) updateData.reviewNotifications = reviewNotifications;
+    // Build update data
+    const updateData: any = {};
+    if (email_notifications !== undefined)
+      updateData.email_notifications = email_notifications;
+    if (push_notifications !== undefined)
+      updateData.push_notifications = push_notifications;
+    if (course_updates !== undefined)
+      updateData.course_updates = course_updates;
+    if (payment_notifications !== undefined)
+      updateData.payment_notifications = payment_notifications;
+    if (certificate_notifications !== undefined)
+      updateData.certificate_notifications = certificate_notifications;
+    if (comment_notifications !== undefined)
+      updateData.comment_notifications = comment_notifications;
+    if (review_notifications !== undefined)
+      updateData.review_notifications = review_notifications;
 
-    // Default values for create
-    const createData = {
-      userId: user.userId,
-      emailNotifications: emailNotifications ?? true,
-      pushNotifications: pushNotifications ?? true,
-      courseUpdates: courseUpdates ?? true,
-      paymentNotifications: paymentNotifications ?? true,
-      certificateNotifications: certificateNotifications ?? true,
-      commentNotifications: commentNotifications ?? true,
-      reviewNotifications: reviewNotifications ?? true,
-    };
+    // Update or create settings
+    const settings = await prisma.notificationSettings.upsert({
+      where: { user_id: user.userId },
+      update: updateData,
+      create: {
+        user_id: user.userId,
+        email_notifications: email_notifications ?? true,
+        push_notifications: push_notifications ?? true,
+        course_updates: course_updates ?? true,
+        payment_notifications: payment_notifications ?? true,
+        certificate_notifications: certificate_notifications ?? true,
+        comment_notifications: comment_notifications ?? true,
+        review_notifications: review_notifications ?? true,
+      },
+    });
 
-    // Try to update or create settings
-    let settings: NotificationSettings | null = null;
-
-    try {
-      // Try userPreferences first
-      const userPrefsTable = prisma as {
-        userPreferences?: {
-          upsert: (args: {
-            where: { userId: string };
-            update: Record<string, boolean>;
-            create: typeof createData;
-          }) => Promise<NotificationSettings>;
-        };
-      };
-      if (userPrefsTable.userPreferences) {
-        settings = await userPrefsTable.userPreferences.upsert({
-          where: { userId: user.userId },
-          update: updateData,
-          create: createData,
-        });
-      }
-    } catch {
-      // If that fails, try notificationPreferences
-      try {
-        const notifPrefsTable = prisma as {
-          notificationPreferences?: {
-            upsert: (args: {
-              where: { userId: string };
-              update: Record<string, boolean>;
-              create: typeof createData;
-            }) => Promise<NotificationSettings>;
-          };
-        };
-        if (notifPrefsTable.notificationPreferences) {
-          settings = await notifPrefsTable.notificationPreferences.upsert({
-            where: { userId: user.userId },
-            update: updateData,
-            create: createData,
-          });
-        }
-      } catch {
-        return errorResponse(
-          'Notification settings table not found in database schema',
-          HTTP_STATUS.INTERNAL_SERVER_ERROR
-        );
-      }
-    }
-
-    return successResponse(settings, 'Notification settings updated successfully');
+    return successResponse(
+      settings,
+      "Notification settings updated successfully"
+    );
   } catch (error) {
     if (error instanceof Error) {
       return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
     }
-    return errorResponse('Failed to update settings', HTTP_STATUS.INTERNAL_SERVER_ERROR);
+    return errorResponse(
+      "Failed to update settings",
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
   }
 }
 
-// Apply middlewares and export
-async function authenticatedGetHandler(request: NextRequest) {
-  const authResult = await authMiddleware(request);
-  if (authResult) return authResult;
-  return getHandler(request);
-}
+// Apply middlewares dan export
+const authenticatedGetHandler = requireAuth(getHandler);
+const authenticatedPutHandler = requireAuth(putHandler);
 
-async function authenticatedPutHandler(request: NextRequest) {
-  const authResult = await authMiddleware(request);
-  if (authResult) return authResult;
-  return putHandler(request);
-}
-
-export const GET = errorHandler(loggingMiddleware(corsMiddleware(authenticatedGetHandler)));
-export const PUT = errorHandler(loggingMiddleware(corsMiddleware(authenticatedPutHandler)));
+export const GET = errorHandler(
+  loggingMiddleware(corsMiddleware(authenticatedGetHandler))
+);
+export const PUT = errorHandler(
+  loggingMiddleware(corsMiddleware(authenticatedPutHandler))
+);

@@ -1,37 +1,39 @@
-import { NextRequest } from 'next/server';
-import videoService from '@/services/video.service';
-import uploadService from '@/services/upload.service';
-import { successResponse, errorResponse } from '@/utils/response.util';
-import { errorHandler } from '@/middlewares/error.middleware';
-import { authMiddleware, getAuthenticatedUser } from '@/middlewares/auth.middleware';
-import { corsMiddleware } from '@/middlewares/cors.middleware';
-import { loggingMiddleware } from '@/middlewares/logging.middleware';
-import { HTTP_STATUS } from '@/lib/constants';
+import { NextRequest } from "next/server";
+import videoService from "@/services/video.service";
+import uploadService from "@/services/upload.service";
+import { successResponse, errorResponse } from "@/utils/response.util";
+import { errorHandler } from "@/middlewares/error.middleware";
+import { requireAuth } from "@/middlewares/auth.middleware";
+import { corsMiddleware } from "@/middlewares/cors.middleware";
+import { loggingMiddleware } from "@/middlewares/logging.middleware";
+import { HTTP_STATUS } from "@/lib/constants";
 
 /**
  * POST /api/videos
  * Upload video file
  */
-async function handler(request: NextRequest) {
+async function handler(
+  request: NextRequest,
+  context: { user: { userId: string; email: string; role: string } }
+) {
+  const { user } = context;
+
   try {
-    const user = getAuthenticatedUser(request);
-
-    if (!user) {
-      return errorResponse('Unauthorized', HTTP_STATUS.UNAUTHORIZED);
-    }
-
     // Get file from form data
     const formData = await request.formData();
-    const file = formData.get('file') as File;
-    const materialId = formData.get('materialId') as string | undefined;
+    const file = formData.get("file") as File;
+    const materialId = formData.get("materialId") as string | undefined;
 
     if (!file) {
-      return errorResponse('No file provided', HTTP_STATUS.BAD_REQUEST);
+      return errorResponse("No file provided", HTTP_STATUS.BAD_REQUEST);
     }
 
     // Validate file type
-    if (!file.type.startsWith('video/')) {
-      return errorResponse('Only video files are allowed', HTTP_STATUS.BAD_REQUEST);
+    if (!file.type.startsWith("video/")) {
+      return errorResponse(
+        "Only video files are allowed",
+        HTTP_STATUS.BAD_REQUEST
+      );
     }
 
     // Convert File to Buffer
@@ -40,9 +42,9 @@ async function handler(request: NextRequest) {
 
     // Create multer-like file object
     const multerFile = {
-      fieldname: 'file',
+      fieldname: "file",
       originalname: file.name,
-      encoding: '7bit',
+      encoding: "7bit",
       mimetype: file.type,
       buffer: buffer,
       size: buffer.length,
@@ -56,8 +58,14 @@ async function handler(request: NextRequest) {
 
     // Link to material if provided
     if (materialId) {
-      const materialService = (await import('@/services/material.service')).default;
-      await materialService.linkVideoToMaterial(materialId, video.id, user.userId, user.role);
+      const materialService = (await import("@/services/material.service"))
+        .default;
+      await materialService.linkVideoToMaterial(
+        materialId,
+        video.id,
+        user.userId,
+        user.role
+      );
     }
 
     return successResponse(
@@ -69,22 +77,23 @@ async function handler(request: NextRequest) {
         status: video.status,
         uploadUrl: uploadResult.url,
       },
-      'Video uploaded successfully. Processing will start shortly.',
+      "Video uploaded successfully. Processing will start shortly.",
       HTTP_STATUS.CREATED
     );
   } catch (error) {
     if (error instanceof Error) {
       return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
     }
-    return errorResponse('Failed to upload video', HTTP_STATUS.INTERNAL_SERVER_ERROR);
+    return errorResponse(
+      "Failed to upload video",
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
   }
 }
 
-// Apply middlewares and export
-async function authenticatedHandler(request: NextRequest) {
-  const authResult = await authMiddleware(request);
-  if (authResult) return authResult;
-  return handler(request);
-}
+// Apply authentication
+const authenticatedHandler = requireAuth(handler);
 
-export const POST = errorHandler(loggingMiddleware(corsMiddleware(authenticatedHandler)));
+export const POST = errorHandler(
+  loggingMiddleware(corsMiddleware(authenticatedHandler))
+);

@@ -1,33 +1,52 @@
-import { NextRequest } from 'next/server';
-import videoService from '@/services/video.service';
-import { successResponse, errorResponse, noContentResponse } from '@/utils/response.util';
-import { errorHandler } from '@/middlewares/error.middleware';
-import { authMiddleware, getAuthenticatedUser } from '@/middlewares/auth.middleware';
-import { corsMiddleware } from '@/middlewares/cors.middleware';
-import { loggingMiddleware } from '@/middlewares/logging.middleware';
-import { HTTP_STATUS } from '@/lib/constants';
+import { NextRequest } from "next/server";
+import videoService from "@/services/video.service";
+import {
+  successResponse,
+  errorResponse,
+  noContentResponse,
+} from "@/utils/response.util";
+import { errorHandler } from "@/middlewares/error.middleware";
+import { requireAuth } from "@/middlewares/auth.middleware";
+import { corsMiddleware } from "@/middlewares/cors.middleware";
+import { loggingMiddleware } from "@/middlewares/logging.middleware";
+import { HTTP_STATUS } from "@/lib/constants";
 
 /**
  * GET /api/videos/:id
  * Get video metadata
  */
-async function getHandler(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+async function getHandler(
+  request: NextRequest,
+  context: { user: { userId: string; email: string; role: string } }
+) {
+  const { user } = context;
+
   try {
-    const { id } = await params;
+    // Extract video ID from URL
+    const url = new URL(request.url);
+    const pathSegments = url.pathname.split("/");
+    const id = pathSegments[pathSegments.length - 1];
+
+    if (!id) {
+      return errorResponse("Video ID is required", HTTP_STATUS.BAD_REQUEST);
+    }
 
     // Get video
     const video = await videoService.getVideoById(id);
 
     if (!video) {
-      return errorResponse('Video not found', HTTP_STATUS.NOT_FOUND);
+      return errorResponse("Video not found", HTTP_STATUS.NOT_FOUND);
     }
 
-    return successResponse(video, 'Video metadata retrieved successfully');
+    return successResponse(video, "Video metadata retrieved successfully");
   } catch (error) {
     if (error instanceof Error) {
       return errorResponse(error.message, HTTP_STATUS.NOT_FOUND);
     }
-    return errorResponse('Failed to get video', HTTP_STATUS.INTERNAL_SERVER_ERROR);
+    return errorResponse(
+      "Failed to get video",
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
   }
 }
 
@@ -37,16 +56,19 @@ async function getHandler(request: NextRequest, { params }: { params: Promise<{ 
  */
 async function deleteHandler(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  context: { user: { userId: string; email: string; role: string } }
 ) {
+  const { user } = context;
+
   try {
-    const user = getAuthenticatedUser(request);
+    // Extract video ID from URL
+    const url = new URL(request.url);
+    const pathSegments = url.pathname.split("/");
+    const id = pathSegments[pathSegments.length - 1];
 
-    if (!user) {
-      return errorResponse('Unauthorized', HTTP_STATUS.UNAUTHORIZED);
+    if (!id) {
+      return errorResponse("Video ID is required", HTTP_STATUS.BAD_REQUEST);
     }
-
-    const { id } = await params;
 
     // Delete video
     await videoService.deleteVideo(id);
@@ -56,31 +78,22 @@ async function deleteHandler(
     if (error instanceof Error) {
       return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
     }
-    return errorResponse('Failed to delete video', HTTP_STATUS.INTERNAL_SERVER_ERROR);
+    return errorResponse(
+      "Failed to delete video",
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
   }
 }
 
-// Apply middlewares and export
-async function authenticatedDeleteHandler(
-  request: NextRequest,
-  context: { params: Promise<{ id: string }> }
-) {
-  const authResult = await authMiddleware(request);
-  if (authResult) return authResult;
-  return deleteHandler(request, context);
-}
+// Apply authentication
+const authenticatedGetHandler = requireAuth(getHandler);
+const authenticatedDeleteHandler = requireAuth(deleteHandler);
 
-// Properly typed exports
-export const GET = (request: NextRequest, context: { params: Promise<{ id: string }> }) =>
-  errorHandler((req: NextRequest) =>
-    loggingMiddleware((req2: NextRequest) =>
-      corsMiddleware((req3: NextRequest) => getHandler(req3, context))(req2)
-    )(req)
-  )(request);
+// Export handlers
+export const GET = errorHandler(
+  loggingMiddleware(corsMiddleware(authenticatedGetHandler))
+);
 
-export const DELETE = (request: NextRequest, context: { params: Promise<{ id: string }> }) =>
-  errorHandler((req: NextRequest) =>
-    loggingMiddleware((req2: NextRequest) =>
-      corsMiddleware((req3: NextRequest) => authenticatedDeleteHandler(req3, context))(req2)
-    )(req)
-  )(request);
+export const DELETE = errorHandler(
+  loggingMiddleware(corsMiddleware(authenticatedDeleteHandler))
+);

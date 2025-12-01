@@ -1,11 +1,11 @@
-import { NextRequest } from 'next/server';
-import prisma from '@/lib/prisma';
-import { noContentResponse, errorResponse } from '@/utils/response.util';
-import { errorHandler } from '@/middlewares/error.middleware';
-import { authMiddleware, getAuthenticatedUser } from '@/middlewares/auth.middleware';
-import { corsMiddleware } from '@/middlewares/cors.middleware';
-import { loggingMiddleware } from '@/middlewares/logging.middleware';
-import { HTTP_STATUS } from '@/lib/constants';
+import { NextRequest } from "next/server";
+import prisma from "@/lib/prisma";
+import { noContentResponse, errorResponse } from "@/utils/response.util";
+import { errorHandler } from "@/middlewares/error.middleware";
+import { requireAuth } from "@/middlewares/auth.middleware";
+import { corsMiddleware } from "@/middlewares/cors.middleware";
+import { loggingMiddleware } from "@/middlewares/logging.middleware";
+import { HTTP_STATUS } from "@/lib/constants";
 
 /**
  * DELETE /api/users/wishlist/:courseId
@@ -13,29 +13,32 @@ import { HTTP_STATUS } from '@/lib/constants';
  */
 async function handler(
   request: NextRequest,
-  { params }: { params: Promise<{ courseId: string }> }
+  context: { user: { userId: string; email: string; role: string } }
 ) {
+  const { user } = context;
+
   try {
-    const user = getAuthenticatedUser(request);
+    // Extract courseId from URL
+    const url = new URL(request.url);
+    const pathSegments = url.pathname.split("/");
+    const courseId = pathSegments[pathSegments.length - 1];
 
-    if (!user) {
-      return errorResponse('Unauthorized', HTTP_STATUS.UNAUTHORIZED);
+    if (!courseId) {
+      return errorResponse("Course ID is required", HTTP_STATUS.BAD_REQUEST);
     }
-
-    const { courseId } = await params;
 
     // Check if exists in wishlist
     const wishlistItem = await prisma.wishlist.findUnique({
       where: {
-        userId_courseId: {
-          userId: user.userId,
-          courseId,
+        user_id_course_id: {
+          user_id: user.userId,
+          course_id: courseId,
         },
       },
     });
 
     if (!wishlistItem) {
-      return errorResponse('Course not in wishlist', HTTP_STATUS.NOT_FOUND);
+      return errorResponse("Course not in wishlist", HTTP_STATUS.NOT_FOUND);
     }
 
     // Remove from wishlist
@@ -48,24 +51,16 @@ async function handler(
     if (error instanceof Error) {
       return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
     }
-    return errorResponse('Failed to remove from wishlist', HTTP_STATUS.INTERNAL_SERVER_ERROR);
+    return errorResponse(
+      "Failed to remove from wishlist",
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
   }
 }
 
-// Apply middlewares and export
-async function authenticatedHandler(
-  request: NextRequest,
-  context: { params: Promise<{ courseId: string }> }
-) {
-  const authResult = await authMiddleware(request);
-  if (authResult) return authResult;
-  return handler(request, context);
-}
+// Apply authentication
+const authenticatedHandler = requireAuth(handler);
 
-// Properly typed export
-export const DELETE = (request: NextRequest, context: { params: Promise<{ courseId: string }> }) =>
-  errorHandler((req: NextRequest) =>
-    loggingMiddleware((req2: NextRequest) =>
-      corsMiddleware((req3: NextRequest) => authenticatedHandler(req3, context))(req2)
-    )(req)
-  )(request);
+export const DELETE = errorHandler(
+  loggingMiddleware(corsMiddleware(authenticatedHandler))
+);

@@ -1,8 +1,44 @@
-import prisma from '@/lib/prisma';
-import { hashPassword } from '@/utils/crypto.util';
-import { ConflictError, NotFoundError } from '@/utils/error.util';
-import { USER_STATUS } from '@/lib/constants';
-import type { UserRole, UserStatus, Prisma } from '@prisma/client';
+// services/user.service.ts
+import prisma from "@/lib/prisma";
+import { hashPassword } from "@/utils/crypto.util";
+import { ConflictError, NotFoundError } from "@/utils/error.util";
+import { USER_STATUS, USER_ROLES } from "@/lib/constants";
+import type { UserRole, UserStatus } from "@prisma/client";
+
+// Interface untuk transformed user
+interface TransformedUser {
+  id: string;
+  email: string;
+  name: string;
+  role: UserRole;
+  status: UserStatus;
+  profilePicture?: string | null;
+  emailVerified: boolean;
+  createdAt: Date;
+  updatedAt?: Date | null;
+  lastLoginAt?: Date | null;
+}
+
+// Interface untuk role count
+interface RoleCount {
+  role: UserRole;
+  _count: number;
+}
+
+// Interface untuk status count
+interface StatusCount {
+  status: UserStatus;
+  _count: number;
+}
+
+// Interface untuk search user
+interface SearchUser {
+  id: string;
+  email: string;
+  full_name: string;
+  role: UserRole;
+  avatar_url?: string | null;
+}
 
 /**
  * User Service
@@ -19,7 +55,7 @@ export class UserService {
     role?: UserRole;
     status?: UserStatus;
     sortBy?: string;
-    sortOrder?: 'asc' | 'desc';
+    sortOrder?: "asc" | "desc";
   }) {
     const {
       page = 1,
@@ -27,17 +63,17 @@ export class UserService {
       search,
       role,
       status,
-      sortBy = 'createdAt',
-      sortOrder = 'desc',
+      sortBy = "created_at",
+      sortOrder = "desc",
     } = params;
 
     // Build where clause
-    const where: Prisma.UserWhereInput = {};
+    const where: any = {};
 
     if (search) {
       where.OR = [
-        { name: { contains: search, mode: 'insensitive' } },
-        { email: { contains: search, mode: 'insensitive' } },
+        { full_name: { contains: search, mode: "insensitive" } },
+        { email: { contains: search, mode: "insensitive" } },
       ];
     }
 
@@ -62,21 +98,35 @@ export class UserService {
         select: {
           id: true,
           email: true,
-          name: true,
+          full_name: true,
           role: true,
           status: true,
-          profilePicture: true,
-          emailVerified: true,
-          createdAt: true,
-          updatedAt: true,
-          lastLoginAt: true,
+          avatar_url: true,
+          email_verified: true,
+          created_at: true,
+          updated_at: true,
+          last_login: true,
         },
       }),
       prisma.user.count({ where }),
     ]);
 
+    // Transform data to match expected format
+    const transformedUsers: TransformedUser[] = users.map((user: any) => ({
+      id: user.id,
+      email: user.email,
+      name: user.full_name,
+      role: user.role,
+      status: user.status,
+      profilePicture: user.avatar_url,
+      emailVerified: user.email_verified,
+      createdAt: user.created_at,
+      updatedAt: user.updated_at,
+      lastLoginAt: user.last_login,
+    }));
+
     return {
-      data: users,
+      data: transformedUsers,
       meta: {
         page,
         limit,
@@ -95,40 +145,72 @@ export class UserService {
       select: {
         id: true,
         email: true,
-        name: true,
+        full_name: true,
         role: true,
         status: true,
-        profilePicture: true,
+        avatar_url: true,
         bio: true,
-        phoneNumber: true,
-        dateOfBirth: true,
+        phone: true,
+        date_of_birth: true,
         address: true,
         city: true,
         country: true,
-        emailVerified: true,
-        emailVerifiedAt: true,
-        createdAt: true,
-        updatedAt: true,
-        lastLoginAt: true,
-        mentorProfile: {
+        disability_type: true,
+        email_verified: true,
+        email_verified_at: true,
+        created_at: true,
+        updated_at: true,
+        last_login: true,
+        mentor_profile: {
           select: {
             id: true,
             expertise: true,
             experience: true,
             status: true,
-            totalStudents: true,
-            totalCourses: true,
-            averageRating: true,
+            total_students: true,
+            total_courses: true,
+            average_rating: true,
           },
         },
       },
     });
 
     if (!user) {
-      throw new NotFoundError('User not found');
+      throw new NotFoundError("User not found");
     }
 
-    return user;
+    // Transform data to match expected format
+    return {
+      id: user.id,
+      email: user.email,
+      name: user.full_name,
+      role: user.role,
+      status: user.status,
+      profilePicture: user.avatar_url,
+      bio: user.bio,
+      phoneNumber: user.phone,
+      dateOfBirth: user.date_of_birth,
+      address: user.address,
+      city: user.city,
+      country: user.country,
+      disabilityType: user.disability_type,
+      emailVerified: user.email_verified,
+      emailVerifiedAt: user.email_verified_at,
+      createdAt: user.created_at,
+      updatedAt: user.updated_at,
+      lastLoginAt: user.last_login,
+      mentorProfile: user.mentor_profile
+        ? {
+            id: user.mentor_profile.id,
+            expertise: user.mentor_profile.expertise,
+            experience: user.mentor_profile.experience,
+            status: user.mentor_profile.status,
+            totalStudents: user.mentor_profile.total_students,
+            totalCourses: user.mentor_profile.total_courses,
+            averageRating: user.mentor_profile.average_rating,
+          }
+        : null,
+    };
   }
 
   /**
@@ -140,6 +222,7 @@ export class UserService {
     name: string;
     role?: UserRole;
     status?: UserStatus;
+    disability_type?: string;
   }) {
     // Check if user already exists
     const existingUser = await prisma.user.findUnique({
@@ -147,7 +230,7 @@ export class UserService {
     });
 
     if (existingUser) {
-      throw new ConflictError('User with this email already exists');
+      throw new ConflictError("User with this email already exists");
     }
 
     // Hash password
@@ -158,26 +241,36 @@ export class UserService {
       data: {
         email: data.email,
         password: hashedPassword,
-        name: data.name,
-        role: data.role || 'STUDENT',
+        full_name: data.name,
+        role: data.role || USER_ROLES.STUDENT,
         status: data.status || USER_STATUS.ACTIVE,
-        emailVerified: false,
+        disability_type: data.disability_type,
+        email_verified: false,
       },
       select: {
         id: true,
         email: true,
-        name: true,
+        full_name: true,
         role: true,
         status: true,
-        createdAt: true,
+        disability_type: true,
+        created_at: true,
       },
     });
 
-    return user;
+    return {
+      id: user.id,
+      email: user.email,
+      name: user.full_name,
+      role: user.role,
+      status: user.status,
+      disabilityType: user.disability_type,
+      createdAt: user.created_at,
+    };
   }
 
   /**
-   * Update user
+   * Update user profile
    */
   async updateUser(
     userId: string,
@@ -189,7 +282,8 @@ export class UserService {
       address?: string;
       city?: string;
       country?: string;
-      profilePicture?: string | null;
+      disabilityType?: string;
+      avatar_url?: string | null;
     }
   ) {
     // Check if user exists
@@ -198,38 +292,60 @@ export class UserService {
     });
 
     if (!existingUser) {
-      throw new NotFoundError('User not found');
+      throw new NotFoundError("User not found");
     }
 
     // Update user
     const user = await prisma.user.update({
       where: { id: userId },
       data: {
-        ...data,
-        phoneNumber: data.phoneNumber || null,
-        address: data.address || null,
-        city: data.city || null,
-        country: data.country || null,
+        full_name: data.name,
+        bio: data.bio,
+        phone: data.phoneNumber,
+        date_of_birth: data.dateOfBirth,
+        address: data.address,
+        city: data.city,
+        country: data.country,
+        disability_type: data.disabilityType,
+        avatar_url: data.avatar_url,
+        updated_at: new Date(),
       },
       select: {
         id: true,
         email: true,
-        name: true,
+        full_name: true,
         role: true,
         status: true,
-        profilePicture: true,
+        avatar_url: true,
         bio: true,
-        phoneNumber: true,
-        dateOfBirth: true,
+        phone: true,
+        date_of_birth: true,
         address: true,
         city: true,
         country: true,
-        updatedAt: true,
+        disability_type: true,
+        updated_at: true,
       },
     });
 
-    return user;
+    return {
+      id: user.id,
+      email: user.email,
+      name: user.full_name,
+      role: user.role,
+      status: user.status,
+      profilePicture: user.avatar_url,
+      bio: user.bio,
+      phoneNumber: user.phone,
+      dateOfBirth: user.date_of_birth,
+      address: user.address,
+      city: user.city,
+      country: user.country,
+      disabilityType: user.disability_type,
+      updatedAt: user.updated_at,
+    };
   }
+
   /**
    * Update user role (admin only)
    */
@@ -239,19 +355,26 @@ export class UserService {
     });
 
     if (!user) {
-      throw new NotFoundError('User not found');
+      throw new NotFoundError("User not found");
     }
 
-    return prisma.user.update({
+    const updatedUser = await prisma.user.update({
       where: { id: userId },
       data: { role },
       select: {
         id: true,
         email: true,
-        name: true,
+        full_name: true,
         role: true,
       },
     });
+
+    return {
+      id: updatedUser.id,
+      email: updatedUser.email,
+      name: updatedUser.full_name,
+      role: updatedUser.role,
+    };
   }
 
   /**
@@ -263,19 +386,26 @@ export class UserService {
     });
 
     if (!user) {
-      throw new NotFoundError('User not found');
+      throw new NotFoundError("User not found");
     }
 
-    return prisma.user.update({
+    const updatedUser = await prisma.user.update({
       where: { id: userId },
       data: { status },
       select: {
         id: true,
         email: true,
-        name: true,
+        full_name: true,
         status: true,
       },
     });
+
+    return {
+      id: updatedUser.id,
+      email: updatedUser.email,
+      name: updatedUser.full_name,
+      status: updatedUser.status,
+    };
   }
 
   /**
@@ -287,7 +417,7 @@ export class UserService {
     });
 
     if (!user) {
-      throw new NotFoundError('User not found');
+      throw new NotFoundError("User not found");
     }
 
     // Soft delete: set status to INACTIVE
@@ -308,7 +438,7 @@ export class UserService {
     });
 
     if (!user) {
-      throw new NotFoundError('User not found');
+      throw new NotFoundError("User not found");
     }
 
     // Permanent delete
@@ -328,7 +458,7 @@ export class UserService {
     });
 
     if (!user) {
-      throw new NotFoundError('User not found');
+      throw new NotFoundError("User not found");
     }
 
     // Update status to SUSPENDED
@@ -352,7 +482,7 @@ export class UserService {
     });
 
     if (!user) {
-      throw new NotFoundError('User not found');
+      throw new NotFoundError("User not found");
     }
 
     await prisma.user.update({
@@ -370,16 +500,16 @@ export class UserService {
     const [total, byRole, byStatus, newThisMonth] = await Promise.all([
       prisma.user.count(),
       prisma.user.groupBy({
-        by: ['role'],
+        by: ["role"],
         _count: true,
       }),
       prisma.user.groupBy({
-        by: ['status'],
+        by: ["status"],
         _count: true,
       }),
       prisma.user.count({
         where: {
-          createdAt: {
+          created_at: {
             gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
           },
         },
@@ -388,8 +518,15 @@ export class UserService {
 
     return {
       total,
-      byRole: Object.fromEntries(byRole.map((r) => [r.role, r._count])),
-      byStatus: Object.fromEntries(byStatus.map((s) => [s.status, s._count])),
+      byRole: Object.fromEntries(
+        (byRole as RoleCount[]).map((r: RoleCount) => [r.role, r._count])
+      ),
+      byStatus: Object.fromEntries(
+        (byStatus as StatusCount[]).map((s: StatusCount) => [
+          s.status,
+          s._count,
+        ])
+      ),
       newThisMonth,
     };
   }
@@ -401,21 +538,118 @@ export class UserService {
     const users = await prisma.user.findMany({
       where: {
         OR: [
-          { name: { contains: query, mode: 'insensitive' } },
-          { email: { contains: query, mode: 'insensitive' } },
+          { full_name: { contains: query, mode: "insensitive" } },
+          { email: { contains: query, mode: "insensitive" } },
         ],
       },
       take: limit,
       select: {
         id: true,
         email: true,
-        name: true,
+        full_name: true,
         role: true,
-        profilePicture: true,
+        avatar_url: true,
       },
     });
 
-    return users;
+    return (users as SearchUser[]).map((user: SearchUser) => ({
+      id: user.id,
+      email: user.email,
+      name: user.full_name,
+      role: user.role,
+      profilePicture: user.avatar_url,
+    }));
+  }
+
+  /**
+   * Update user profile picture
+   */
+  async updateProfilePicture(userId: string, avatarUrl: string) {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new NotFoundError("User not found");
+    }
+
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        avatar_url: avatarUrl,
+        updated_at: new Date(),
+      },
+      select: {
+        id: true,
+        email: true,
+        full_name: true,
+        avatar_url: true,
+      },
+    });
+
+    return {
+      id: updatedUser.id,
+      email: updatedUser.email,
+      name: updatedUser.full_name,
+      profilePicture: updatedUser.avatar_url,
+    };
+  }
+
+  /**
+   * Get user by email
+   */
+  async getUserByEmail(email: string) {
+    const user = await prisma.user.findUnique({
+      where: { email },
+      select: {
+        id: true,
+        email: true,
+        full_name: true,
+        role: true,
+        status: true,
+        avatar_url: true,
+        email_verified: true,
+        created_at: true,
+      },
+    });
+
+    if (!user) {
+      return null;
+    }
+
+    return {
+      id: user.id,
+      email: user.email,
+      name: user.full_name,
+      role: user.role,
+      status: user.status,
+      profilePicture: user.avatar_url,
+      emailVerified: user.email_verified,
+      createdAt: user.created_at,
+    };
+  }
+
+  /**
+   * Verify user email
+   */
+  async verifyUserEmail(userId: string) {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new NotFoundError("User not found");
+    }
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        email_verified: true,
+        email_verified_at: new Date(),
+      },
+    });
+
+    return { id: userId, emailVerified: true };
   }
 }
 

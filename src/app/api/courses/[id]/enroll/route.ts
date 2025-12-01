@@ -1,75 +1,75 @@
-import { NextRequest, NextResponse } from 'next/server';
-import enrollmentService from '@/services/enrollment.service';
-import { successResponse, errorResponse } from '@/utils/response.util';
-import { errorHandler } from '@/middlewares/error.middleware';
-import { authMiddleware, getAuthenticatedUser } from '@/middlewares/auth.middleware';
-import { corsMiddleware } from '@/middlewares/cors.middleware';
-import { loggingMiddleware } from '@/middlewares/logging.middleware';
-import { HTTP_STATUS } from '@/lib/constants';
+// app/api/courses/[id]/enroll/route.ts
+import { NextRequest } from "next/server";
+import enrollmentService from "@/services/enrollment.service";
+import { successResponse, errorResponse } from "@/utils/response.util";
+import { errorHandler } from "@/middlewares/error.middleware";
+import { requireAuth } from "@/middlewares/auth.middleware";
+import { corsMiddleware } from "@/middlewares/cors.middleware";
+import { loggingMiddleware } from "@/middlewares/logging.middleware";
+import { HTTP_STATUS } from "@/lib/constants";
 
-/**
- * POST /api/courses/:id/enroll
- * Enroll in course (free or paid)
- */
-async function handler(request: NextRequest, context: { params: Promise<{ id: string }> }) {
+async function handler(
+  request: NextRequest,
+  context: { user: { userId: string; email: string; role: string } }
+) {
+  const { user } = context;
+
   try {
-    const user = getAuthenticatedUser(request);
+    // Extract course ID from URL
+    const url = new URL(request.url);
+    const pathSegments = url.pathname.split("/");
+    const courseId = pathSegments[pathSegments.length - 2]; // Get ID from /api/courses/[id]/enroll
 
-    if (!user) {
-      return errorResponse('Unauthorized', HTTP_STATUS.UNAUTHORIZED);
+    if (!courseId) {
+      return errorResponse("Course ID is required", HTTP_STATUS.BAD_REQUEST);
     }
 
-    const { id: courseId } = await context.params;
-
     // Parse request body (optional transactionId for paid courses)
-    const body = await request.json().catch(() => ({}));
+    let body;
+    try {
+      body = await request.json();
+    } catch {
+      body = {};
+    }
     const { transactionId } = body;
 
     // Enroll user
-    const enrollment = await enrollmentService.enrollCourse(user.userId, courseId, transactionId);
+    const result = await enrollmentService.enrollCourse(
+      user.userId,
+      courseId,
+      transactionId
+    );
 
+    // PERBAIKAN: Gunakan field yang sesuai dengan return value service
     return successResponse(
       {
-        enrollmentId: enrollment.id,
-        courseId: enrollment.courseId,
-        status: enrollment.status,
-        progress: enrollment.progress,
-        course: enrollment.course,
+        enrollmentId: result.enrollment.id,
+        courseId: result.enrollment.courseId, // PERBAIKAN: Gunakan course_id bukan courseId
+        status: result.enrollment.status,
+        progress: result.enrollment.progress,
+        course: result.enrollment.course,
       },
-      'Successfully enrolled in course',
+      "Successfully enrolled in course",
       HTTP_STATUS.CREATED
     );
   } catch (error) {
     if (error instanceof Error) {
       // Handle specific errors
-      if (error.message.includes('payment')) {
+      if (error.message.includes("payment")) {
         return errorResponse(error.message, HTTP_STATUS.PAYMENT_REQUIRED);
       }
       return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
     }
-    return errorResponse('Failed to enroll in course', HTTP_STATUS.INTERNAL_SERVER_ERROR);
+    return errorResponse(
+      "Failed to enroll in course",
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
   }
 }
 
-// Apply middlewares and export
-async function authenticatedHandler(
-  request: NextRequest,
-  context: { params: Promise<{ id: string }> }
-): Promise<NextResponse> {
-  const authResult = await authMiddleware(request);
-  if (authResult) return authResult;
-  return handler(request, context);
-}
+// Gunakan requireAuth untuk wrap handler
+const authenticatedHandler = requireAuth(handler);
 
-export async function POST(
-  req: NextRequest,
-  context: { params: Promise<{ id: string }> }
-): Promise<NextResponse> {
-  return errorHandler(async (request: NextRequest) => {
-    return loggingMiddleware(async (req: NextRequest) => {
-      return corsMiddleware(async (r: NextRequest) => {
-        return authenticatedHandler(r, context);
-      })(req);
-    })(request);
-  })(req);
-}
+export const POST = errorHandler(
+  loggingMiddleware(corsMiddleware(authenticatedHandler))
+);

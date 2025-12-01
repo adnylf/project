@@ -1,40 +1,57 @@
-import { NextRequest, NextResponse } from 'next/server';
-import courseService from '@/services/course.service';
-import { updateCourseSchema } from '@/lib/validation';
+// app/api/courses/[id]/route.ts
+import { NextRequest } from "next/server";
+import courseService from "@/services/course.service";
+import { updateCourseSchema } from "@/lib/validation";
 import {
   successResponse,
   validationErrorResponse,
   errorResponse,
   noContentResponse,
-} from '@/utils/response.util';
-import { validateData } from '@/utils/validation.util';
-import { errorHandler } from '@/middlewares/error.middleware';
-import { authMiddleware, getAuthenticatedUser } from '@/middlewares/auth.middleware';
-import { corsMiddleware } from '@/middlewares/cors.middleware';
-import { loggingMiddleware } from '@/middlewares/logging.middleware';
-import { HTTP_STATUS } from '@/lib/constants';
+} from "@/utils/response.util";
+import { validateData } from "@/utils/validation.util";
+import { errorHandler } from "@/middlewares/error.middleware";
+import {
+  requireAuth,
+  requireAuthWithParams,
+} from "@/middlewares/auth.middleware";
+import { corsMiddleware } from "@/middlewares/cors.middleware";
+import { loggingMiddleware } from "@/middlewares/logging.middleware";
+import { HTTP_STATUS } from "@/lib/constants";
 
 /**
  * GET /api/courses/:id
  * Get course details by ID
  */
-async function getHandler(request: NextRequest, context: { params: Promise<{ id: string }> }) {
+async function getHandler(
+  request: NextRequest,
+  context: {
+    params: { id: string };
+    user?: { userId: string; email: string; role: string };
+  }
+) {
   try {
-    const { id } = await context.params;
+    const { params } = context;
+    const id = params.id;
+
+    if (!id) {
+      return errorResponse("Course ID is required", HTTP_STATUS.BAD_REQUEST);
+    }
 
     // Check if user is authenticated to see draft courses
-    const user = getAuthenticatedUser(request);
-    const includePrivate = !!user;
+    const includePrivate = !!context.user;
 
     // Get course
     const course = await courseService.getCourseById(id, includePrivate);
 
-    return successResponse(course, 'Course retrieved successfully');
+    return successResponse(course, "Course retrieved successfully");
   } catch (error) {
     if (error instanceof Error) {
       return errorResponse(error.message, HTTP_STATUS.NOT_FOUND);
     }
-    return errorResponse('Failed to get course', HTTP_STATUS.INTERNAL_SERVER_ERROR);
+    return errorResponse(
+      "Failed to get course",
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
   }
 }
 
@@ -42,42 +59,60 @@ async function getHandler(request: NextRequest, context: { params: Promise<{ id:
  * PUT /api/courses/:id
  * Update course
  */
-async function putHandler(request: NextRequest, context: { params: Promise<{ id: string }> }) {
+async function putHandler(
+  request: NextRequest,
+  context: {
+    params: { id: string };
+    user: { userId: string; email: string; role: string };
+  }
+) {
   try {
-    const user = getAuthenticatedUser(request);
+    const { params, user } = context;
+    const id = params.id;
 
-    if (!user) {
-      return errorResponse('Unauthorized', HTTP_STATUS.UNAUTHORIZED);
+    if (!id) {
+      return errorResponse("Course ID is required", HTTP_STATUS.BAD_REQUEST);
     }
 
-    const { id } = await context.params;
-
     // Parse request body
-    const body = await request.json();
+    let body;
+    try {
+      body = await request.json();
+    } catch {
+      return errorResponse("Invalid JSON body", HTTP_STATUS.BAD_REQUEST);
+    }
+
+    // Handle discount_price conversion from null to undefined
+    const cleanedBody = {
+      ...body,
+      discountPrice:
+        body.discountPrice === null ? undefined : body.discountPrice,
+    };
 
     // Validate input
-    const validation = await validateData(updateCourseSchema, body);
+    const validation = await validateData(updateCourseSchema, cleanedBody);
 
     if (!validation.success) {
       return validationErrorResponse(validation.errors);
     }
 
-    // Handle null discountPrice - convert to undefined for service
-    const updateData = {
-      ...validation.data,
-      discountPrice:
-        validation.data.discountPrice === null ? undefined : validation.data.discountPrice,
-    };
-
     // Update course
-    const course = await courseService.updateCourse(id, user.userId, user.role, updateData);
+    const course = await courseService.updateCourse(
+      id,
+      user.userId,
+      user.role,
+      validation.data
+    );
 
-    return successResponse(course, 'Course updated successfully');
+    return successResponse(course, "Course updated successfully");
   } catch (error) {
     if (error instanceof Error) {
       return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
     }
-    return errorResponse('Failed to update course', HTTP_STATUS.INTERNAL_SERVER_ERROR);
+    return errorResponse(
+      "Failed to update course",
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
   }
 }
 
@@ -85,15 +120,20 @@ async function putHandler(request: NextRequest, context: { params: Promise<{ id:
  * DELETE /api/courses/:id
  * Delete course
  */
-async function deleteHandler(request: NextRequest, context: { params: Promise<{ id: string }> }) {
+async function deleteHandler(
+  request: NextRequest,
+  context: {
+    params: { id: string };
+    user: { userId: string; email: string; role: string };
+  }
+) {
   try {
-    const user = getAuthenticatedUser(request);
+    const { params, user } = context;
+    const id = params.id;
 
-    if (!user) {
-      return errorResponse('Unauthorized', HTTP_STATUS.UNAUTHORIZED);
+    if (!id) {
+      return errorResponse("Course ID is required", HTTP_STATUS.BAD_REQUEST);
     }
-
-    const { id } = await context.params;
 
     // Delete course
     await courseService.deleteCourse(id, user.userId, user.role);
@@ -103,64 +143,82 @@ async function deleteHandler(request: NextRequest, context: { params: Promise<{ 
     if (error instanceof Error) {
       return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
     }
-    return errorResponse('Failed to delete course', HTTP_STATUS.INTERNAL_SERVER_ERROR);
+    return errorResponse(
+      "Failed to delete course",
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
   }
 }
 
-// Apply middlewares and export
-async function authenticatedPutHandler(
+// PERBAIKAN: Buat wrapper function yang sesuai untuk setiap method
+const getHandlerWrapper = async (
   request: NextRequest,
-  context: { params: Promise<{ id: string }> }
-): Promise<NextResponse> {
-  const authResult = await authMiddleware(request);
-  if (authResult) return authResult;
-  return putHandler(request, context);
-}
+  context: { params: { id: string } }
+) => {
+  return getHandler(request, { ...context, user: undefined });
+};
 
-async function authenticatedDeleteHandler(
+const putHandlerWrapper = async (
   request: NextRequest,
-  context: { params: Promise<{ id: string }> }
-): Promise<NextResponse> {
-  const authResult = await authMiddleware(request);
-  if (authResult) return authResult;
-  return deleteHandler(request, context);
+  context: { params: { id: string } }
+) => {
+  const authHandler = requireAuthWithParams(putHandler);
+  return authHandler(request, context);
+};
+
+const deleteHandlerWrapper = async (
+  request: NextRequest,
+  context: { params: { id: string } }
+) => {
+  const authHandler = requireAuthWithParams(deleteHandler);
+  return authHandler(request, context);
+};
+
+// PERBAIKAN: Alternatif lebih sederhana - gunakan requireAuth biasa dan extract params dari URL
+async function authenticatedPutHandler(request: NextRequest) {
+  const authHandler = requireAuth(
+    async (request: NextRequest, { user }: { user: any }) => {
+      const url = new URL(request.url);
+      const pathSegments = url.pathname.split("/");
+      const id = pathSegments[pathSegments.length - 1];
+
+      return putHandler(request, { params: { id }, user });
+    }
+  );
+
+  return authHandler(request);
 }
 
-export async function GET(
-  req: NextRequest,
-  context: { params: Promise<{ id: string }> }
-): Promise<NextResponse> {
-  return errorHandler(async (request: NextRequest) => {
-    return loggingMiddleware(async (r: NextRequest) => {
-      return corsMiddleware(async (rq: NextRequest) => {
-        return getHandler(rq, context);
-      })(r);
-    })(request);
-  })(req);
+async function authenticatedDeleteHandler(request: NextRequest) {
+  const authHandler = requireAuth(
+    async (request: NextRequest, { user }: { user: any }) => {
+      const url = new URL(request.url);
+      const pathSegments = url.pathname.split("/");
+      const id = pathSegments[pathSegments.length - 1];
+
+      return deleteHandler(request, { params: { id }, user });
+    }
+  );
+
+  return authHandler(request);
 }
 
-export async function PUT(
-  req: NextRequest,
-  context: { params: Promise<{ id: string }> }
-): Promise<NextResponse> {
-  return errorHandler(async (request: NextRequest) => {
-    return loggingMiddleware(async (r: NextRequest) => {
-      return corsMiddleware(async (rq: NextRequest) => {
-        return authenticatedPutHandler(rq, context);
-      })(r);
-    })(request);
-  })(req);
+async function getHandlerWithAuth(request: NextRequest) {
+  const url = new URL(request.url);
+  const pathSegments = url.pathname.split("/");
+  const id = pathSegments[pathSegments.length - 1];
+
+  return getHandler(request, { params: { id }, user: undefined });
 }
 
-export async function DELETE(
-  req: NextRequest,
-  context: { params: Promise<{ id: string }> }
-): Promise<NextResponse> {
-  return errorHandler(async (request: NextRequest) => {
-    return loggingMiddleware(async (r: NextRequest) => {
-      return corsMiddleware(async (rq: NextRequest) => {
-        return authenticatedDeleteHandler(rq, context);
-      })(r);
-    })(request);
-  })(req);
-}
+export const GET = errorHandler(
+  loggingMiddleware(corsMiddleware(getHandlerWithAuth))
+);
+
+export const PUT = errorHandler(
+  loggingMiddleware(corsMiddleware(authenticatedPutHandler))
+);
+
+export const DELETE = errorHandler(
+  loggingMiddleware(corsMiddleware(authenticatedDeleteHandler))
+);

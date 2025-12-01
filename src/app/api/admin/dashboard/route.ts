@@ -1,19 +1,21 @@
-// src/app/api/admin/dashboard/route.ts
-import { NextRequest } from 'next/server';
-import prisma from '@/lib/prisma';
-import { successResponse, errorResponse } from '@/utils/response.util';
-import { errorHandler } from '@/middlewares/error.middleware';
-import { authMiddleware, getAuthenticatedUser } from '@/middlewares/auth.middleware';
-import { corsMiddleware } from '@/middlewares/cors.middleware';
-import { loggingMiddleware } from '@/middlewares/logging.middleware';
-import { HTTP_STATUS, USER_ROLES } from '@/lib/constants';
+import { NextRequest } from "next/server";
+import prisma from "@/lib/prisma";
+import { successResponse, errorResponse } from "@/utils/response.util";
+import { errorHandler } from "@/middlewares/error.middleware";
+import { requireAuth } from "@/middlewares/auth.middleware";
+import { corsMiddleware } from "@/middlewares/cors.middleware";
+import { loggingMiddleware } from "@/middlewares/logging.middleware";
+import { HTTP_STATUS, USER_ROLES } from "@/lib/constants";
 
-async function handler(request: NextRequest) {
+async function handler(
+  request: NextRequest,
+  context: { user: { userId: string; email: string; role: string } }
+) {
   try {
-    const user = getAuthenticatedUser(request);
+    const { user } = context;
 
-    if (!user || user.role !== USER_ROLES.ADMIN) {
-      return errorResponse('Insufficient permissions', HTTP_STATUS.FORBIDDEN);
+    if (user.role !== USER_ROLES.ADMIN) {
+      return errorResponse("Insufficient permissions", HTTP_STATUS.FORBIDDEN);
     }
 
     const now = new Date();
@@ -50,10 +52,10 @@ async function handler(request: NextRequest) {
     ] = await Promise.all([
       // Users
       prisma.user.count(),
-      prisma.user.count({ where: { createdAt: { gte: thisMonth } } }),
+      prisma.user.count({ where: { created_at: { gte: thisMonth } } }),
       prisma.user.count({
         where: {
-          createdAt: {
+          created_at: {
             gte: lastMonth,
             lt: thisMonth,
           },
@@ -61,70 +63,70 @@ async function handler(request: NextRequest) {
       }),
       prisma.user.count({
         where: {
-          lastLoginAt: { gte: last7Days },
+          last_login: { gte: last7Days },
         },
       }),
 
       // Courses
       prisma.course.count(),
-      prisma.course.count({ where: { status: 'PUBLISHED' } }),
-      prisma.course.count({ where: { status: 'DRAFT' } }),
-      prisma.course.count({ where: { status: 'REVIEW' } }),
+      prisma.course.count({ where: { status: "PUBLISHED" } }),
+      prisma.course.count({ where: { status: "DRAFT" } }),
+      prisma.course.count({ where: { status: "PENDING_REVIEW" } }),
 
       // Revenue
       prisma.transaction.aggregate({
-        where: { status: 'PAID' },
-        _sum: { totalAmount: true },
+        where: { status: "PAID" },
+        _sum: { total_amount: true },
       }),
       prisma.transaction.aggregate({
         where: {
-          status: 'PAID',
-          paidAt: { gte: thisMonth },
+          status: "PAID",
+          paid_at: { gte: thisMonth },
         },
-        _sum: { totalAmount: true },
+        _sum: { total_amount: true },
       }),
       prisma.transaction.aggregate({
         where: {
-          status: 'PAID',
-          paidAt: {
+          status: "PAID",
+          paid_at: {
             gte: lastMonth,
             lt: thisMonth,
           },
         },
-        _sum: { totalAmount: true },
+        _sum: { total_amount: true },
       }),
 
       // Enrollments
       prisma.enrollment.count(),
-      prisma.enrollment.count({ where: { createdAt: { gte: thisMonth } } }),
-      prisma.enrollment.count({ where: { status: 'ACTIVE' } }),
+      prisma.enrollment.count({ where: { created_at: { gte: thisMonth } } }),
+      prisma.enrollment.count({ where: { status: "ACTIVE" } }),
 
       // Recent activities
       prisma.user.findMany({
         take: 5,
-        orderBy: { createdAt: 'desc' },
+        orderBy: { created_at: "desc" },
         select: {
           id: true,
-          name: true,
+          full_name: true,
           email: true,
           role: true,
-          createdAt: true,
-          profilePicture: true,
+          created_at: true,
+          avatar_url: true,
         },
       }),
       prisma.course.findMany({
         take: 5,
-        orderBy: { createdAt: 'desc' },
+        orderBy: { created_at: "desc" },
         select: {
           id: true,
           title: true,
           status: true,
-          createdAt: true,
+          created_at: true,
           thumbnail: true,
           mentor: {
             select: {
               user: {
-                select: { name: true },
+                select: { full_name: true },
               },
             },
           },
@@ -132,15 +134,15 @@ async function handler(request: NextRequest) {
       }),
       prisma.transaction.findMany({
         take: 5,
-        orderBy: { createdAt: 'desc' },
-        where: { status: 'PAID' },
+        orderBy: { created_at: "desc" },
+        where: { status: "PAID" },
         select: {
           id: true,
-          orderId: true,
-          totalAmount: true,
-          paidAt: true,
+          order_id: true,
+          total_amount: true,
+          paid_at: true,
           user: {
-            select: { name: true, email: true },
+            select: { full_name: true, email: true },
           },
           course: {
             select: { title: true },
@@ -184,9 +186,10 @@ async function handler(request: NextRequest) {
         : 0;
 
     const revenueGrowthPercent =
-      (revenueLastMonth._sum.totalAmount || 0) > 0
-        ? (((revenueThisMonth._sum.totalAmount || 0) - (revenueLastMonth._sum.totalAmount || 0)) /
-            (revenueLastMonth._sum.totalAmount || 0)) *
+      (revenueLastMonth._sum.total_amount || 0) > 0
+        ? (((revenueThisMonth._sum.total_amount || 0) -
+            (revenueLastMonth._sum.total_amount || 0)) /
+            (revenueLastMonth._sum.total_amount || 0)) *
           100
         : 0;
 
@@ -206,9 +209,9 @@ async function handler(request: NextRequest) {
             pendingApproval,
           },
           revenue: {
-            total: totalRevenue._sum.totalAmount || 0,
-            thisMonth: revenueThisMonth._sum.totalAmount || 0,
-            lastMonth: revenueLastMonth._sum.totalAmount || 0,
+            total: totalRevenue._sum.total_amount || 0,
+            thisMonth: revenueThisMonth._sum.total_amount || 0,
+            lastMonth: revenueLastMonth._sum.total_amount || 0,
             growth: Math.round(revenueGrowthPercent * 10) / 10,
           },
           enrollments: {
@@ -228,20 +231,21 @@ async function handler(request: NextRequest) {
           revenue: revenueGrowth,
         },
       },
-      'Dashboard data retrieved successfully'
+      "Dashboard data retrieved successfully"
     );
   } catch (error) {
     if (error instanceof Error) {
       return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
     }
-    return errorResponse('Failed to get dashboard data', HTTP_STATUS.INTERNAL_SERVER_ERROR);
+    return errorResponse(
+      "Failed to get dashboard data",
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
   }
 }
 
-async function authenticatedHandler(request: NextRequest) {
-  const authResult = await authMiddleware(request);
-  if (authResult) return authResult;
-  return handler(request);
-}
+const authenticatedHandler = requireAuth(handler);
 
-export const GET = errorHandler(loggingMiddleware(corsMiddleware(authenticatedHandler)));
+export const GET = errorHandler(
+  loggingMiddleware(corsMiddleware(authenticatedHandler))
+);

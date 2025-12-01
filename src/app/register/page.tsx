@@ -54,7 +54,7 @@ export default function RegisterPageComponent() {
       console.log('Registrasi berhasil:', data);
       
       // Redirect to login page or dashboard
-      router.push('/login');
+      router.push('/verify-email');
       
     } catch (error) {
       console.error('Registrasi gagal:', error);

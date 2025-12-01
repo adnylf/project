@@ -1,36 +1,42 @@
-import { NextRequest } from 'next/server';
-import sectionService from '@/services/section.service';
-import { updateSectionSchema } from '@/lib/validation';
+import { NextRequest, NextResponse } from "next/server";
+import sectionService from "@/services/section.service";
+import { updateSectionSchema } from "@/lib/validation";
 import {
   successResponse,
   validationErrorResponse,
   errorResponse,
   noContentResponse,
-} from '@/utils/response.util';
-import { validateData } from '@/utils/validation.util';
-import { errorHandler } from '@/middlewares/error.middleware';
-import { authMiddleware, getAuthenticatedUser } from '@/middlewares/auth.middleware';
-import { corsMiddleware } from '@/middlewares/cors.middleware';
-import { loggingMiddleware } from '@/middlewares/logging.middleware';
-import { HTTP_STATUS } from '@/lib/constants';
+} from "@/utils/response.util";
+import { validateData } from "@/utils/validation.util";
+import { errorHandler } from "@/middlewares/error.middleware";
+import { authMiddleware } from "@/middlewares/auth.middleware";
+import { corsMiddleware } from "@/middlewares/cors.middleware";
+import { loggingMiddleware } from "@/middlewares/logging.middleware";
+import { HTTP_STATUS } from "@/lib/constants";
 
 /**
  * GET /api/sections/:id
  * Get section by ID with materials
  */
-async function getHandler(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+async function getHandler(
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
   try {
-    const { id } = await params;
+    const { id } = await context.params;
 
     // Get section
     const section = await sectionService.getSectionById(id);
 
-    return successResponse(section, 'Section retrieved successfully');
+    return successResponse(section, "Section retrieved successfully");
   } catch (error) {
     if (error instanceof Error) {
       return errorResponse(error.message, HTTP_STATUS.NOT_FOUND);
     }
-    return errorResponse('Failed to get section', HTTP_STATUS.INTERNAL_SERVER_ERROR);
+    return errorResponse(
+      "Failed to get section",
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
   }
 }
 
@@ -38,15 +44,13 @@ async function getHandler(request: NextRequest, { params }: { params: Promise<{ 
  * PUT /api/sections/:id
  * Update section
  */
-async function putHandler(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+async function putHandler(
+  request: NextRequest,
+  user: any,
+  context: { params: Promise<{ id: string }> }
+) {
   try {
-    const user = getAuthenticatedUser(request);
-
-    if (!user) {
-      return errorResponse('Unauthorized', HTTP_STATUS.UNAUTHORIZED);
-    }
-
-    const { id } = await params;
+    const { id } = await context.params;
 
     // Parse request body
     const body = await request.json();
@@ -59,14 +63,22 @@ async function putHandler(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     // Update section
-    const section = await sectionService.updateSection(id, user.userId, user.role, validation.data);
+    const section = await sectionService.updateSection(
+      id,
+      user.userId,
+      user.role,
+      validation.data
+    );
 
-    return successResponse(section, 'Section updated successfully');
+    return successResponse(section, "Section updated successfully");
   } catch (error) {
     if (error instanceof Error) {
       return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
     }
-    return errorResponse('Failed to update section', HTTP_STATUS.INTERNAL_SERVER_ERROR);
+    return errorResponse(
+      "Failed to update section",
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
   }
 }
 
@@ -76,16 +88,11 @@ async function putHandler(request: NextRequest, { params }: { params: Promise<{ 
  */
 async function deleteHandler(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  user: any,
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = getAuthenticatedUser(request);
-
-    if (!user) {
-      return errorResponse('Unauthorized', HTTP_STATUS.UNAUTHORIZED);
-    }
-
-    const { id } = await params;
+    const { id } = await context.params;
 
     // Delete section
     await sectionService.deleteSection(id, user.userId, user.role);
@@ -95,7 +102,10 @@ async function deleteHandler(
     if (error instanceof Error) {
       return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
     }
-    return errorResponse('Failed to delete section', HTTP_STATUS.INTERNAL_SERVER_ERROR);
+    return errorResponse(
+      "Failed to delete section",
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
   }
 }
 
@@ -103,39 +113,61 @@ async function deleteHandler(
 async function authenticatedPutHandler(
   request: NextRequest,
   context: { params: Promise<{ id: string }> }
-) {
+): Promise<NextResponse> {
   const authResult = await authMiddleware(request);
-  if (authResult) return authResult;
-  return putHandler(request, context);
+  if (authResult instanceof NextResponse) {
+    return authResult;
+  }
+  return putHandler(request, authResult, context);
 }
 
 async function authenticatedDeleteHandler(
   request: NextRequest,
   context: { params: Promise<{ id: string }> }
-) {
+): Promise<NextResponse> {
   const authResult = await authMiddleware(request);
-  if (authResult) return authResult;
-  return deleteHandler(request, context);
+  if (authResult instanceof NextResponse) {
+    return authResult;
+  }
+  return deleteHandler(request, authResult, context);
 }
 
 // Properly typed exports
-export const GET = (request: NextRequest, context: { params: Promise<{ id: string }> }) =>
-  errorHandler((req: NextRequest) =>
-    loggingMiddleware((req2: NextRequest) =>
-      corsMiddleware((req3: NextRequest) => getHandler(req3, context))(req2)
-    )(req)
-  )(request);
+export async function GET(
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
+): Promise<NextResponse> {
+  return errorHandler(async (req: NextRequest) => {
+    return loggingMiddleware(async (r: NextRequest) => {
+      return corsMiddleware(async (rq: NextRequest) => {
+        return getHandler(rq, context);
+      })(r);
+    })(req);
+  })(request);
+}
 
-export const PUT = (request: NextRequest, context: { params: Promise<{ id: string }> }) =>
-  errorHandler((req: NextRequest) =>
-    loggingMiddleware((req2: NextRequest) =>
-      corsMiddleware((req3: NextRequest) => authenticatedPutHandler(req3, context))(req2)
-    )(req)
-  )(request);
+export async function PUT(
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
+): Promise<NextResponse> {
+  return errorHandler(async (req: NextRequest) => {
+    return loggingMiddleware(async (r: NextRequest) => {
+      return corsMiddleware(async (rq: NextRequest) => {
+        return authenticatedPutHandler(rq, context);
+      })(r);
+    })(req);
+  })(request);
+}
 
-export const DELETE = (request: NextRequest, context: { params: Promise<{ id: string }> }) =>
-  errorHandler((req: NextRequest) =>
-    loggingMiddleware((req2: NextRequest) =>
-      corsMiddleware((req3: NextRequest) => authenticatedDeleteHandler(req3, context))(req2)
-    )(req)
-  )(request);
+export async function DELETE(
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
+): Promise<NextResponse> {
+  return errorHandler(async (req: NextRequest) => {
+    return loggingMiddleware(async (r: NextRequest) => {
+      return corsMiddleware(async (rq: NextRequest) => {
+        return authenticatedDeleteHandler(rq, context);
+      })(r);
+    })(req);
+  })(request);
+}

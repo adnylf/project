@@ -29,8 +29,15 @@ export interface RegistrationData {
   email: string;
   password: string;
   name: string;
-  disability_type?: 'BUTA_WARNA' | 'DISLEKSIA' | 'KOGNITIF' | 'LOW_VISION' | 'MENTOR' | 'MOTORIK' | 'TUNARUNGU';
-  role?: 'STUDENT' | 'MENTOR';
+  disability_type?:
+    | "BUTA_WARNA"
+    | "DISLEKSIA"
+    | "KOGNITIF"
+    | "LOW_VISION"
+    | "MENTOR"
+    | "MOTORIK"
+    | "TUNARUNGU";
+  role?: "STUDENT" | "MENTOR";
 }
 
 /**

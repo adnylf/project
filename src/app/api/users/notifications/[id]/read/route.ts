@@ -1,44 +1,53 @@
-import { NextRequest } from 'next/server';
-import prisma from '@/lib/prisma';
-import { successResponse, errorResponse } from '@/utils/response.util';
-import { errorHandler } from '@/middlewares/error.middleware';
-import { authMiddleware, getAuthenticatedUser } from '@/middlewares/auth.middleware';
-import { corsMiddleware } from '@/middlewares/cors.middleware';
-import { loggingMiddleware } from '@/middlewares/logging.middleware';
-import { HTTP_STATUS } from '@/lib/constants';
+import { NextRequest } from "next/server";
+import prisma from "@/lib/prisma";
+import { successResponse, errorResponse } from "@/utils/response.util";
+import { errorHandler } from "@/middlewares/error.middleware";
+import { requireAuth } from "@/middlewares/auth.middleware";
+import { corsMiddleware } from "@/middlewares/cors.middleware";
+import { loggingMiddleware } from "@/middlewares/logging.middleware";
+import { HTTP_STATUS } from "@/lib/constants";
 
 /**
  * PUT /api/users/notifications/:id/read
  * Mark notification as read
  */
-async function handler(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+async function handler(
+  request: NextRequest,
+  context: { user: { userId: string; email: string; role: string } }
+) {
+  const { user } = context;
+
   try {
-    const user = getAuthenticatedUser(request);
+    // Extract notification ID from URL
+    const url = new URL(request.url);
+    const pathSegments = url.pathname.split("/");
+    const id = pathSegments[pathSegments.length - 2]; // Get ID from /api/users/notifications/[id]/read
 
-    if (!user) {
-      return errorResponse('Unauthorized', HTTP_STATUS.UNAUTHORIZED);
+    if (!id) {
+      return errorResponse(
+        "Notification ID is required",
+        HTTP_STATUS.BAD_REQUEST
+      );
     }
-
-    const { id } = await params;
 
     // Check if notification exists and belongs to user
     const notification = await prisma.notification.findFirst({
       where: {
         id,
-        userId: user.userId,
+        user_id: user.userId,
       },
     });
 
     if (!notification) {
-      return errorResponse('Notification not found', HTTP_STATUS.NOT_FOUND);
+      return errorResponse("Notification not found", HTTP_STATUS.NOT_FOUND);
     }
 
     // Mark as read
     const updatedNotification = await prisma.notification.update({
       where: { id },
       data: {
-        status: 'READ',
-        readAt: new Date(),
+        status: "READ",
+        read_at: new Date(),
       },
     });
 
@@ -46,32 +55,24 @@ async function handler(request: NextRequest, { params }: { params: Promise<{ id:
       {
         id: updatedNotification.id,
         status: updatedNotification.status,
-        readAt: updatedNotification.readAt,
+        read_at: updatedNotification.read_at,
       },
-      'Notification marked as read'
+      "Notification marked as read"
     );
   } catch (error) {
     if (error instanceof Error) {
       return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
     }
-    return errorResponse('Failed to mark notification as read', HTTP_STATUS.INTERNAL_SERVER_ERROR);
+    return errorResponse(
+      "Failed to mark notification as read",
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
   }
 }
 
-// Apply middlewares and export
-async function authenticatedHandler(
-  request: NextRequest,
-  context: { params: Promise<{ id: string }> }
-) {
-  const authResult = await authMiddleware(request);
-  if (authResult) return authResult;
-  return handler(request, context);
-}
+// Apply authentication
+const authenticatedHandler = requireAuth(handler);
 
-// Properly typed export
-export const PUT = (request: NextRequest, context: { params: Promise<{ id: string }> }) =>
-  errorHandler((req: NextRequest) =>
-    loggingMiddleware((req2: NextRequest) =>
-      corsMiddleware((req3: NextRequest) => authenticatedHandler(req3, context))(req2)
-    )(req)
-  )(request);
+export const PUT = errorHandler(
+  loggingMiddleware(corsMiddleware(authenticatedHandler))
+);

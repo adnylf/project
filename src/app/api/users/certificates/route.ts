@@ -1,29 +1,28 @@
-import { NextRequest } from 'next/server';
-import prisma from '@/lib/prisma';
-import { paginatedResponse, errorResponse } from '@/utils/response.util';
-import { validatePagination } from '@/utils/validation.util';
-import { errorHandler } from '@/middlewares/error.middleware';
-import { authMiddleware, getAuthenticatedUser } from '@/middlewares/auth.middleware';
-import { corsMiddleware } from '@/middlewares/cors.middleware';
-import { loggingMiddleware } from '@/middlewares/logging.middleware';
-import { HTTP_STATUS } from '@/lib/constants';
+import { NextRequest } from "next/server";
+import prisma from "@/lib/prisma";
+import { paginatedResponse, errorResponse } from "@/utils/response.util";
+import { validatePagination } from "@/utils/validation.util";
+import { errorHandler } from "@/middlewares/error.middleware";
+import { requireAuth } from "@/middlewares/auth.middleware";
+import { corsMiddleware } from "@/middlewares/cors.middleware";
+import { loggingMiddleware } from "@/middlewares/logging.middleware";
+import { HTTP_STATUS } from "@/lib/constants";
 
 /**
  * GET /api/users/certificates
  * Get user certificates
  */
-async function handler(request: NextRequest) {
+async function handler(
+  request: NextRequest,
+  context: { user: { userId: string; email: string; role: string } }
+) {
+  const { user } = context;
+
   try {
-    const user = getAuthenticatedUser(request);
-
-    if (!user) {
-      return errorResponse('Unauthorized', HTTP_STATUS.UNAUTHORIZED);
-    }
-
     // Parse query parameters
     const { searchParams } = new URL(request.url);
-    const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '10');
+    const page = parseInt(searchParams.get("page") || "1");
+    const limit = parseInt(searchParams.get("limit") || "10");
 
     // Validate pagination
     const validatedPagination = validatePagination(page, limit);
@@ -35,18 +34,18 @@ async function handler(request: NextRequest) {
     const [certificates, total] = await Promise.all([
       prisma.certificate.findMany({
         where: {
-          userId: user.userId,
-          status: 'ISSUED', // Only show issued certificates
+          user_id: user.userId,
+          status: "ISSUED", // Only show issued certificates
         },
         skip,
         take: validatedPagination.limit,
-        orderBy: { issuedAt: 'desc' },
+        orderBy: { issued_at: "desc" },
         select: {
           id: true,
-          certificateNumber: true,
+          certificate_number: true,
           status: true,
-          issuedAt: true,
-          pdfUrl: true,
+          issued_at: true,
+          pdf_url: true,
           enrollment: {
             select: {
               course: {
@@ -58,7 +57,7 @@ async function handler(request: NextRequest) {
                     select: {
                       user: {
                         select: {
-                          name: true,
+                          full_name: true,
                         },
                       },
                     },
@@ -71,8 +70,8 @@ async function handler(request: NextRequest) {
       }),
       prisma.certificate.count({
         where: {
-          userId: user.userId,
-          status: 'ISSUED',
+          user_id: user.userId,
+          status: "ISSUED",
         },
       }),
     ]);
@@ -84,21 +83,22 @@ async function handler(request: NextRequest) {
         limit: validatedPagination.limit,
         total,
       },
-      'Certificates retrieved successfully'
+      "Certificates retrieved successfully"
     );
   } catch (error) {
     if (error instanceof Error) {
       return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
     }
-    return errorResponse('Failed to get certificates', HTTP_STATUS.INTERNAL_SERVER_ERROR);
+    return errorResponse(
+      "Failed to get certificates",
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
   }
 }
 
-// Apply middlewares and export
-async function authenticatedHandler(request: NextRequest) {
-  const authResult = await authMiddleware(request);
-  if (authResult) return authResult;
-  return handler(request);
-}
+// Apply authentication
+const authenticatedHandler = requireAuth(handler);
 
-export const GET = errorHandler(loggingMiddleware(corsMiddleware(authenticatedHandler)));
+export const GET = errorHandler(
+  loggingMiddleware(corsMiddleware(authenticatedHandler))
+);

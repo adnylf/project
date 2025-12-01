@@ -1,29 +1,32 @@
-import { NextRequest } from 'next/server';
-import prisma from '@/lib/prisma';
-import { successResponse, paginatedResponse, errorResponse } from '@/utils/response.util';
-import { validatePagination } from '@/utils/validation.util';
-import { errorHandler } from '@/middlewares/error.middleware';
-import { authMiddleware, getAuthenticatedUser } from '@/middlewares/auth.middleware';
-import { corsMiddleware } from '@/middlewares/cors.middleware';
-import { loggingMiddleware } from '@/middlewares/logging.middleware';
-import { HTTP_STATUS } from '@/lib/constants';
+import { NextRequest } from "next/server";
+import prisma from "@/lib/prisma";
+import {
+  successResponse,
+  paginatedResponse,
+  errorResponse,
+} from "@/utils/response.util";
+import { validatePagination } from "@/utils/validation.util";
+import { errorHandler } from "@/middlewares/error.middleware";
+import { requireAuth } from "@/middlewares/auth.middleware";
+import { corsMiddleware } from "@/middlewares/cors.middleware";
+import { loggingMiddleware } from "@/middlewares/logging.middleware";
+import { HTTP_STATUS } from "@/lib/constants";
 
 /**
  * GET /api/users/wishlist
  * Get user wishlist
  */
-async function getHandler(request: NextRequest) {
+async function getHandler(
+  request: NextRequest,
+  context: { user: { userId: string; email: string; role: string } }
+) {
+  const { user } = context;
+
   try {
-    const user = getAuthenticatedUser(request);
-
-    if (!user) {
-      return errorResponse('Unauthorized', HTTP_STATUS.UNAUTHORIZED);
-    }
-
     // Parse query parameters
     const { searchParams } = new URL(request.url);
-    const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '10');
+    const page = parseInt(searchParams.get("page") || "1");
+    const limit = parseInt(searchParams.get("limit") || "10");
 
     // Validate pagination
     const validatedPagination = validatePagination(page, limit);
@@ -34,32 +37,32 @@ async function getHandler(request: NextRequest) {
     // Get wishlist
     const [wishlist, total] = await Promise.all([
       prisma.wishlist.findMany({
-        where: { userId: user.userId },
+        where: { user_id: user.userId },
         skip,
         take: validatedPagination.limit,
-        orderBy: { createdAt: 'desc' },
+        orderBy: { created_at: "desc" },
         select: {
           id: true,
-          createdAt: true,
+          created_at: true,
           course: {
             select: {
               id: true,
               title: true,
               slug: true,
               thumbnail: true,
-              shortDescription: true,
+              short_description: true,
               level: true,
               price: true,
-              discountPrice: true,
-              isFree: true,
-              averageRating: true,
-              totalStudents: true,
+              discount_price: true,
+              is_free: true,
+              average_rating: true,
+              total_students: true,
               mentor: {
                 select: {
                   user: {
                     select: {
-                      name: true,
-                      profilePicture: true,
+                      full_name: true,
+                      avatar_url: true,
                     },
                   },
                 },
@@ -68,7 +71,7 @@ async function getHandler(request: NextRequest) {
           },
         },
       }),
-      prisma.wishlist.count({ where: { userId: user.userId } }),
+      prisma.wishlist.count({ where: { user_id: user.userId } }),
     ]);
 
     return paginatedResponse(
@@ -78,13 +81,16 @@ async function getHandler(request: NextRequest) {
         limit: validatedPagination.limit,
         total,
       },
-      'Wishlist retrieved successfully'
+      "Wishlist retrieved successfully"
     );
   } catch (error) {
     if (error instanceof Error) {
       return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
     }
-    return errorResponse('Failed to get wishlist', HTTP_STATUS.INTERNAL_SERVER_ERROR);
+    return errorResponse(
+      "Failed to get wishlist",
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
   }
 }
 
@@ -92,20 +98,28 @@ async function getHandler(request: NextRequest) {
  * POST /api/users/wishlist
  * Add course to wishlist
  */
-async function postHandler(request: NextRequest) {
-  try {
-    const user = getAuthenticatedUser(request);
+async function postHandler(
+  request: NextRequest,
+  context: { user: { userId: string; email: string; role: string } }
+) {
+  const { user } = context;
 
-    if (!user) {
-      return errorResponse('Unauthorized', HTTP_STATUS.UNAUTHORIZED);
+  try {
+    // Parse request body
+    let body;
+    try {
+      body = await request.json();
+    } catch {
+      return errorResponse(
+        "Invalid JSON in request body",
+        HTTP_STATUS.BAD_REQUEST
+      );
     }
 
-    // Parse request body
-    const body = await request.json();
     const { courseId } = body;
 
     if (!courseId) {
-      return errorResponse('Course ID is required', HTTP_STATUS.BAD_REQUEST);
+      return errorResponse("Course ID is required", HTTP_STATUS.BAD_REQUEST);
     }
 
     // Check if course exists
@@ -114,46 +128,49 @@ async function postHandler(request: NextRequest) {
     });
 
     if (!course) {
-      return errorResponse('Course not found', HTTP_STATUS.NOT_FOUND);
+      return errorResponse("Course not found", HTTP_STATUS.NOT_FOUND);
     }
 
     // Check if already in wishlist
     const existingWishlist = await prisma.wishlist.findUnique({
       where: {
-        userId_courseId: {
-          userId: user.userId,
-          courseId,
+        user_id_course_id: {
+          user_id: user.userId,
+          course_id: courseId,
         },
       },
     });
 
     if (existingWishlist) {
-      return errorResponse('Course already in wishlist', HTTP_STATUS.CONFLICT);
+      return errorResponse("Course already in wishlist", HTTP_STATUS.CONFLICT);
     }
 
     // Check if already enrolled
     const enrollment = await prisma.enrollment.findUnique({
       where: {
-        userId_courseId: {
-          userId: user.userId,
-          courseId,
+        user_id_course_id: {
+          user_id: user.userId,
+          course_id: courseId,
         },
       },
     });
 
     if (enrollment) {
-      return errorResponse('You are already enrolled in this course', HTTP_STATUS.CONFLICT);
+      return errorResponse(
+        "You are already enrolled in this course",
+        HTTP_STATUS.CONFLICT
+      );
     }
 
     // Add to wishlist
     const wishlistItem = await prisma.wishlist.create({
       data: {
-        userId: user.userId,
-        courseId,
+        user_id: user.userId,
+        course_id: courseId,
       },
       select: {
         id: true,
-        createdAt: true,
+        created_at: true,
         course: {
           select: {
             id: true,
@@ -165,27 +182,29 @@ async function postHandler(request: NextRequest) {
       },
     });
 
-    return successResponse(wishlistItem, 'Course added to wishlist', HTTP_STATUS.CREATED);
+    return successResponse(
+      wishlistItem,
+      "Course added to wishlist",
+      HTTP_STATUS.CREATED
+    );
   } catch (error) {
     if (error instanceof Error) {
       return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
     }
-    return errorResponse('Failed to add to wishlist', HTTP_STATUS.INTERNAL_SERVER_ERROR);
+    return errorResponse(
+      "Failed to add to wishlist",
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
   }
 }
 
-// Apply middlewares and export
-async function authenticatedGetHandler(request: NextRequest) {
-  const authResult = await authMiddleware(request);
-  if (authResult) return authResult;
-  return getHandler(request);
-}
+// Apply authentication
+const authenticatedGetHandler = requireAuth(getHandler);
+const authenticatedPostHandler = requireAuth(postHandler);
 
-async function authenticatedPostHandler(request: NextRequest) {
-  const authResult = await authMiddleware(request);
-  if (authResult) return authResult;
-  return postHandler(request);
-}
-
-export const GET = errorHandler(loggingMiddleware(corsMiddleware(authenticatedGetHandler)));
-export const POST = errorHandler(loggingMiddleware(corsMiddleware(authenticatedPostHandler)));
+export const GET = errorHandler(
+  loggingMiddleware(corsMiddleware(authenticatedGetHandler))
+);
+export const POST = errorHandler(
+  loggingMiddleware(corsMiddleware(authenticatedPostHandler))
+);

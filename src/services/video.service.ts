@@ -1,24 +1,28 @@
-import path from 'path';
-import { videoProcessor } from '@/lib/video';
-import { storage } from '@/lib/storage';
-import { storageConfig } from '@/config/storage.config';
-import { videoConfig } from '@/config/video.config';
-import prisma from '@/lib/prisma';
-import { generateUniqueFilename } from '@/utils/file.util';
-import { AppError } from '@/utils/error.util';
-import { HTTP_STATUS } from '@/lib/constants';
-import type { VideoQuality, VideoProcessingOptions, VideoStatus } from '@/types/video.types';
-import type { VideoQuality as PrismaVideoQuality } from '@prisma/client';
+import path from "path";
+import { videoProcessor } from "@/lib/video";
+import { storage } from "@/lib/storage";
+import { storageConfig } from "@/config/storage.config";
+import { videoConfig } from "@/config/video.config";
+import prisma from "@/lib/prisma";
+import { generateUniqueFilename } from "@/utils/file.util";
+import { AppError } from "@/utils/error.util";
+import { HTTP_STATUS } from "@/lib/constants";
+import type {
+  VideoQuality,
+  VideoProcessingOptions,
+  VideoStatus,
+} from "@/types/video.types";
+import type { VideoQuality as PrismaVideoQuality } from "@prisma/client";
 
 /**
  * Map VideoQuality to Prisma VideoQuality enum
  */
 function mapToPrismaQuality(quality: VideoQuality): PrismaVideoQuality {
   const qualityMap: Record<VideoQuality, PrismaVideoQuality> = {
-    '360p': 'Q360P',
-    '480p': 'Q480P',
-    '720p': 'Q720P',
-    '1080p': 'Q1080P',
+    "360p": "Q360P",
+    "480p": "Q480P",
+    "720p": "Q720P",
+    "1080p": "Q1080P",
   };
   return qualityMap[quality];
 }
@@ -58,7 +62,7 @@ export class VideoService {
    */
   async createVideo(file: Express.Multer.File): Promise<VideoResponse> {
     const filename = generateUniqueFilename(file.originalname);
-    const filePath = path.join('videos', 'originals', filename);
+    const filePath = path.join("videos", "originals", filename);
 
     // Save to storage
     if (file.buffer) {
@@ -77,7 +81,7 @@ export class VideoService {
         path: filePath,
         size: file.size,
         mimeType: file.mimetype, // Added required field
-        status: 'PROCESSING',
+        status: "PROCESSING",
         duration: Math.floor(metadata.duration),
       },
     });
@@ -101,7 +105,10 @@ export class VideoService {
   /**
    * Process video in background
    */
-  private async processVideoInBackground(videoId: string, inputPath: string): Promise<void> {
+  private async processVideoInBackground(
+    videoId: string,
+    inputPath: string
+  ): Promise<void> {
     try {
       // Process to multiple qualities
       await this.processVideo(videoId, inputPath, {
@@ -114,17 +121,18 @@ export class VideoService {
       // Update status to completed
       await prisma.video.update({
         where: { id: videoId },
-        data: { status: 'COMPLETED' },
+        data: { status: "COMPLETED" },
       });
     } catch (error) {
-      console.error('Video processing error:', error);
+      console.error("Video processing error:", error);
 
       // Update status to failed
       await prisma.video.update({
         where: { id: videoId },
         data: {
-          status: 'FAILED',
-          processingError: error instanceof Error ? error.message : 'Unknown error',
+          status: "FAILED",
+          processingError:
+            error instanceof Error ? error.message : "Unknown error",
         },
       });
     }
@@ -141,22 +149,44 @@ export class VideoService {
     const fullInputPath = path.join(storageConfig.local.basePath, inputPath);
 
     // Get qualities to process
-    const qualities: VideoQuality[] = options.qualities || ['360p', '480p', '720p', '1080p'];
+    const qualities: VideoQuality[] = options.qualities || [
+      "360p",
+      "480p",
+      "720p",
+      "1080p",
+    ];
 
     // Process each quality
     for (const quality of qualities) {
       const outputFilename = `${videoId}.mp4`;
-      const outputPath = path.join('videos', 'processed', quality, outputFilename);
-      const fullOutputPath = path.join(storageConfig.local.basePath, outputPath);
+      const outputPath = path.join(
+        "videos",
+        "processed",
+        quality,
+        outputFilename
+      );
+      const fullOutputPath = path.join(
+        storageConfig.local.basePath,
+        outputPath
+      );
 
-      await videoProcessor.convertToQuality(fullInputPath, fullOutputPath, quality, (progress) => {
-        console.log(`Processing ${quality}: ${progress.percent?.toFixed(2)}%`);
-      });
+      await videoProcessor.convertToQuality(
+        fullInputPath,
+        fullOutputPath,
+        quality,
+        (progress) => {
+          console.log(
+            `Processing ${quality}: ${progress.percent?.toFixed(2)}%`
+          );
+        }
+      );
 
       // Get file size
       const exists = await storage.exists(outputPath);
       if (exists) {
-        const resolution = videoConfig.resolutions.find((r) => r.name === quality);
+        const resolution = videoConfig.resolutions.find(
+          (r) => r.name === quality
+        );
         // Create quality record with mapped enum
         await prisma.videoQuality_Model.create({
           data: {
@@ -164,7 +194,7 @@ export class VideoService {
             quality: mapToPrismaQuality(quality), // Use mapping function
             path: outputPath,
             size: 0, // Will be updated
-            bitrate: resolution?.bitrate || '0k',
+            bitrate: resolution?.bitrate || "0k",
             resolution: `${resolution?.width}x${resolution?.height}`,
           },
         });
@@ -185,19 +215,33 @@ export class VideoService {
   /**
    * Generate video thumbnails
    */
-  async generateThumbnails(videoId: string, inputPath: string): Promise<string[]> {
-    const outputDir = path.join(storageConfig.local.basePath, 'videos', 'thumbnails');
+  async generateThumbnails(
+    videoId: string,
+    inputPath: string
+  ): Promise<string[]> {
+    const outputDir = path.join(
+      storageConfig.local.basePath,
+      "videos",
+      "thumbnails"
+    );
 
-    const thumbnails = await videoProcessor.generateThumbnails(inputPath, outputDir, {
-      count: videoConfig.thumbnails.count,
-      size: videoConfig.thumbnails.size,
-      format: videoConfig.thumbnails.format as 'jpg',
-      quality: videoConfig.thumbnails.quality,
-    });
+    const thumbnails = await videoProcessor.generateThumbnails(
+      inputPath,
+      outputDir,
+      {
+        count: videoConfig.thumbnails.count,
+        size: videoConfig.thumbnails.size,
+        format: videoConfig.thumbnails.format as "jpg",
+        quality: videoConfig.thumbnails.quality,
+      }
+    );
 
     // Update database with first thumbnail
     if (thumbnails.length > 0) {
-      const thumbnailPath = path.relative(storageConfig.local.basePath, thumbnails[0]);
+      const thumbnailPath = path.relative(
+        storageConfig.local.basePath,
+        thumbnails[0]
+      );
 
       await prisma.video.update({
         where: { id: videoId },
@@ -272,7 +316,7 @@ export class VideoService {
     });
 
     if (!video) {
-      throw new AppError('Video not found', HTTP_STATUS.NOT_FOUND);
+      throw new AppError("Video not found", HTTP_STATUS.NOT_FOUND);
     }
 
     // Delete original
@@ -297,17 +341,21 @@ export class VideoService {
   /**
    * Get processing status
    */
-  async getProcessingStatus(videoId: string): Promise<ProcessingStatusResponse> {
+  async getProcessingStatus(
+    videoId: string
+  ): Promise<ProcessingStatusResponse> {
     const video = await prisma.video.findUnique({
       where: { id: videoId },
       include: { qualities: true },
     });
 
     if (!video) {
-      throw new AppError('Video not found', HTTP_STATUS.NOT_FOUND);
+      throw new AppError("Video not found", HTTP_STATUS.NOT_FOUND);
     }
 
-    const totalQualities = videoConfig.resolutions.filter((r) => r.enabled).length;
+    const totalQualities = videoConfig.resolutions.filter(
+      (r) => r.enabled
+    ).length;
     const completedQualities = video.qualities.length;
     const progress = (completedQualities / totalQualities) * 100;
 

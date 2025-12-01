@@ -1,35 +1,47 @@
-import { NextRequest } from 'next/server';
-import prisma from '@/lib/prisma';
-import { successResponse, validationErrorResponse, errorResponse } from '@/utils/response.util';
-import { errorHandler } from '@/middlewares/error.middleware';
-import { authMiddleware, getAuthenticatedUser } from '@/middlewares/auth.middleware';
-import { corsMiddleware } from '@/middlewares/cors.middleware';
-import { loggingMiddleware } from '@/middlewares/logging.middleware';
-import { HTTP_STATUS } from '@/lib/constants';
-import type { NotificationType } from '@prisma/client';
+import { NextRequest, NextResponse } from "next/server";
+import prisma from "@/lib/prisma";
+import {
+  successResponse,
+  validationErrorResponse,
+  errorResponse,
+} from "@/utils/response.util";
+import { errorHandler } from "@/middlewares/error.middleware";
+import { authMiddleware } from "@/middlewares/auth.middleware";
+import { corsMiddleware } from "@/middlewares/cors.middleware";
+import { loggingMiddleware } from "@/middlewares/logging.middleware";
+import { HTTP_STATUS } from "@/lib/constants";
 
 async function reportReviewHandler(request: NextRequest) {
   try {
-    const user = getAuthenticatedUser(request);
+    const authResult = await authMiddleware(request);
 
-    if (!user) {
-      return errorResponse('Unauthorized', HTTP_STATUS.UNAUTHORIZED);
+    // Check if authentication failed
+    if (authResult instanceof NextResponse) {
+      return authResult;
     }
+
+    const user = authResult;
 
     const body = await request.json();
     const { reviewId, reason, details } = body;
 
     if (!reviewId || !reason) {
       return validationErrorResponse({
-        reviewId: !reviewId ? ['Review ID is required'] : [],
-        reason: !reason ? ['Reason is required'] : [],
+        reviewId: !reviewId ? ["Review ID is required"] : [],
+        reason: !reason ? ["Reason is required"] : [],
       });
     }
 
-    const validReasons = ['SPAM', 'OFFENSIVE', 'INAPPROPRIATE', 'FALSE_INFORMATION', 'OTHER'];
+    const validReasons = [
+      "SPAM",
+      "OFFENSIVE",
+      "INAPPROPRIATE",
+      "FALSE_INFORMATION",
+      "OTHER",
+    ];
 
     if (!validReasons.includes(reason)) {
-      return errorResponse('Invalid reason', HTTP_STATUS.BAD_REQUEST);
+      return errorResponse("Invalid reason", HTTP_STATUS.BAD_REQUEST);
     }
 
     const review = await prisma.review.findUnique({
@@ -44,7 +56,7 @@ async function reportReviewHandler(request: NextRequest) {
     });
 
     if (!review) {
-      return errorResponse('Review not found', HTTP_STATUS.NOT_FOUND);
+      return errorResponse("Review not found", HTTP_STATUS.NOT_FOUND);
     }
 
     // For this implementation, we'll log the report in activity logs
@@ -52,8 +64,8 @@ async function reportReviewHandler(request: NextRequest) {
     await prisma.activityLog.create({
       data: {
         userId: user.userId,
-        action: 'report_review',
-        entityType: 'REVIEW',
+        action: "report_review",
+        entityType: "REVIEW",
         entityId: reviewId,
         metadata: {
           reason,
@@ -67,43 +79,46 @@ async function reportReviewHandler(request: NextRequest) {
     });
 
     const admins = await prisma.user.findMany({
-      where: { role: 'ADMIN' },
+      where: { role: "ADMIN" },
       select: { id: true },
     });
 
-    const notificationType: NotificationType = 'SYSTEM';
+    // Use valid NotificationType from your schema
+    const notificationType = "SYSTEM" as const;
 
     await prisma.notification.createMany({
-      data: admins.map((admin) => ({
+      data: admins.map((admin: { id: string }) => ({
         userId: admin.id,
         type: notificationType,
-        title: 'Review Reported',
+        title: "Review Reported",
         message: `A review has been reported for: ${reason}`,
         data: { reviewId, reason },
-        status: 'UNREAD',
+        status: "UNREAD",
       })),
     });
 
     return successResponse(
       {
-        status: 'PENDING',
-        message: 'Report submitted successfully',
+        status: "PENDING",
+        message: "Report submitted successfully",
       },
-      'Review reported successfully',
+      "Review reported successfully",
       HTTP_STATUS.CREATED
     );
   } catch (error) {
     if (error instanceof Error) {
       return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
     }
-    return errorResponse('Failed to report review', HTTP_STATUS.INTERNAL_SERVER_ERROR);
+    return errorResponse(
+      "Failed to report review",
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
   }
 }
 
-async function authenticatedReportHandler(request: NextRequest) {
-  const authResult = await authMiddleware(request);
-  if (authResult) return authResult;
-  return reportReviewHandler(request);
-}
+// Apply middlewares
+const handlerWithMiddlewares = errorHandler(
+  loggingMiddleware(corsMiddleware(reportReviewHandler))
+);
 
-export const POST = errorHandler(loggingMiddleware(corsMiddleware(authenticatedReportHandler)));
+export const POST = handlerWithMiddlewares;

@@ -1,48 +1,27 @@
-import { NextRequest } from 'next/server';
-import prisma from '@/lib/prisma';
-import { successResponse, errorResponse } from '@/utils/response.util';
-import { errorHandler } from '@/middlewares/error.middleware';
-import { authMiddleware, getAuthenticatedUser } from '@/middlewares/auth.middleware';
-import { corsMiddleware } from '@/middlewares/cors.middleware';
-import { loggingMiddleware } from '@/middlewares/logging.middleware';
-import { HTTP_STATUS } from '@/lib/constants';
+import { NextRequest } from "next/server";
+import prisma from "@/lib/prisma";
+import { successResponse, errorResponse } from "@/utils/response.util";
+import { errorHandler } from "@/middlewares/error.middleware";
+import { requireAuth } from "@/middlewares/auth.middleware";
+import { corsMiddleware } from "@/middlewares/cors.middleware";
+import { loggingMiddleware } from "@/middlewares/logging.middleware";
+import { HTTP_STATUS } from "@/lib/constants";
 
-interface Resource {
-  id: string;
-  title: string;
-  fileUrl: string;
-  fileType: string | null;
-  fileSize: number | null;
-}
-
-interface Material {
-  id: string;
-  title: string;
-  description: string | null;
-  type: string;
-  duration: number | null;
-  order: number;
-  isFree: boolean;
-  videoId: string | null;
-  content: string | null;
-  resources: Resource[];
-}
-
-interface Section {
-  id: string;
-  title: string;
-  description: string | null;
-  order: number;
-  materials: Material[];
-}
-
-async function materialsHandler(
+async function handler(
   request: NextRequest,
-  context: { params: Promise<{ id: string }> }
+  context: { user?: { userId: string; email: string; role: string } }
 ) {
+  const { user } = context;
+
   try {
-    const user = getAuthenticatedUser(request);
-    const { id: courseId } = await context.params;
+    // Extract course ID from URL
+    const url = new URL(request.url);
+    const pathSegments = url.pathname.split("/");
+    const courseId = pathSegments[pathSegments.length - 2]; // Get ID from /api/courses/[id]/materials
+
+    if (!courseId) {
+      return errorResponse("Course ID is required", HTTP_STATUS.BAD_REQUEST);
+    }
 
     const course = await prisma.course.findUnique({
       where: { id: courseId },
@@ -50,15 +29,17 @@ async function materialsHandler(
         id: true,
         title: true,
         status: true,
+        is_free: true,
+        price: true,
         sections: {
-          orderBy: { order: 'asc' },
+          orderBy: { order: "asc" },
           select: {
             id: true,
             title: true,
             description: true,
             order: true,
             materials: {
-              orderBy: { order: 'asc' },
+              orderBy: { order: "asc" },
               select: {
                 id: true,
                 title: true,
@@ -66,16 +47,16 @@ async function materialsHandler(
                 type: true,
                 duration: true,
                 order: true,
-                isFree: true,
-                videoId: true,
+                is_free: true,
+                video_id: true,
                 content: true,
                 resources: {
                   select: {
                     id: true,
                     title: true,
-                    fileUrl: true,
-                    fileType: true,
-                    fileSize: true,
+                    file_url: true,
+                    file_type: true,
+                    file_size: true,
                   },
                 },
               },
@@ -86,17 +67,17 @@ async function materialsHandler(
     });
 
     if (!course) {
-      return errorResponse('Course not found', HTTP_STATUS.NOT_FOUND);
+      return errorResponse("Course not found", HTTP_STATUS.NOT_FOUND);
     }
 
-    const sections = course.sections as unknown as Section[];
-
+    // Check if user is enrolled
+    let enrollment = null;
     if (user) {
-      const enrollment = await prisma.enrollment.findUnique({
+      enrollment = await prisma.enrollment.findUnique({
         where: {
-          userId_courseId: {
-            userId: user.userId,
-            courseId,
+          user_id_course_id: {
+            user_id: user.userId,
+            course_id: courseId,
           },
         },
         select: {
@@ -105,46 +86,29 @@ async function materialsHandler(
           progress: true,
         },
       });
-
-      const filteredSections = sections.map((section) => ({
-        ...section,
-        materials: section.materials.map((material) => {
-          const isAccessible =
-            material.isFree ||
-            enrollment?.status === 'ACTIVE' ||
-            enrollment?.status === 'COMPLETED';
-
-          return {
-            ...material,
-            isLocked: !isAccessible,
-            videoId: isAccessible ? material.videoId : null,
-            content: isAccessible ? material.content : null,
-          };
-        }),
-      }));
-
-      return successResponse(
-        {
-          course: {
-            id: course.id,
-            title: course.title,
-            status: course.status,
-          },
-          sections: filteredSections,
-          enrollment,
-        },
-        'Course materials retrieved successfully'
-      );
     }
 
-    const filteredSections = sections.map((section) => ({
+    // Filter materials based on access
+    const filteredSections = course.sections.map((section: any) => ({
       ...section,
-      materials: section.materials.map((material) => ({
-        ...material,
-        isLocked: !material.isFree,
-        videoId: material.isFree ? material.videoId : null,
-        content: material.isFree ? material.content : null,
-      })),
+      materials: section.materials.map((material: any) => {
+        const hasAccess =
+          material.is_free ||
+          course.is_free ||
+          (enrollment &&
+            (enrollment.status === "ACTIVE" ||
+              enrollment.status === "COMPLETED"));
+
+        return {
+          ...material,
+          isLocked: !hasAccess,
+          // Hide videoId and content if locked
+          video_id: hasAccess ? material.video_id : null,
+          content: hasAccess ? material.content : null,
+          // Filter resources if locked
+          resources: hasAccess ? material.resources : [],
+        };
+      }),
     }));
 
     return successResponse(
@@ -153,31 +117,37 @@ async function materialsHandler(
           id: course.id,
           title: course.title,
           status: course.status,
+          is_free: course.is_free,
+          price: course.price,
         },
         sections: filteredSections,
-        enrollment: null,
+        enrollment,
       },
-      'Course materials retrieved successfully'
+      "Course materials retrieved successfully"
     );
   } catch (error) {
     if (error instanceof Error) {
       return errorResponse(error.message, HTTP_STATUS.NOT_FOUND);
     }
-    return errorResponse('Failed to get materials', HTTP_STATUS.INTERNAL_SERVER_ERROR);
+    return errorResponse(
+      "Failed to get materials",
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
   }
 }
 
-async function optionalAuthMaterialsHandler(
-  request: NextRequest,
-  context: { params: Promise<{ id: string }> }
-) {
-  await authMiddleware(request);
-  return materialsHandler(request, context);
-}
+// Handler dengan auth opsional - PERBAIKAN: panggil dengan context kosong
+const optionalAuthHandler = async (request: NextRequest) => {
+  try {
+    // Coba dapatkan user, tapi tidak required
+    const authHandler = requireAuth(handler);
+    return authHandler(request);
+  } catch {
+    // Jika auth gagal, tetap lanjut tanpa user - PERBAIKAN: kirim context kosong
+    return handler(request, {});
+  }
+};
 
-export const GET = (request: NextRequest, context: { params: Promise<{ id: string }> }) =>
-  errorHandler((req: NextRequest) =>
-    loggingMiddleware((req2: NextRequest) =>
-      corsMiddleware((req3: NextRequest) => optionalAuthMaterialsHandler(req3, context))(req2)
-    )(req)
-  )(request);
+export const GET = errorHandler(
+  loggingMiddleware(corsMiddleware(optionalAuthHandler))
+);

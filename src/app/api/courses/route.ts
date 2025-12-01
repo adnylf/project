@@ -1,19 +1,20 @@
-import { NextRequest } from 'next/server';
-import courseService from '@/services/course.service';
-import { createCourseSchema } from '@/lib/validation';
+// app/api/courses/route.ts
+import { NextRequest } from "next/server";
+import courseService from "@/services/course.service";
+import { createCourseSchema } from "@/lib/validation";
+import type { CreateCourseInput } from "@/lib/validation";
 import {
   paginatedResponse,
   successResponse,
   validationErrorResponse,
   errorResponse,
-} from '@/utils/response.util';
-import { validateData, validatePagination, parseBoolean } from '@/utils/validation.util';
-import { errorHandler } from '@/middlewares/error.middleware';
-import { authMiddleware, getAuthenticatedUser } from '@/middlewares/auth.middleware';
-import { corsMiddleware } from '@/middlewares/cors.middleware';
-import { loggingMiddleware } from '@/middlewares/logging.middleware';
-import { HTTP_STATUS } from '@/lib/constants';
-import type { CourseLevel, CourseStatus } from '@prisma/client';
+} from "@/utils/response.util";
+import { validateData, validatePagination } from "@/utils/validation.util";
+import { errorHandler } from "@/middlewares/error.middleware";
+import { requireAuth } from "@/middlewares/auth.middleware";
+import { corsMiddleware } from "@/middlewares/cors.middleware";
+import { loggingMiddleware } from "@/middlewares/logging.middleware";
+import { HTTP_STATUS } from "@/lib/constants";
 
 /**
  * GET /api/courses
@@ -23,27 +24,29 @@ async function getHandler(request: NextRequest) {
   try {
     // Parse query parameters
     const { searchParams } = new URL(request.url);
-    const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '12');
-    const search = searchParams.get('search') || undefined;
-    const categoryId = searchParams.get('categoryId') || undefined;
-    const level = searchParams.get('level') as CourseLevel | undefined;
-    const minPrice = searchParams.get('minPrice')
-      ? parseFloat(searchParams.get('minPrice')!)
+    const page = parseInt(searchParams.get("page") || "1");
+    const limit = parseInt(searchParams.get("limit") || "12");
+    const search = searchParams.get("search") || undefined;
+    const categoryId = searchParams.get("categoryId") || undefined;
+    const level = searchParams.get("level") || undefined;
+    const minPrice = searchParams.get("minPrice")
+      ? parseFloat(searchParams.get("minPrice")!)
       : undefined;
-    const maxPrice = searchParams.get('maxPrice')
-      ? parseFloat(searchParams.get('maxPrice')!)
+    const maxPrice = searchParams.get("maxPrice")
+      ? parseFloat(searchParams.get("maxPrice")!)
       : undefined;
-    const isFree = searchParams.get('isFree')
-      ? parseBoolean(searchParams.get('isFree'))
+    const isFree = searchParams.get("isFree")
+      ? searchParams.get("isFree") === "true"
       : undefined;
-    const isPremium = searchParams.get('isPremium')
-      ? parseBoolean(searchParams.get('isPremium'))
+    const isPremium = searchParams.get("isPremium")
+      ? searchParams.get("isPremium") === "true"
       : undefined;
-    const status = searchParams.get('status') as CourseStatus | undefined;
-    const mentorId = searchParams.get('mentorId') || undefined;
-    const sortBy = searchParams.get('sortBy') || 'createdAt';
-    const sortOrder = (searchParams.get('sortOrder') || 'desc') as 'asc' | 'desc';
+    const status = searchParams.get("status") || undefined;
+    const mentorId = searchParams.get("mentorId") || undefined;
+    const sortBy = searchParams.get("sortBy") || "created_at";
+    const sortOrder = (searchParams.get("sortOrder") || "desc") as
+      | "asc"
+      | "desc";
 
     // Validate pagination
     const validatedPagination = validatePagination(page, limit);
@@ -54,23 +57,30 @@ async function getHandler(request: NextRequest) {
       limit: validatedPagination.limit,
       search,
       categoryId,
-      level,
+      level: level as any,
       minPrice,
       maxPrice,
       isFree,
       isPremium,
-      status,
+      status: status as any,
       mentorId,
       sortBy,
       sortOrder,
     });
 
-    return paginatedResponse(result.data, result.meta, 'Courses retrieved successfully');
+    return paginatedResponse(
+      result.data,
+      result.meta,
+      "Courses retrieved successfully"
+    );
   } catch (error) {
     if (error instanceof Error) {
       return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
     }
-    return errorResponse('Failed to get courses', HTTP_STATUS.INTERNAL_SERVER_ERROR);
+    return errorResponse(
+      "Failed to get courses",
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
   }
 }
 
@@ -78,16 +88,15 @@ async function getHandler(request: NextRequest) {
  * POST /api/courses
  * Create new course (mentor only)
  */
-async function postHandler(request: NextRequest) {
+async function postHandler(request: NextRequest, { user }: { user: any }) {
   try {
-    const user = getAuthenticatedUser(request);
-
-    if (!user) {
-      return errorResponse('Unauthorized', HTTP_STATUS.UNAUTHORIZED);
-    }
-
     // Parse request body
-    const body = await request.json();
+    let body;
+    try {
+      body = await request.json();
+    } catch {
+      return errorResponse("Invalid JSON body", HTTP_STATUS.BAD_REQUEST);
+    }
 
     // Validate input
     const validation = await validateData(createCourseSchema, body);
@@ -96,31 +105,42 @@ async function postHandler(request: NextRequest) {
       return validationErrorResponse(validation.errors);
     }
 
-    // Handle null discountPrice - convert to undefined for service
-    const courseData = {
+    // PERBAIKAN: Pastikan semua field boolean memiliki nilai default
+    const courseData: CreateCourseInput = {
       ...validation.data,
-      discountPrice:
-        validation.data.discountPrice === null ? undefined : validation.data.discountPrice,
+      language: validation.data.language || "id",
+      isFree: validation.data.isFree ?? false,
+      isPremium: validation.data.isPremium ?? false, // PERBAIKAN: Tambah default untuk isPremium
+      requirements: validation.data.requirements || [],
+      whatYouWillLearn: validation.data.whatYouWillLearn || [],
+      targetAudience: validation.data.targetAudience || [],
+      tags: validation.data.tags || [],
     };
 
     // Create course
     const course = await courseService.createCourse(user.userId, courseData);
 
-    return successResponse(course, 'Course created successfully', HTTP_STATUS.CREATED);
+    return successResponse(
+      course,
+      "Course created successfully",
+      HTTP_STATUS.CREATED
+    );
   } catch (error) {
     if (error instanceof Error) {
       return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
     }
-    return errorResponse('Failed to create course', HTTP_STATUS.INTERNAL_SERVER_ERROR);
+    return errorResponse(
+      "Failed to create course",
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
   }
 }
 
-// Apply middlewares and export
-async function authenticatedPostHandler(request: NextRequest) {
-  const authResult = await authMiddleware(request);
-  if (authResult) return authResult;
-  return postHandler(request);
-}
+// Gunakan requireAuth untuk POST handler
+const authenticatedPostHandler = requireAuth(postHandler);
 
 export const GET = errorHandler(loggingMiddleware(corsMiddleware(getHandler)));
-export const POST = errorHandler(loggingMiddleware(corsMiddleware(authenticatedPostHandler)));
+
+export const POST = errorHandler(
+  loggingMiddleware(corsMiddleware(authenticatedPostHandler))
+);

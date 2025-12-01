@@ -1,12 +1,12 @@
-import { NextRequest } from 'next/server';
-import prisma from '@/lib/prisma';
-import { Prisma } from '@prisma/client';
-import { successResponse, errorResponse } from '@/utils/response.util';
-import { errorHandler } from '@/middlewares/error.middleware';
-import { authMiddleware, getAuthenticatedUser } from '@/middlewares/auth.middleware';
-import { corsMiddleware } from '@/middlewares/cors.middleware';
-import { loggingMiddleware } from '@/middlewares/logging.middleware';
-import { HTTP_STATUS, USER_ROLES } from '@/lib/constants';
+import { NextRequest } from "next/server";
+import prisma from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
+import { successResponse, errorResponse } from "@/utils/response.util";
+import { errorHandler } from "@/middlewares/error.middleware";
+import { requireAuth } from "@/middlewares/auth.middleware";
+import { corsMiddleware } from "@/middlewares/cors.middleware";
+import { loggingMiddleware } from "@/middlewares/logging.middleware";
+import { HTTP_STATUS, USER_ROLES } from "@/lib/constants";
 
 interface UserOverview {
   total_users: bigint;
@@ -27,17 +27,20 @@ interface UserEngagement {
   users_with_comments: bigint;
 }
 
-async function usersHandler(request: NextRequest) {
+async function handler(
+  request: NextRequest,
+  context: { user: { userId: string; email: string; role: string } }
+) {
   try {
-    const user = getAuthenticatedUser(request);
+    const { user } = context;
 
-    if (!user || user.role !== USER_ROLES.ADMIN) {
-      return errorResponse('Insufficient permissions', HTTP_STATUS.FORBIDDEN);
+    if (user.role !== USER_ROLES.ADMIN) {
+      return errorResponse("Insufficient permissions", HTTP_STATUS.FORBIDDEN);
     }
 
     const { searchParams } = new URL(request.url);
-    const startDate = searchParams.get('startDate');
-    const endDate = searchParams.get('endDate');
+    const startDate = searchParams.get("startDate");
+    const endDate = searchParams.get("endDate");
 
     const dateFilter: Prisma.DateTimeFilter = {};
     if (startDate) dateFilter.gte = new Date(startDate);
@@ -73,7 +76,9 @@ async function usersHandler(request: NextRequest) {
           COUNT(*) FILTER (WHERE email_verified = true)::bigint as verified_users,
           ${
             startDate
-              ? Prisma.sql`COUNT(*) FILTER (WHERE created_at >= ${new Date(startDate)})::bigint`
+              ? Prisma.sql`COUNT(*) FILTER (WHERE created_at >= ${new Date(
+                  startDate
+                )})::bigint`
               : Prisma.sql`0::bigint`
           } as new_users
         FROM users
@@ -117,13 +122,13 @@ async function usersHandler(request: NextRequest) {
       prisma.$queryRaw`
         SELECT 
           u.id,
-          u.name,
+          u.full_name,
           u.email,
           u.role,
           COUNT(DISTINCT e.id)::int as total_enrollments,
           COUNT(DISTINCT e.id) FILTER (WHERE e.status = 'COMPLETED')::int as completed_courses,
           COUNT(DISTINCT r.id)::int as total_reviews,
-          u.last_login_at
+          u.last_login
         FROM users u
         LEFT JOIN enrollments e ON u.id = e.user_id
         LEFT JOIN reviews r ON u.id = r.user_id
@@ -145,8 +150,8 @@ async function usersHandler(request: NextRequest) {
         SELECT 
           TO_CHAR(cohort_month, 'YYYY-MM') as cohort,
           COUNT(DISTINCT user_id)::int as cohort_size,
-          COUNT(DISTINCT CASE WHEN last_login_at >= NOW() - INTERVAL '30 days' THEN user_id END)::int as retained_30d,
-          COUNT(DISTINCT CASE WHEN last_login_at >= NOW() - INTERVAL '90 days' THEN user_id END)::int as retained_90d
+          COUNT(DISTINCT CASE WHEN last_login >= NOW() - INTERVAL '30 days' THEN user_id END)::int as retained_30d,
+          COUNT(DISTINCT CASE WHEN last_login >= NOW() - INTERVAL '90 days' THEN user_id END)::int as retained_90d
         FROM cohorts
         JOIN users ON cohorts.user_id = users.id
         GROUP BY cohort_month
@@ -156,10 +161,10 @@ async function usersHandler(request: NextRequest) {
 
       // Demographics
       prisma.user.groupBy({
-        by: ['country'],
+        by: ["country"],
         where: { country: { not: null } },
         _count: { _all: true },
-        orderBy: { _count: { _all: 'desc' } },
+        orderBy: { _count: { _all: "desc" } },
         take: 20,
       }),
     ]);
@@ -191,20 +196,21 @@ async function usersHandler(request: NextRequest) {
         retention,
         demographics,
       },
-      'User report retrieved successfully'
+      "User report retrieved successfully"
     );
   } catch (error) {
     if (error instanceof Error) {
       return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
     }
-    return errorResponse('Failed to generate user report', HTTP_STATUS.INTERNAL_SERVER_ERROR);
+    return errorResponse(
+      "Failed to generate user report",
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
   }
 }
 
-async function authenticatedUsersHandler(request: NextRequest) {
-  const authResult = await authMiddleware(request);
-  if (authResult) return authResult;
-  return usersHandler(request);
-}
+const authenticatedHandler = requireAuth(handler);
 
-export const GET = errorHandler(loggingMiddleware(corsMiddleware(authenticatedUsersHandler)));
+export const GET = errorHandler(
+  loggingMiddleware(corsMiddleware(authenticatedHandler))
+);

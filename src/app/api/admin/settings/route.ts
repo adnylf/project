@@ -1,17 +1,16 @@
-// ============================================
-// FILE: src/app/api/admin/settings/route.ts
-// Fixed version - Admin Settings & Configuration Management
-// ============================================
-
-import { NextRequest } from 'next/server';
-import prisma from '@/lib/prisma';
-import { redis } from '@/lib/redis-upstash';
-import { successResponse, validationErrorResponse, errorResponse } from '@/utils/response.util';
-import { errorHandler } from '@/middlewares/error.middleware';
-import { authMiddleware, getAuthenticatedUser } from '@/middlewares/auth.middleware';
-import { corsMiddleware } from '@/middlewares/cors.middleware';
-import { loggingMiddleware } from '@/middlewares/logging.middleware';
-import { HTTP_STATUS, USER_ROLES } from '@/lib/constants';
+// src/app/api/admin/settings/route.ts
+import { NextRequest } from "next/server";
+import prisma from "@/lib/prisma";
+import {
+  successResponse,
+  validationErrorResponse,
+  errorResponse,
+} from "@/utils/response.util";
+import { errorHandler } from "@/middlewares/error.middleware";
+import { requireAdmin, AuthContext } from "@/middlewares/auth.middleware";
+import { corsMiddleware } from "@/middlewares/cors.middleware";
+import { loggingMiddleware } from "@/middlewares/logging.middleware";
+import { HTTP_STATUS } from "@/lib/constants";
 
 /**
  * Platform Settings Structure
@@ -80,14 +79,6 @@ interface PlatformSettings {
   updatedBy: string;
 }
 
-interface SettingsRecord {
-  id: string;
-  settings: Record<string, unknown>;
-  updatedBy: string;
-  updatedAt: Date;
-  createdAt: Date;
-}
-
 const DEFAULT_SETTINGS: PlatformSettings = {
   commission: {
     platformFeePercentage: 10,
@@ -125,18 +116,18 @@ const DEFAULT_SETTINGS: PlatformSettings = {
     spamDetection: true,
   },
   email: {
-    fromName: 'LMS Platform',
-    fromEmail: 'noreply@lms-platform.com',
-    replyToEmail: 'support@lms-platform.com',
+    fromName: "LMS Platform",
+    fromEmail: "noreply@lms-platform.com",
+    replyToEmail: "support@lms-platform.com",
     welcomeEmailEnabled: true,
     enrollmentEmailEnabled: true,
     certificateEmailEnabled: true,
   },
   seo: {
-    siteName: 'LMS Platform',
-    siteDescription: 'Learn from the best instructors',
-    siteUrl: 'https://lms-platform.com',
-    socialImage: 'https://lms-platform.com/og-image.png',
+    siteName: "LMS Platform",
+    siteDescription: "Learn from the best instructors",
+    siteUrl: "https://lms-platform.com",
+    socialImage: "https://lms-platform.com/og-image.png",
   },
   security: {
     twoFactorEnabled: false,
@@ -147,67 +138,59 @@ const DEFAULT_SETTINGS: PlatformSettings = {
     loginLockoutDuration: 15,
   },
   updatedAt: new Date(),
-  updatedBy: 'system',
+  updatedBy: "system",
 };
 
-const SETTINGS_CACHE_KEY = 'platform:settings';
-const SETTINGS_CACHE_TTL = 3600;
-
-async function getHandler(request: NextRequest) {
+/**
+ * GET /api/admin/settings
+ * Get platform settings
+ */
+async function getHandler(request: NextRequest, context: AuthContext) {
   try {
-    const user = getAuthenticatedUser(request);
+    const { user } = context;
 
-    if (!user || user.role !== USER_ROLES.ADMIN) {
-      return errorResponse('Insufficient permissions', HTTP_STATUS.FORBIDDEN);
-    }
-
-    const cachedSettings = await redis.get(SETTINGS_CACHE_KEY);
-    if (cachedSettings) {
-      return successResponse(JSON.parse(cachedSettings as string), 'Settings retrieved from cache');
-    }
-
-    // Use raw query to handle missing table
-    const settingsRecords = await prisma.$queryRaw<SettingsRecord[]>`
-      SELECT * FROM platform_settings 
-      ORDER BY updated_at DESC 
-      LIMIT 1
-    `.catch(() => [] as SettingsRecord[]);
+    const settingsRecord = await prisma.platformSettings.findFirst({
+      orderBy: { updated_at: "desc" },
+    });
 
     let settings: PlatformSettings;
 
-    if (settingsRecords.length === 0) {
+    if (!settingsRecord) {
       settings = DEFAULT_SETTINGS;
-      await saveToDatabaseAndCache(settings, user.userId).catch(() => {
-        // If table doesn't exist, just return default settings
-        console.warn('platform_settings table not found, using default settings');
+      // Create default settings if not exists
+      await prisma.platformSettings.create({
+        data: {
+          settings: settings as any,
+          updated_by: user.userId,
+        },
       });
     } else {
-      const record = settingsRecords[0];
       settings = {
-        ...(record.settings as Partial<PlatformSettings>),
-        updatedAt: record.updatedAt,
-        updatedBy: record.updatedBy,
+        ...(settingsRecord.settings as Partial<PlatformSettings>),
+        updatedAt: settingsRecord.updated_at,
+        updatedBy: settingsRecord.updated_by,
       } as PlatformSettings;
     }
 
-    await redis.setex(SETTINGS_CACHE_KEY, SETTINGS_CACHE_TTL, JSON.stringify(settings));
-
-    return successResponse(settings, 'Settings retrieved successfully');
+    return successResponse(settings, "Settings retrieved successfully");
   } catch (error) {
     if (error instanceof Error) {
       return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
     }
-    return errorResponse('Failed to get settings', HTTP_STATUS.INTERNAL_SERVER_ERROR);
+    return errorResponse(
+      "Failed to get settings",
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
   }
 }
 
-async function putHandler(request: NextRequest) {
+/**
+ * PUT /api/admin/settings
+ * Update platform settings
+ */
+async function putHandler(request: NextRequest, context: AuthContext) {
   try {
-    const user = getAuthenticatedUser(request);
-
-    if (!user || user.role !== USER_ROLES.ADMIN) {
-      return errorResponse('Insufficient permissions', HTTP_STATUS.FORBIDDEN);
-    }
+    const { user } = context;
 
     const body = await request.json();
 
@@ -230,34 +213,44 @@ async function putHandler(request: NextRequest) {
       updatedBy: user.userId,
     };
 
-    await saveToDatabaseAndCache(updatedSettings, user.userId);
+    // Save to database
+    await prisma.platformSettings.create({
+      data: {
+        settings: updatedSettings as any,
+        updated_by: user.userId,
+      },
+    });
 
+    // Log activity
     await prisma.activityLog.create({
       data: {
-        userId: user.userId,
-        action: 'update_settings',
-        entityType: 'platform_setting',
-        entityId: 'global',
+        user_id: user.userId,
+        action: "update_settings",
+        entity_type: "platform_setting",
+        entity_id: "global",
         metadata: { changes: body },
       },
     });
 
-    return successResponse(updatedSettings, 'Settings updated successfully');
+    return successResponse(updatedSettings, "Settings updated successfully");
   } catch (error) {
     if (error instanceof Error) {
       return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
     }
-    return errorResponse('Failed to update settings', HTTP_STATUS.INTERNAL_SERVER_ERROR);
+    return errorResponse(
+      "Failed to update settings",
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
   }
 }
 
-async function resetHandler(request: NextRequest) {
+/**
+ * POST /api/admin/settings/reset
+ * Reset settings to default
+ */
+async function resetHandler(request: NextRequest, context: AuthContext) {
   try {
-    const user = getAuthenticatedUser(request);
-
-    if (!user || user.role !== USER_ROLES.ADMIN) {
-      return errorResponse('Insufficient permissions', HTTP_STATUS.FORBIDDEN);
-    }
+    const { user } = context;
 
     const settings = {
       ...DEFAULT_SETTINGS,
@@ -265,143 +258,74 @@ async function resetHandler(request: NextRequest) {
       updatedBy: user.userId,
     };
 
-    await saveToDatabaseAndCache(settings, user.userId);
+    await prisma.platformSettings.create({
+      data: {
+        settings: settings as any,
+        updated_by: user.userId,
+      },
+    });
 
     await prisma.activityLog.create({
       data: {
-        userId: user.userId,
-        action: 'reset_settings',
-        entityType: 'platform_setting',
-        entityId: 'global',
+        user_id: user.userId,
+        action: "reset_settings",
+        entity_type: "platform_setting",
+        entity_id: "global",
         metadata: {},
       },
     });
 
-    return successResponse(settings, 'Settings reset to default');
+    return successResponse(settings, "Settings reset to default");
   } catch (error) {
     if (error instanceof Error) {
       return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
     }
-    return errorResponse('Failed to reset settings', HTTP_STATUS.INTERNAL_SERVER_ERROR);
+    return errorResponse(
+      "Failed to reset settings",
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
   }
 }
 
-async function getCurrentSettings(): Promise<PlatformSettings> {
-  const cachedSettings = await redis.get(SETTINGS_CACHE_KEY);
-  if (cachedSettings) {
-    return JSON.parse(cachedSettings as string);
-  }
-
-  const settingsRecords = await prisma.$queryRaw<SettingsRecord[]>`
-    SELECT * FROM platform_settings 
-    ORDER BY updated_at DESC 
-    LIMIT 1
-  `.catch(() => [] as SettingsRecord[]);
-
-  if (settingsRecords.length === 0) {
-    return DEFAULT_SETTINGS;
-  }
-
-  const record = settingsRecords[0];
-  return {
-    ...(record.settings as Partial<PlatformSettings>),
-    updatedAt: record.updatedAt,
-    updatedBy: record.updatedBy,
-  } as PlatformSettings;
-}
-
-async function saveToDatabaseAndCache(settings: PlatformSettings, userId: string): Promise<void> {
-  await prisma.$executeRaw`
-    INSERT INTO platform_settings (settings, updated_by, created_at, updated_at)
-    VALUES (${JSON.stringify(settings)}::jsonb, ${userId}, NOW(), NOW())
-  `;
-
-  await redis.setex(SETTINGS_CACHE_KEY, SETTINGS_CACHE_TTL, JSON.stringify(settings));
-}
-
-function validateSettings(settings: Record<string, unknown>): Record<string, string[]> {
-  const errors: Record<string, string[]> = {};
-
-  if (settings.commission && typeof settings.commission === 'object') {
-    const commission = settings.commission as Record<string, unknown>;
-    if (
-      typeof commission.platformFeePercentage === 'number' &&
-      (commission.platformFeePercentage < 0 || commission.platformFeePercentage > 100)
-    ) {
-      errors['commission.platformFeePercentage'] = ['Must be between 0 and 100'];
-    }
-
-    if (
-      typeof commission.mentorRevenuePercentage === 'number' &&
-      (commission.mentorRevenuePercentage < 0 || commission.mentorRevenuePercentage > 100)
-    ) {
-      errors['commission.mentorRevenuePercentage'] = ['Must be between 0 and 100'];
-    }
-  }
-
-  if (settings.limits && typeof settings.limits === 'object') {
-    const limits = settings.limits as Record<string, unknown>;
-    if (typeof limits.maxCoursePrice === 'number' && limits.maxCoursePrice < 0) {
-      errors['limits.maxCoursePrice'] = ['Must be positive'];
-    }
-
-    if (typeof limits.maxFileUploadSize === 'number' && limits.maxFileUploadSize < 1) {
-      errors['limits.maxFileUploadSize'] = ['Must be at least 1 MB'];
-    }
-  }
-
-  if (settings.security && typeof settings.security === 'object') {
-    const security = settings.security as Record<string, unknown>;
-    if (typeof security.passwordMinLength === 'number' && security.passwordMinLength < 6) {
-      errors['security.passwordMinLength'] = ['Must be at least 6 characters'];
-    }
-
-    if (typeof security.maxLoginAttempts === 'number' && security.maxLoginAttempts < 1) {
-      errors['security.maxLoginAttempts'] = ['Must be at least 1'];
-    }
-  }
-
-  return errors;
-}
-
-async function historyHandler(request: NextRequest) {
+/**
+ * GET /api/admin/settings/history
+ * Get settings history
+ */
+async function historyHandler(request: NextRequest, context: AuthContext) {
   try {
-    const user = getAuthenticatedUser(request);
-
-    if (!user || user.role !== USER_ROLES.ADMIN) {
-      return errorResponse('Insufficient permissions', HTTP_STATUS.FORBIDDEN);
-    }
+    const { user } = context;
 
     const { searchParams } = new URL(request.url);
-    const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '20');
+    const page = parseInt(searchParams.get("page") || "1");
+    const limit = parseInt(searchParams.get("limit") || "20");
     const skip = (page - 1) * limit;
 
     const [history, total] = await Promise.all([
-      prisma.$queryRaw<SettingsRecord[]>`
-        SELECT id, updated_at, updated_by, created_at
-        FROM platform_settings
-        ORDER BY updated_at DESC
-        LIMIT ${limit} OFFSET ${skip}
-      `.catch(() => [] as SettingsRecord[]),
-      prisma.$queryRaw<[{ count: bigint }]>`
-        SELECT COUNT(*) as count FROM platform_settings
-      `
-        .then((result) => Number(result[0]?.count || 0))
-        .catch(() => 0),
+      prisma.platformSettings.findMany({
+        select: {
+          id: true,
+          updated_at: true,
+          updated_by: true,
+          created_at: true,
+        },
+        orderBy: { updated_at: "desc" },
+        take: limit,
+        skip,
+      }),
+      prisma.platformSettings.count(),
     ]);
 
-    const userIds = [...new Set(history.map((h) => h.updatedBy))];
+    const userIds = [...new Set(history.map((h: any) => h.updated_by))];
     const users = await prisma.user.findMany({
       where: { id: { in: userIds } },
-      select: { id: true, name: true, email: true },
+      select: { id: true, full_name: true, email: true },
     });
 
-    const userMap = new Map(users.map((u) => [u.id, u]));
+    const userMap = new Map(users.map((u: any) => [u.id, u]));
 
-    const enrichedHistory = history.map((h) => ({
+    const enrichedHistory = history.map((h: any) => ({
       ...h,
-      updatedByUser: userMap.get(h.updatedBy),
+      updatedByUser: userMap.get(h.updated_by),
     }));
 
     return successResponse(
@@ -414,39 +338,126 @@ async function historyHandler(request: NextRequest) {
           totalPages: Math.ceil(total / limit),
         },
       },
-      'Settings history retrieved successfully'
+      "Settings history retrieved successfully"
     );
   } catch (error) {
     if (error instanceof Error) {
       return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
     }
-    return errorResponse('Failed to get settings history', HTTP_STATUS.INTERNAL_SERVER_ERROR);
+    return errorResponse(
+      "Failed to get settings history",
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
   }
 }
 
-async function authenticatedGetHandler(request: NextRequest) {
-  const authResult = await authMiddleware(request);
-  if (authResult) return authResult;
-  return getHandler(request);
+// Helper functions
+async function getCurrentSettings(): Promise<PlatformSettings> {
+  const settingsRecord = await prisma.platformSettings.findFirst({
+    orderBy: { updated_at: "desc" },
+  });
+
+  if (!settingsRecord) {
+    return DEFAULT_SETTINGS;
+  }
+
+  return {
+    ...(settingsRecord.settings as Partial<PlatformSettings>),
+    updatedAt: settingsRecord.updated_at,
+    updatedBy: settingsRecord.updated_by,
+  } as PlatformSettings;
 }
 
-async function authenticatedPutHandler(request: NextRequest) {
-  const authResult = await authMiddleware(request);
-  if (authResult) return authResult;
-  return putHandler(request);
+function validateSettings(
+  settings: Record<string, unknown>
+): Record<string, string[]> {
+  const errors: Record<string, string[]> = {};
+
+  if (settings.commission && typeof settings.commission === "object") {
+    const commission = settings.commission as Record<string, unknown>;
+    if (
+      typeof commission.platformFeePercentage === "number" &&
+      (commission.platformFeePercentage < 0 ||
+        commission.platformFeePercentage > 100)
+    ) {
+      errors["commission.platformFeePercentage"] = [
+        "Must be between 0 and 100",
+      ];
+    }
+
+    if (
+      typeof commission.mentorRevenuePercentage === "number" &&
+      (commission.mentorRevenuePercentage < 0 ||
+        commission.mentorRevenuePercentage > 100)
+    ) {
+      errors["commission.mentorRevenuePercentage"] = [
+        "Must be between 0 and 100",
+      ];
+    }
+  }
+
+  if (settings.limits && typeof settings.limits === "object") {
+    const limits = settings.limits as Record<string, unknown>;
+    if (
+      typeof limits.maxCoursePrice === "number" &&
+      limits.maxCoursePrice < 0
+    ) {
+      errors["limits.maxCoursePrice"] = ["Must be positive"];
+    }
+
+    if (
+      typeof limits.maxFileUploadSize === "number" &&
+      limits.maxFileUploadSize < 1
+    ) {
+      errors["limits.maxFileUploadSize"] = ["Must be at least 1 MB"];
+    }
+  }
+
+  if (settings.security && typeof settings.security === "object") {
+    const security = settings.security as Record<string, unknown>;
+    if (
+      typeof security.passwordMinLength === "number" &&
+      security.passwordMinLength < 6
+    ) {
+      errors["security.passwordMinLength"] = ["Must be at least 6 characters"];
+    }
+
+    if (
+      typeof security.maxLoginAttempts === "number" &&
+      security.maxLoginAttempts < 1
+    ) {
+      errors["security.maxLoginAttempts"] = ["Must be at least 1"];
+    }
+  }
+
+  return errors;
 }
 
-async function authenticatedResetHandler(request: NextRequest) {
-  const authResult = await authMiddleware(request);
-  if (authResult) return authResult;
-  return resetHandler(request);
+// Apply middlewares
+const authenticatedGetHandler = requireAdmin(getHandler);
+const authenticatedPutHandler = requireAdmin(putHandler);
+const authenticatedResetHandler = requireAdmin(resetHandler);
+const authenticatedHistoryHandler = requireAdmin(historyHandler);
+
+export const GET = errorHandler(
+  loggingMiddleware(corsMiddleware(authenticatedGetHandler))
+);
+export const PUT = errorHandler(
+  loggingMiddleware(corsMiddleware(authenticatedPutHandler))
+);
+
+// Route untuk reset (harus dipisah ke file terpisah: src/app/api/admin/settings/reset/route.ts)
+export async function POST_RESET(request: NextRequest) {
+  const handler = errorHandler(
+    loggingMiddleware(corsMiddleware(authenticatedResetHandler))
+  );
+  return handler(request);
 }
 
-async function authenticatedHistoryHandler(request: NextRequest) {
-  const authResult = await authMiddleware(request);
-  if (authResult) return authResult;
-  return historyHandler(request);
+// Route untuk history (harus dipisah ke file terpisah: src/app/api/admin/settings/history/route.ts)
+export async function GET_HISTORY(request: NextRequest) {
+  const handler = errorHandler(
+    loggingMiddleware(corsMiddleware(authenticatedHistoryHandler))
+  );
+  return handler(request);
 }
-
-export const GET = errorHandler(loggingMiddleware(corsMiddleware(authenticatedGetHandler)));
-export const PUT = errorHandler(loggingMiddleware(corsMiddleware(authenticatedPutHandler)));

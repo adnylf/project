@@ -1,557 +1,996 @@
-import { sql, QueryResultRow } from '@vercel/postgres';
-import { logError } from '@/utils/logger.util';
+// services/transaction.service.ts
+import prisma from "@/lib/prisma";
+import { logError, logInfo } from "@/utils/logger.util";
+import {
+  AppError,
+  NotFoundError,
+  ValidationError,
+  ConflictError,
+} from "@/utils/error.util";
+import {
+  HTTP_STATUS,
+  TRANSACTION_STATUS,
+  PAYMENT_METHOD,
+} from "@/lib/constants";
+import paymentGateway from "@/lib/payment";
 
 export interface Transaction {
   id: string;
-  user_id: string;
-  course_id: string;
+  userId: string;
+  courseId: string;
+  orderId: string;
   amount: number;
-  payment_method: 'credit_card' | 'bank_transfer' | 'e_wallet' | 'qris';
-  payment_gateway: 'midtrans' | 'xendit' | 'manual';
-  status: 'pending' | 'processing' | 'success' | 'failed' | 'expired';
-  payment_url?: string;
-  payment_token?: string;
-  payment_reference?: string;
-  paid_at?: Date;
-  expired_at?: Date;
-  created_at: Date;
-  updated_at: Date;
+  discount: number;
+  totalAmount: number;
+  paymentMethod: string;
+  status: string;
+  paymentUrl?: string;
+  paidAt?: Date;
+  expiredAt?: Date;
+  refundedAt?: Date;
+  refundReason?: string;
+  metadata?: Record<string, unknown>;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
-export interface PaymentGatewayResponse {
-  success: boolean;
-  transaction_id: string;
-  payment_url?: string;
-  payment_token?: string;
-  payment_reference?: string;
-  message?: string;
+export interface CreateTransactionData {
+  courseId: string;
+  paymentMethod: string;
+  userId: string;
+}
+
+export interface PaymentResponse {
+  orderId: string;
+  transactionId: string;
+  paymentUrl?: string;
+  status: string;
+  amount: number;
+  expiredAt: Date;
+}
+
+export interface PaymentWebhookData {
+  orderId: string;
+  transactionStatus: string;
+  fraudStatus?: string;
+  statusCode?: string;
+  grossAmount?: string;
+  paymentType?: string;
+  transactionTime?: string;
+  signatureKey?: string;
 }
 
 export interface TransactionStats {
-  total_amount: number;
-  total_transactions: number;
-  pending_count: number;
-  success_count: number;
-  failed_count: number;
+  totalRevenue: number;
+  revenueThisMonth: number;
+  revenueLastMonth: number;
+  growthRate: number;
+  totalTransactions: number;
+  successfulTransactions: number;
+  pendingTransactions: number;
+  refundedAmount: number;
 }
 
-// Helper function to convert QueryResultRow to Transaction
-function rowToTransaction(row: QueryResultRow): Transaction {
-  return {
-    id: String(row.id),
-    user_id: String(row.user_id),
-    course_id: String(row.course_id),
-    amount: Number(row.amount),
-    payment_method: row.payment_method as Transaction['payment_method'],
-    payment_gateway: row.payment_gateway as Transaction['payment_gateway'],
-    status: row.status as Transaction['status'],
-    payment_url: row.payment_url ? String(row.payment_url) : undefined,
-    payment_token: row.payment_token ? String(row.payment_token) : undefined,
-    payment_reference: row.payment_reference ? String(row.payment_reference) : undefined,
-    paid_at: row.paid_at ? new Date(row.paid_at as string) : undefined,
-    expired_at: row.expired_at ? new Date(row.expired_at as string) : undefined,
-    created_at: new Date(row.created_at as string),
-    updated_at: new Date(row.updated_at as string),
-  };
+export interface UserTransactionStats {
+  totalSpent: number;
+  totalTransactions: number;
+  successfulTransactions: number;
+  pendingTransactions: number;
 }
 
-class TransactionService {
-  // Create new transaction
-  async createTransaction(data: {
-    user_id: string;
-    course_id: string;
-    amount: number;
-    payment_method: string;
-    payment_gateway: string;
-  }): Promise<Transaction> {
+// Extended interface untuk payment notification
+interface PaymentNotification {
+  orderId: string;
+  transactionStatus: string;
+  fraudStatus?: string;
+  grossAmount: string;
+  paymentType?: string;
+  transactionTime?: string;
+  signatureKey?: string;
+}
+
+/**
+ * Transaction Service
+ * Handles payment transactions, webhooks, and transaction management
+ */
+export class TransactionService {
+  /**
+   * Create new transaction
+   */
+  async createTransaction(
+    data: CreateTransactionData
+  ): Promise<PaymentResponse> {
     try {
-      // Set expiration time (24 hours from now)
-      const expiredAt = new Date();
-      expiredAt.setHours(expiredAt.getHours() + 24);
+      console.log(
+        "💰 Creating transaction for user:",
+        data.userId,
+        "course:",
+        data.courseId
+      );
 
-      const result = await sql`
-        INSERT INTO transactions (
-          user_id, course_id, amount, payment_method, 
-          payment_gateway, status, expired_at
-        )
-        VALUES (
-          ${data.user_id}, ${data.course_id}, ${data.amount}, 
-          ${data.payment_method}, ${data.payment_gateway}, 
-          'pending', ${expiredAt.toISOString()}
-        )
-        RETURNING *
-      `;
+      // Validate input
+      if (!data.courseId || !data.paymentMethod || !data.userId) {
+        throw new ValidationError(
+          "Course ID, payment method, and user ID are required"
+        );
+      }
 
-      const transaction = rowToTransaction(result.rows[0]);
+      // Check if course exists and get price
+      console.log("🔍 Getting course details...");
+      const course = await prisma.course.findUnique({
+        where: { id: data.courseId },
+        select: {
+          id: true,
+          title: true,
+          price: true,
+          discountPrice: true,
+          isFree: true,
+        },
+      });
+
+      if (!course) {
+        console.log("❌ Course not found:", data.courseId);
+        throw new NotFoundError("Course not found");
+      }
+
+      if (course.isFree) {
+        console.log("❌ Cannot create transaction for free course");
+        throw new ValidationError("Cannot create transaction for free course");
+      }
+
+      // Check if user already has an active enrollment
+      console.log("🔍 Checking existing enrollment...");
+      const existingEnrollment = await prisma.enrollment.findFirst({
+        where: {
+          userId: data.userId,
+          courseId: data.courseId,
+          status: { in: ["ACTIVE", "COMPLETED"] },
+        },
+      });
+
+      if (existingEnrollment) {
+        console.log("❌ User already enrolled in this course");
+        throw new ConflictError("You are already enrolled in this course");
+      }
+
+      // Check for pending transactions for the same course
+      console.log("🔍 Checking pending transactions...");
+      const pendingTransaction = await prisma.transaction.findFirst({
+        where: {
+          userId: data.userId,
+          courseId: data.courseId,
+          status: { in: ["PENDING", "PROCESSING"] },
+        },
+      });
+
+      if (pendingTransaction) {
+        console.log("ℹ️ Returning existing pending transaction");
+        return {
+          orderId: pendingTransaction.orderId,
+          transactionId: pendingTransaction.id,
+          paymentUrl: pendingTransaction.paymentUrl || undefined,
+          status: pendingTransaction.status,
+          amount: pendingTransaction.totalAmount,
+          expiredAt: pendingTransaction.expiredAt!,
+        };
+      }
+
+      // Calculate amounts
+      const amount = course.discountPrice || course.price;
+      const discount = course.discountPrice
+        ? course.price - course.discountPrice
+        : 0;
+      const totalAmount = amount;
+
+      // Generate order ID
+      const orderId = this.generateOrderId();
+
+      // Calculate expiry time (24 hours from now)
+      const expiredAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+      console.log("💾 Creating transaction in database...");
+      // Create transaction record
+      const transaction = await prisma.transaction.create({
+        data: {
+          userId: data.userId,
+          courseId: data.courseId,
+          orderId,
+          amount,
+          discount,
+          totalAmount,
+          paymentMethod: data.paymentMethod,
+          status: TRANSACTION_STATUS.PENDING,
+          expiredAt,
+          metadata: {
+            courseTitle: course.title,
+            originalPrice: course.price,
+            discountPrice: course.discountPrice,
+          },
+        },
+      });
+
+      console.log("✅ Transaction created:", transaction.id);
 
       // Process payment with gateway
-      const paymentResponse = await this.processPaymentGateway(transaction);
+      console.log("🔗 Processing payment with gateway...");
+      const paymentRequest = {
+        orderId: transaction.orderId,
+        amount: transaction.totalAmount,
+        customerName: `User_${data.userId}`, // In real app, get user name
+        customerEmail: `user_${data.userId}@example.com`, // In real app, get user email
+        courseName: course.title,
+        userId: data.userId,
+        courseId: data.courseId,
+      };
+
+      const paymentResult = await paymentGateway.createTransaction(
+        paymentRequest
+      );
 
       // Update transaction with payment details
-      if (paymentResponse.success) {
-        const updated = await sql`
-          UPDATE transactions
-          SET 
-            payment_url = ${paymentResponse.payment_url || null},
-            payment_token = ${paymentResponse.payment_token || null},
-            payment_reference = ${paymentResponse.payment_reference || null},
-            status = 'processing',
-            updated_at = NOW()
-          WHERE id = ${transaction.id}
-          RETURNING *
-        `;
-
-        return rowToTransaction(updated.rows[0]);
-      }
-
-      return transaction;
-    } catch (error) {
-      console.error('Create transaction error:', error);
-      throw new Error('Failed to create transaction');
-    }
-  }
-
-  // Process payment with gateway
-  private async processPaymentGateway(transaction: Transaction): Promise<PaymentGatewayResponse> {
-    try {
-      if (transaction.payment_gateway === 'midtrans') {
-        return await this.processMidtrans(transaction);
-      } else if (transaction.payment_gateway === 'xendit') {
-        return await this.processXendit(transaction);
-      } else {
-        // Manual payment
-        return {
-          success: true,
-          transaction_id: transaction.id,
-          message: 'Manual payment - awaiting confirmation',
-        };
-      }
-    } catch (error) {
-      console.error('Payment gateway error:', error);
-      return {
-        success: false,
-        transaction_id: transaction.id,
-        message: 'Payment gateway processing failed',
-      };
-    }
-  }
-
-  // Midtrans integration
-  private async processMidtrans(transaction: Transaction): Promise<PaymentGatewayResponse> {
-    try {
-      // Midtrans Snap API
-      const midtransUrl =
-        process.env.MIDTRANS_API_URL || 'https://app.sandbox.midtrans.com/snap/v1/transactions';
-      const serverKey = process.env.MIDTRANS_SERVER_KEY || '';
-
-      const payload = {
-        transaction_details: {
-          order_id: transaction.id,
-          gross_amount: transaction.amount,
+      console.log("💾 Updating transaction with payment details...");
+      await prisma.transaction.update({
+        where: { id: transaction.id },
+        data: {
+          paymentUrl: paymentResult.redirectUrl,
+          status: TRANSACTION_STATUS.PENDING,
+          metadata: {
+            ...(transaction.metadata as Record<string, unknown>),
+            paymentToken: paymentResult.token,
+            gateway: "midtrans",
+          },
         },
-        customer_details: {
-          id: transaction.user_id,
-        },
-        credit_card: {
-          secure: true,
-        },
-      };
-
-      const response = await fetch(midtransUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Basic ${Buffer.from(serverKey + ':').toString('base64')}`,
-        },
-        body: JSON.stringify(payload),
       });
 
-      const data = (await response.json()) as {
-        redirect_url?: string;
-        token?: string;
-        error_messages?: string[];
-      };
-
-      if (response.ok) {
-        return {
-          success: true,
-          transaction_id: transaction.id,
-          payment_url: data.redirect_url,
-          payment_token: data.token,
-        };
-      }
+      console.log(
+        "✅ Payment processing completed for transaction:",
+        transaction.id
+      );
 
       return {
-        success: false,
-        transaction_id: transaction.id,
-        message: data.error_messages?.[0] || 'Midtrans error',
+        orderId: transaction.orderId,
+        transactionId: transaction.id,
+        paymentUrl: paymentResult.redirectUrl,
+        status: TRANSACTION_STATUS.PENDING,
+        amount: transaction.totalAmount,
+        expiredAt: transaction.expiredAt!,
       };
     } catch (error) {
-      console.error('Midtrans error:', error);
-      return {
-        success: false,
-        transaction_id: transaction.id,
-        message: 'Midtrans integration failed',
-      };
+      console.error("❌ Create transaction failed:", error);
+      throw error;
     }
   }
 
-  // Xendit integration
-  private async processXendit(transaction: Transaction): Promise<PaymentGatewayResponse> {
+  /**
+   * Get transaction by ID
+   */
+  async getTransactionById(
+    id: string,
+    userId?: string
+  ): Promise<Transaction | null> {
     try {
-      const xenditUrl = process.env.XENDIT_API_URL || 'https://api.xendit.co/v2/invoices';
-      const apiKey = process.env.XENDIT_API_KEY || '';
+      console.log("🔍 Getting transaction by ID:", id);
 
-      const payload = {
-        external_id: transaction.id,
-        amount: transaction.amount,
-        payer_email: `user_${transaction.user_id}@example.com`,
-        description: `Payment for course ${transaction.course_id}`,
-      };
+      const whereClause: any = { id };
+      if (userId) {
+        whereClause.userId = userId; // Restrict to user's own transactions if userId provided
+      }
 
-      const response = await fetch(xenditUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Basic ${Buffer.from(apiKey + ':').toString('base64')}`,
+      const transaction = await prisma.transaction.findUnique({
+        where: whereClause,
+        include: {
+          user: {
+            select: {
+              id: true,
+              full_name: true,
+              email: true,
+            },
+          },
+          course: {
+            select: {
+              id: true,
+              title: true,
+              thumbnail: true,
+            },
+          },
         },
-        body: JSON.stringify(payload),
       });
 
-      const data = (await response.json()) as {
-        invoice_url?: string;
-        id?: string;
-        message?: string;
-      };
-
-      if (response.ok) {
-        return {
-          success: true,
-          transaction_id: transaction.id,
-          payment_url: data.invoice_url,
-          payment_reference: data.id,
-        };
+      if (!transaction) {
+        console.log("❌ Transaction not found:", id);
+        return null;
       }
 
-      return {
-        success: false,
-        transaction_id: transaction.id,
-        message: data.message || 'Xendit error',
-      };
+      console.log("✅ Transaction found:", id);
+
+      return this.mapPrismaTransaction(transaction);
     } catch (error) {
-      console.error('Xendit error:', error);
-      return {
-        success: false,
-        transaction_id: transaction.id,
-        message: 'Xendit integration failed',
-      };
+      console.error("❌ Get transaction by ID failed:", error);
+      throw error;
     }
   }
 
-  // Get transaction by ID
-  async getTransactionById(id: string): Promise<Transaction | null> {
+  /**
+   * Get transaction by order ID
+   */
+  async getTransactionByOrderId(orderId: string): Promise<Transaction | null> {
     try {
-      const result = await sql`
-        SELECT 
-          t.*,
-          c.title as course_title,
-          c.price as course_price,
-          u.full_name as user_name,
-          u.email as user_email
-        FROM transactions t
-        JOIN courses c ON t.course_id = c.id
-        JOIN users u ON t.user_id = u.id
-        WHERE t.id = ${id}
-      `;
+      console.log("🔍 Getting transaction by order ID:", orderId);
 
-      return result.rows[0] ? rowToTransaction(result.rows[0] as QueryResultRow) : null;
+      const transaction = await prisma.transaction.findUnique({
+        where: { orderId },
+        include: {
+          user: {
+            select: {
+              id: true,
+              full_name: true,
+              email: true,
+            },
+          },
+          course: {
+            select: {
+              id: true,
+              title: true,
+              thumbnail: true,
+            },
+          },
+        },
+      });
+
+      if (!transaction) {
+        console.log("❌ Transaction not found for order:", orderId);
+        return null;
+      }
+
+      console.log("✅ Transaction found for order:", orderId);
+
+      return this.mapPrismaTransaction(transaction);
     } catch (error) {
-      logError('Get transaction error', error);
-      return null;
+      console.error("❌ Get transaction by order ID failed:", error);
+      throw error;
     }
   }
 
-  // Get user transactions
+  /**
+   * Get user transactions
+   */
   async getUserTransactions(
     userId: string,
     filters?: {
       status?: string;
+      page?: number;
       limit?: number;
-      offset?: number;
     }
-  ): Promise<{ transactions: Transaction[]; total: number }> {
+  ): Promise<{
+    transactions: Transaction[];
+    total: number;
+    page: number;
+    totalPages: number;
+  }> {
     try {
-      // Validate pagination parameters
-      let limit = filters?.limit || 10;
-      let offset = filters?.offset || 0;
+      console.log("🔍 Getting transactions for user:", userId);
 
-      if (limit < 1 || limit > 100) limit = 10;
-      if (offset < 0) offset = 0;
+      const page = filters?.page || 1;
+      const limit = filters?.limit || 10;
+      const skip = (page - 1) * limit;
 
-      // Validate status if provided
-      const validStatuses = ['pending', 'processing', 'success', 'failed', 'expired'];
-      const status = filters?.status && validStatuses.includes(filters.status) ? filters.status : undefined;
+      const whereClause: any = { userId };
+      if (filters?.status) {
+        whereClause.status = filters.status;
+      }
 
-      const result = await sql`
-        SELECT 
-          t.*,
-          c.title as course_title,
-          c.thumbnail_url as course_thumbnail
-        FROM transactions t
-        JOIN courses c ON t.course_id = c.id
-        WHERE t.user_id = ${userId}
-        ${status ? sql`AND t.status = ${status}` : sql``}
-        ORDER BY t.created_at DESC
-        LIMIT ${limit}
-        OFFSET ${offset}
-      `;
+      const [transactions, total] = await Promise.all([
+        prisma.transaction.findMany({
+          where: whereClause,
+          include: {
+            course: {
+              select: {
+                id: true,
+                title: true,
+                thumbnail: true,
+              },
+            },
+          },
+          orderBy: { createdAt: "desc" },
+          skip,
+          take: limit,
+        }),
+        prisma.transaction.count({ where: whereClause }),
+      ]);
 
-      // Get total count
-      const countResult = await sql`
-        SELECT COUNT(*) as total
-        FROM transactions
-        WHERE user_id = ${userId}
-        ${status ? sql`AND status = ${status}` : sql``}
-      `;
+      const totalPages = Math.ceil(total / limit);
+
+      console.log(
+        `✅ Found ${transactions.length} transactions for user ${userId}`
+      );
 
       return {
-        transactions: result.rows.map(row => rowToTransaction(row as QueryResultRow)),
-        total: parseInt(countResult.rows[0].total as string),
+        transactions: transactions.map((transaction: any) =>
+          this.mapPrismaTransaction(transaction)
+        ),
+        total,
+        page,
+        totalPages,
       };
     } catch (error) {
-      logError('Get user transactions error', error);
-      return { transactions: [], total: 0 };
+      console.error("❌ Get user transactions failed:", error);
+      throw error;
     }
   }
 
-  // Update transaction status
+  /**
+   * Update transaction status
+   */
   async updateTransactionStatus(
-    id: string,
+    transactionId: string,
     status: string,
     additionalData?: {
-      payment_reference?: string;
-      paid_at?: Date;
+      paidAt?: Date;
+      refundedAt?: Date;
+      refundReason?: string;
+      metadata?: Record<string, unknown>;
     }
-  ): Promise<Transaction | null> {
+  ): Promise<Transaction> {
     try {
-      const updates: any = {
+      console.log("🔄 Updating transaction status:", { transactionId, status });
+
+      const updateData: any = {
         status,
-        updated_at: new Date(),
+        updatedAt: new Date(),
       };
 
-      if (additionalData?.payment_reference) {
-        updates.payment_reference = additionalData.payment_reference;
+      if (additionalData?.paidAt) {
+        updateData.paidAt = additionalData.paidAt;
       }
 
-      if (additionalData?.paid_at) {
-        updates.paid_at = additionalData.paid_at;
+      if (additionalData?.refundedAt) {
+        updateData.refundedAt = additionalData.refundedAt;
+        updateData.refundReason = additionalData.refundReason;
       }
 
-      const result = await sql`
-        UPDATE transactions
-        SET 
-          status = ${status},
-          payment_reference = ${updates.payment_reference || null},
-          paid_at = ${updates.paid_at?.toISOString() || null},
-          updated_at = NOW()
-        WHERE id = ${id}
-        RETURNING *
-      `;
+      if (additionalData?.metadata) {
+        // Merge with existing metadata
+        const existingTransaction = await prisma.transaction.findUnique({
+          where: { id: transactionId },
+          select: { metadata: true },
+        });
 
-      // If transaction is successful, grant course access
-      if (status === 'success' && result.rows[0]) {
-        await this.grantCourseAccess(result.rows[0]);
+        updateData.metadata = {
+          ...(existingTransaction?.metadata as Record<string, unknown>),
+          ...additionalData.metadata,
+        };
       }
 
-      return result.rows[0] || null;
-    } catch (error) {
-      console.error('Update transaction status error:', error);
-      return null;
-    }
-  }
-
-  // Grant course access after successful payment
-  private async grantCourseAccess(transaction: Transaction): Promise<void> {
-    try {
-      // Check if enrollment already exists
-      const existing = await sql`
-        SELECT id FROM enrollments
-        WHERE user_id = ${transaction.user_id}
-        AND course_id = ${transaction.course_id}
-      `;
-
-      if (existing.rows.length === 0) {
-        await sql`
-          INSERT INTO enrollments (user_id, course_id, status, enrolled_at)
-          VALUES (${transaction.user_id}, ${transaction.course_id}, 'active', NOW())
-        `;
-      }
-    } catch (error) {
-      console.error('Grant course access error:', error);
-    }
-  }
-
-  // Process webhook from payment gateway
-  async processWebhook(
-    gateway: string,
-    payload: any
-  ): Promise<{ success: boolean; message: string }> {
-    try {
-      if (gateway === 'midtrans') {
-        return await this.processMidtransWebhook(payload);
-      } else if (gateway === 'xendit') {
-        return await this.processXenditWebhook(payload);
-      }
-
-      return { success: false, message: 'Unknown gateway' };
-    } catch (error) {
-      console.error('Webhook processing error:', error);
-      return { success: false, message: 'Webhook processing failed' };
-    }
-  }
-
-  // Process Midtrans webhook
-  private async processMidtransWebhook(
-    payload: any
-  ): Promise<{ success: boolean; message: string }> {
-    try {
-      const transactionId = payload.order_id;
-      const transactionStatus = payload.transaction_status;
-      const fraudStatus = payload.fraud_status;
-
-      let status = 'pending';
-      if (transactionStatus === 'capture') {
-        status = fraudStatus === 'accept' ? 'success' : 'failed';
-      } else if (transactionStatus === 'settlement') {
-        status = 'success';
-      } else if (transactionStatus === 'deny' || transactionStatus === 'cancel') {
-        status = 'failed';
-      } else if (transactionStatus === 'expire') {
-        status = 'expired';
-      }
-
-      await this.updateTransactionStatus(transactionId, status, {
-        payment_reference: payload.transaction_id,
-        paid_at: status === 'success' ? new Date() : undefined,
+      const transaction = await prisma.transaction.update({
+        where: { id: transactionId },
+        data: updateData,
+        include: {
+          user: {
+            select: {
+              id: true,
+              full_name: true,
+              email: true,
+            },
+          },
+          course: {
+            select: {
+              id: true,
+              title: true,
+              thumbnail: true,
+            },
+          },
+        },
       });
 
-      return { success: true, message: 'Webhook processed successfully' };
+      // If transaction is successful, create enrollment
+      if (status === TRANSACTION_STATUS.PAID) {
+        console.log("🎓 Creating enrollment for successful transaction...");
+        await this.createEnrollment(transaction.userId, transaction.courseId);
+      }
+
+      console.log("✅ Transaction status updated:", { transactionId, status });
+
+      return this.mapPrismaTransaction(transaction);
     } catch (error) {
-      console.error('Midtrans webhook error:', error);
-      return { success: false, message: 'Webhook processing failed' };
+      console.error("❌ Update transaction status failed:", error);
+      throw error;
     }
   }
 
-  // Process Xendit webhook
-  private async processXenditWebhook(payload: any): Promise<{ success: boolean; message: string }> {
+  /**
+   * Process payment webhook
+   */
+  async processPaymentWebhook(
+    data: PaymentWebhookData
+  ): Promise<{ success: boolean; message: string }> {
     try {
-      const transactionId = payload.external_id;
-      const status = payload.status === 'PAID' ? 'success' : 'pending';
+      console.log("🔗 Processing payment webhook:", data);
 
-      await this.updateTransactionStatus(transactionId, status, {
-        payment_reference: payload.id,
-        paid_at: status === 'success' ? new Date(payload.paid_at) : undefined,
+      // Convert PaymentWebhookData to PaymentNotification format yang diharapkan oleh paymentGateway
+      const notificationData: PaymentNotification = {
+        orderId: data.orderId,
+        transactionStatus: data.transactionStatus,
+        fraudStatus: data.fraudStatus,
+        grossAmount: data.grossAmount || "0", // Provide default value
+        paymentType: data.paymentType,
+        transactionTime: data.transactionTime,
+        signatureKey: data.signatureKey,
+      };
+
+      // Verify webhook signature
+      const isValid = await paymentGateway.verifyNotification(notificationData);
+      if (!isValid) {
+        console.log("❌ Invalid webhook signature");
+        return { success: false, message: "Invalid signature" };
+      }
+
+      // Get transaction by order ID
+      const transaction = await this.getTransactionByOrderId(data.orderId);
+      if (!transaction) {
+        console.log("❌ Transaction not found for order:", data.orderId);
+        return { success: false, message: "Transaction not found" };
+      }
+
+      // Map gateway status to our status
+      const status = this.mapTransactionStatus(data.transactionStatus);
+
+      // Update transaction status
+      await this.updateTransactionStatus(transaction.id, status, {
+        paidAt: status === TRANSACTION_STATUS.PAID ? new Date() : undefined,
+        metadata: {
+          gatewayData: data,
+          processedAt: new Date().toISOString(),
+        },
       });
 
-      return { success: true, message: 'Webhook processed successfully' };
+      console.log("✅ Webhook processed successfully for order:", data.orderId);
+
+      return { success: true, message: "Webhook processed successfully" };
     } catch (error) {
-      console.error('Xendit webhook error:', error);
-      return { success: false, message: 'Webhook processing failed' };
+      console.error("❌ Process payment webhook failed:", error);
+      return { success: false, message: "Webhook processing failed" };
     }
   }
 
-  // Get transaction statistics
-  async getTransactionStats(
-    userId?: string,
-    filters?: {
-      start_date?: Date;
-      end_date?: Date;
-    }
-  ): Promise<TransactionStats> {
+  /**
+   * Get transaction statistics
+   */
+  async getTransactionStats(userId?: string): Promise<TransactionStats> {
     try {
-      let query = `
-        SELECT 
-          COALESCE(SUM(amount), 0) as total_amount,
-          COUNT(*) as total_transactions,
-          SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending_count,
-          SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as success_count,
-          SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed_count
-        FROM transactions
-        WHERE 1=1
-      `;
+      console.log("📊 Getting transaction statistics for user:", userId);
 
-      const params: any[] = [];
-
+      const whereClause: any = {};
       if (userId) {
-        query += ` AND user_id = $${params.length + 1}`;
-        params.push(userId);
+        whereClause.userId = userId;
       }
 
-      if (filters?.start_date) {
-        query += ` AND created_at >= $${params.length + 1}`;
-        params.push(filters.start_date.toISOString());
-      }
+      // Get current date ranges for monthly stats
+      const now = new Date();
+      const startOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const startOfLastMonth = new Date(
+        now.getFullYear(),
+        now.getMonth() - 1,
+        1
+      );
+      const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
 
-      if (filters?.end_date) {
-        query += ` AND created_at <= $${params.length + 1}`;
-        params.push(filters.end_date.toISOString());
-      }
+      const [
+        totalRevenueResult,
+        revenueThisMonthResult,
+        revenueLastMonthResult,
+        totalTransactionsResult,
+        successfulTransactionsResult,
+        pendingTransactionsResult,
+        refundedAmountResult,
+      ] = await Promise.all([
+        // Total revenue
+        prisma.transaction.aggregate({
+          where: { ...whereClause, status: TRANSACTION_STATUS.PAID },
+          _sum: { totalAmount: true },
+        }),
 
-      const result = await sql.query(query, params);
+        // Revenue this month
+        prisma.transaction.aggregate({
+          where: {
+            ...whereClause,
+            status: TRANSACTION_STATUS.PAID,
+            paidAt: { gte: startOfThisMonth },
+          },
+          _sum: { totalAmount: true },
+        }),
 
-      return {
-        total_amount: parseFloat(result.rows[0].total_amount),
-        total_transactions: parseInt(result.rows[0].total_transactions),
-        pending_count: parseInt(result.rows[0].pending_count),
-        success_count: parseInt(result.rows[0].success_count),
-        failed_count: parseInt(result.rows[0].failed_count),
+        // Revenue last month
+        prisma.transaction.aggregate({
+          where: {
+            ...whereClause,
+            status: TRANSACTION_STATUS.PAID,
+            paidAt: { gte: startOfLastMonth, lte: endOfLastMonth },
+          },
+          _sum: { totalAmount: true },
+        }),
+
+        // Total transactions
+        prisma.transaction.count({ where: whereClause }),
+
+        // Successful transactions
+        prisma.transaction.count({
+          where: { ...whereClause, status: TRANSACTION_STATUS.PAID },
+        }),
+
+        // Pending transactions
+        prisma.transaction.count({
+          where: { ...whereClause, status: TRANSACTION_STATUS.PENDING },
+        }),
+
+        // Refunded amount
+        prisma.transaction.aggregate({
+          where: { ...whereClause, status: TRANSACTION_STATUS.REFUNDED },
+          _sum: { totalAmount: true },
+        }),
+      ]);
+
+      const totalRevenue = totalRevenueResult._sum.totalAmount || 0;
+      const revenueThisMonth = revenueThisMonthResult._sum.totalAmount || 0;
+      const revenueLastMonth = revenueLastMonthResult._sum.totalAmount || 0;
+      const refundedAmount = refundedAmountResult._sum.totalAmount || 0;
+
+      // Calculate growth rate
+      const growthRate =
+        revenueLastMonth > 0
+          ? ((revenueThisMonth - revenueLastMonth) / revenueLastMonth) * 100
+          : revenueThisMonth > 0
+          ? 100
+          : 0;
+
+      const stats: TransactionStats = {
+        totalRevenue,
+        revenueThisMonth,
+        revenueLastMonth,
+        growthRate: Math.round(growthRate * 100) / 100, // Round to 2 decimal places
+        totalTransactions: totalTransactionsResult,
+        successfulTransactions: successfulTransactionsResult,
+        pendingTransactions: pendingTransactionsResult,
+        refundedAmount,
       };
+
+      console.log("✅ Transaction statistics retrieved successfully");
+
+      return stats;
     } catch (error) {
-      console.error('Get transaction stats error:', error);
-      return {
-        total_amount: 0,
-        total_transactions: 0,
-        pending_count: 0,
-        success_count: 0,
-        failed_count: 0,
-      };
+      console.error("❌ Get transaction statistics failed:", error);
+      throw error;
     }
   }
 
-  // Cancel transaction
-  async cancelTransaction(id: string): Promise<boolean> {
+  /**
+   * Get user transaction statistics
+   */
+  async getUserTransactionStats(userId: string): Promise<UserTransactionStats> {
     try {
-      const result = await sql`
-        UPDATE transactions
-        SET status = 'failed', updated_at = NOW()
-        WHERE id = ${id} AND status = 'pending'
-        RETURNING id
-      `;
+      console.log("📊 Getting user transaction statistics:", userId);
 
-      return result.rows.length > 0;
+      const [
+        totalSpentResult,
+        totalTransactionsResult,
+        successfulTransactionsResult,
+        pendingTransactionsResult,
+      ] = await Promise.all([
+        prisma.transaction.aggregate({
+          where: { userId, status: TRANSACTION_STATUS.PAID },
+          _sum: { totalAmount: true },
+        }),
+        prisma.transaction.count({ where: { userId } }),
+        prisma.transaction.count({
+          where: { userId, status: TRANSACTION_STATUS.PAID },
+        }),
+        prisma.transaction.count({
+          where: { userId, status: TRANSACTION_STATUS.PENDING },
+        }),
+      ]);
+
+      const stats: UserTransactionStats = {
+        totalSpent: totalSpentResult._sum.totalAmount || 0,
+        totalTransactions: totalTransactionsResult,
+        successfulTransactions: successfulTransactionsResult,
+        pendingTransactions: pendingTransactionsResult,
+      };
+
+      console.log("✅ User transaction statistics retrieved successfully");
+
+      return stats;
     } catch (error) {
-      console.error('Cancel transaction error:', error);
-      return false;
+      console.error("❌ Get user transaction statistics failed:", error);
+      throw error;
     }
   }
 
-  // Check and expire old transactions
+  /**
+   * Cancel transaction
+   */
+  async cancelTransaction(
+    transactionId: string,
+    userId?: string
+  ): Promise<Transaction> {
+    try {
+      console.log("❌ Canceling transaction:", transactionId);
+
+      const whereClause: any = { id: transactionId };
+      if (userId) {
+        whereClause.userId = userId; // Users can only cancel their own transactions
+      }
+
+      const transaction = await prisma.transaction.findUnique({
+        where: whereClause,
+      });
+
+      if (!transaction) {
+        console.log("❌ Transaction not found:", transactionId);
+        throw new NotFoundError("Transaction not found");
+      }
+
+      if (transaction.status !== TRANSACTION_STATUS.PENDING) {
+        console.log("❌ Cannot cancel non-pending transaction");
+        throw new ValidationError("Only pending transactions can be cancelled");
+      }
+
+      const updatedTransaction = await prisma.transaction.update({
+        where: { id: transactionId },
+        data: {
+          status: TRANSACTION_STATUS.CANCELLED,
+          updatedAt: new Date(),
+        },
+        include: {
+          user: {
+            select: {
+              id: true,
+              full_name: true,
+              email: true,
+            },
+          },
+          course: {
+            select: {
+              id: true,
+              title: true,
+              thumbnail: true,
+            },
+          },
+        },
+      });
+
+      console.log("✅ Transaction cancelled successfully:", transactionId);
+
+      return this.mapPrismaTransaction(updatedTransaction);
+    } catch (error) {
+      console.error("❌ Cancel transaction failed:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Refund transaction
+   */
+  async refundTransaction(
+    transactionId: string,
+    reason: string,
+    adminUserId?: string
+  ): Promise<Transaction> {
+    try {
+      console.log("💸 Refunding transaction:", transactionId);
+
+      const transaction = await prisma.transaction.findUnique({
+        where: { id: transactionId },
+      });
+
+      if (!transaction) {
+        console.log("❌ Transaction not found:", transactionId);
+        throw new NotFoundError("Transaction not found");
+      }
+
+      if (transaction.status !== TRANSACTION_STATUS.PAID) {
+        console.log("❌ Cannot refund non-paid transaction");
+        throw new ValidationError("Only paid transactions can be refunded");
+      }
+
+      if (transaction.refundedAt) {
+        console.log("❌ Transaction already refunded");
+        throw new ValidationError("Transaction has already been refunded");
+      }
+
+      const updatedTransaction = await prisma.transaction.update({
+        where: { id: transactionId },
+        data: {
+          status: TRANSACTION_STATUS.REFUNDED,
+          refundedAt: new Date(),
+          refundReason: reason,
+          updatedAt: new Date(),
+          metadata: {
+            ...(transaction.metadata as Record<string, unknown>),
+            refundBy: adminUserId || "system",
+            refundReason: reason,
+            refundedAt: new Date().toISOString(),
+          },
+        },
+        include: {
+          user: {
+            select: {
+              id: true,
+              full_name: true,
+              email: true,
+            },
+          },
+          course: {
+            select: {
+              id: true,
+              title: true,
+              thumbnail: true,
+            },
+          },
+        },
+      });
+
+      // Remove enrollment if exists
+      console.log("🎓 Removing enrollment for refunded transaction...");
+      await prisma.enrollment.deleteMany({
+        where: {
+          userId: transaction.userId,
+          courseId: transaction.courseId,
+        },
+      });
+
+      console.log("✅ Transaction refunded successfully:", transactionId);
+
+      return this.mapPrismaTransaction(updatedTransaction);
+    } catch (error) {
+      console.error("❌ Refund transaction failed:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Expire old pending transactions
+   */
   async expireOldTransactions(): Promise<number> {
     try {
-      const result = await sql`
-        UPDATE transactions
-        SET status = 'expired', updated_at = NOW()
-        WHERE status = 'pending' 
-        AND expired_at < NOW()
-        RETURNING id
-      `;
+      console.log("🕐 Expiring old pending transactions...");
 
-      return result.rows.length;
+      const result = await prisma.transaction.updateMany({
+        where: {
+          status: TRANSACTION_STATUS.PENDING,
+          expiredAt: { lt: new Date() },
+        },
+        data: {
+          status: "EXPIRED", // Using string literal since it's not in TRANSACTION_STATUS
+          updatedAt: new Date(),
+        },
+      });
+
+      console.log(`✅ Expired ${result.count} old transactions`);
+
+      return result.count;
     } catch (error) {
-      console.error('Expire old transactions error:', error);
-      return 0;
+      console.error("❌ Expire old transactions failed:", error);
+      throw error;
     }
+  }
+
+  /**
+   * Create enrollment after successful payment
+   */
+  private async createEnrollment(
+    userId: string,
+    courseId: string
+  ): Promise<void> {
+    try {
+      console.log(
+        "🎓 Creating enrollment for user:",
+        userId,
+        "course:",
+        courseId
+      );
+
+      // Check if enrollment already exists
+      const existingEnrollment = await prisma.enrollment.findFirst({
+        where: {
+          userId,
+          courseId,
+        },
+      });
+
+      if (existingEnrollment) {
+        console.log("ℹ️ Enrollment already exists, updating status...");
+        await prisma.enrollment.update({
+          where: { id: existingEnrollment.id },
+          data: {
+            status: "ACTIVE",
+            updatedAt: new Date(),
+          },
+        });
+      } else {
+        // Create new enrollment
+        await prisma.enrollment.create({
+          data: {
+            userId,
+            courseId,
+            status: "ACTIVE",
+            progress: 0,
+            lastAccessedAt: new Date(),
+          },
+        });
+      }
+
+      console.log("✅ Enrollment created/updated successfully");
+    } catch (error) {
+      console.error("❌ Create enrollment failed:", error);
+      // Don't throw error, just log it
+    }
+  }
+
+  /**
+   * Generate unique order ID
+   */
+  private generateOrderId(): string {
+    const timestamp = Date.now().toString();
+    const random = Math.random().toString(36).substring(2, 8).toUpperCase();
+    return `ORD-${timestamp}-${random}`;
+  }
+
+  /**
+   * Map transaction status from payment gateway to our status
+   */
+  private mapTransactionStatus(gatewayStatus: string): string {
+    const statusMap: Record<string, string> = {
+      capture: TRANSACTION_STATUS.PAID,
+      settlement: TRANSACTION_STATUS.PAID,
+      pending: TRANSACTION_STATUS.PENDING,
+      deny: TRANSACTION_STATUS.FAILED,
+      cancel: TRANSACTION_STATUS.CANCELLED,
+      expire: "EXPIRED", // Sesuai schema
+      refund: TRANSACTION_STATUS.REFUNDED,
+      partial_refund: TRANSACTION_STATUS.REFUNDED,
+      authorize: TRANSACTION_STATUS.PENDING,
+    };
+    return statusMap[gatewayStatus.toLowerCase()] || TRANSACTION_STATUS.PENDING;
+  }
+
+  /**
+   * Map Prisma transaction to our Transaction interface
+   */
+  private mapPrismaTransaction(prismaTransaction: any): Transaction {
+    return {
+      id: prismaTransaction.id,
+      userId: prismaTransaction.userId,
+      courseId: prismaTransaction.courseId,
+      orderId: prismaTransaction.orderId,
+      amount: Number(prismaTransaction.amount),
+      discount: Number(prismaTransaction.discount),
+      totalAmount: Number(prismaTransaction.totalAmount),
+      paymentMethod: prismaTransaction.paymentMethod,
+      status: prismaTransaction.status,
+      paymentUrl: prismaTransaction.paymentUrl || undefined,
+      paidAt: prismaTransaction.paidAt || undefined,
+      expiredAt: prismaTransaction.expiredAt || undefined,
+      refundedAt: prismaTransaction.refundedAt || undefined,
+      refundReason: prismaTransaction.refundReason || undefined,
+      metadata: prismaTransaction.metadata as
+        | Record<string, unknown>
+        | undefined,
+      createdAt: prismaTransaction.createdAt,
+      updatedAt: prismaTransaction.updatedAt,
+    };
+  }
+
+  /**
+   * Get service status (for debugging)
+   */
+  getServiceStatus(): any {
+    return {
+      paymentGateway: "Midtrans",
+      database: "Connected",
+      timestamp: new Date().toISOString(),
+    };
   }
 }
 
-export default new TransactionService();
+// Export singleton instance
+const transactionService = new TransactionService();
+export default transactionService;

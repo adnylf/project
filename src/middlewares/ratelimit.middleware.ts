@@ -1,12 +1,12 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { rateLimitResponse } from '@/utils/response.util';
-import { RATE_LIMIT } from '@/lib/constants';
+import { NextRequest, NextResponse } from "next/server";
+import { rateLimitResponse } from "@/utils/response.util";
+import { RATE_LIMIT } from "@/lib/constants";
 
-// In-memory store for rate limiting (use Redis in production)
+// In-memory store untuk rate limiting
 const rateLimitStore = new Map<string, { count: number; resetTime: number }>();
 
 /**
- * Rate Limiting Middleware
+ * Rate Limiting Middleware menggunakan In-Memory Store
  */
 export function rateLimit(options?: {
   windowMs?: number;
@@ -19,97 +19,94 @@ export function rateLimit(options?: {
 
   return (handler) => {
     return async (request: NextRequest) => {
-      // Get client identifier (IP address or user ID)
+      // Get client identifier (IP address atau user ID)
       const clientId = getClientIdentifier(request);
+      const now = Date.now();
+      const key = `ratelimit:${clientId}`;
 
-      // Check rate limit
-      const isAllowed = checkRateLimit(clientId, windowMs, maxRequests);
-
-      if (!isAllowed) {
-        return rateLimitResponse('Too many requests. Please try again later.');
+      // Clean up expired entries periodically
+      if (Math.random() < 0.01) {
+        // 1% chance to clean up
+        cleanupExpiredEntries();
       }
 
-      // Proceed to handler
+      const clientData = rateLimitStore.get(key);
+
+      if (!clientData) {
+        // First request
+        rateLimitStore.set(key, {
+          count: 1,
+          resetTime: now + windowMs,
+        });
+        return handler(request);
+      }
+
+      // Check if window has expired
+      if (now > clientData.resetTime) {
+        rateLimitStore.set(key, {
+          count: 1,
+          resetTime: now + windowMs,
+        });
+        return handler(request);
+      }
+
+      // Check if rate limit exceeded
+      if (clientData.count >= maxRequests) {
+        return rateLimitResponse("Too many requests. Please try again later.");
+      }
+
+      // Increment counter
+      clientData.count++;
+      rateLimitStore.set(key, clientData);
+
       return handler(request);
     };
   };
 }
 
 /**
- * Get client identifier for rate limiting
+ * Get client identifier untuk rate limiting
  */
 function getClientIdentifier(request: NextRequest): string {
   // Try to get user ID from authenticated request
-  const userId = request.headers.get('x-user-id');
+  const userId = request.headers.get("x-user-id");
   if (userId) {
     return `user:${userId}`;
   }
 
   // Fall back to IP address
-  const forwarded = request.headers.get('x-forwarded-for');
-  const ip = forwarded ? forwarded.split(',')[0] : 'unknown';
+  const forwarded = request.headers.get("x-forwarded-for");
+  const ip = forwarded ? forwarded.split(",")[0] : "unknown";
 
   return `ip:${ip}`;
 }
 
 /**
- * Check if request is within rate limit
+ * Clean up expired rate limit entries
  */
-function checkRateLimit(clientId: string, windowMs: number, maxRequests: number): boolean {
+function cleanupExpiredEntries(): void {
   const now = Date.now();
-  const clientData = rateLimitStore.get(clientId);
-
-  // First request or expired window
-  if (!clientData || now > clientData.resetTime) {
-    rateLimitStore.set(clientId, {
-      count: 1,
-      resetTime: now + windowMs,
-    });
-    return true;
-  }
-
-  // Within window
-  if (clientData.count < maxRequests) {
-    clientData.count++;
-    return true;
-  }
-
-  // Rate limit exceeded
-  return false;
-}
-
-/**
- * Cleanup expired rate limit entries (call periodically)
- */
-export function cleanupRateLimitStore(): void {
-  const now = Date.now();
-
-  for (const [clientId, data] of rateLimitStore.entries()) {
+  for (const [key, data] of rateLimitStore.entries()) {
     if (now > data.resetTime) {
-      rateLimitStore.delete(clientId);
+      rateLimitStore.delete(key);
     }
   }
 }
 
-// Cleanup every 5 minutes
-if (typeof window === 'undefined') {
-  setInterval(cleanupRateLimitStore, 5 * 60 * 1000);
-}
-
 /**
- * Stricter rate limit for sensitive endpoints
+ * Stricter rate limit untuk sensitive endpoints
  */
 export function strictRateLimit(
   handler: (request: NextRequest) => Promise<NextResponse>
 ): (request: NextRequest) => Promise<NextResponse> {
   return rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    maxRequests: 5,
+    maxRequests: 10,
   })(handler);
 }
 
 /**
- * Loose rate limit for public endpoints
+ * Loose rate limit untuk public endpoints
  */
 export function looseRateLimit(
   handler: (request: NextRequest) => Promise<NextResponse>

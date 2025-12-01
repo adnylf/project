@@ -1,30 +1,34 @@
-import { NextRequest, NextResponse } from 'next/server';
-import commentService from '@/services/comment.service';
-import { createCommentSchema } from '@/lib/validation';
+import { NextRequest, NextResponse } from "next/server";
+import commentService from "@/services/comment.service";
+import { createCommentSchema } from "@/lib/validation";
 import {
   paginatedResponse,
   successResponse,
   validationErrorResponse,
   errorResponse,
-} from '@/utils/response.util';
-import { validateData, validatePagination } from '@/utils/validation.util';
-import { errorHandler } from '@/middlewares/error.middleware';
-import { authMiddleware, getAuthenticatedUser } from '@/middlewares/auth.middleware';
-import { corsMiddleware } from '@/middlewares/cors.middleware';
-import { loggingMiddleware } from '@/middlewares/logging.middleware';
-import { HTTP_STATUS } from '@/lib/constants';
+} from "@/utils/response.util";
+import { validateData, validatePagination } from "@/utils/validation.util";
+import { errorHandler } from "@/middlewares/error.middleware";
+import { requireAuth } from "@/middlewares/auth.middleware";
+import { corsMiddleware } from "@/middlewares/cors.middleware";
+import { loggingMiddleware } from "@/middlewares/logging.middleware";
+import { HTTP_STATUS } from "@/lib/constants";
 
 /**
  * GET /api/comments/:id/replies
  * Get all replies for a comment
  */
-async function getHandler(request: NextRequest, context: { params: Promise<{ id: string }> }) {
+async function getHandler(
+  request: NextRequest,
+  context: { params: { id: string } }
+) {
   try {
-    const { id: commentId } = await context.params;
+    const { params } = context;
+    const { id: commentId } = params;
 
     const { searchParams } = new URL(request.url);
-    const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '20');
+    const page = parseInt(searchParams.get("page") || "1");
+    const limit = parseInt(searchParams.get("limit") || "20");
 
     const validatedPagination = validatePagination(page, limit);
 
@@ -33,12 +37,19 @@ async function getHandler(request: NextRequest, context: { params: Promise<{ id:
       limit: validatedPagination.limit,
     });
 
-    return paginatedResponse(result.data, result.meta, 'Replies retrieved successfully');
+    return paginatedResponse(
+      result.data,
+      result.meta,
+      "Replies retrieved successfully"
+    );
   } catch (error) {
     if (error instanceof Error) {
       return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
     }
-    return errorResponse('Failed to get replies', HTTP_STATUS.INTERNAL_SERVER_ERROR);
+    return errorResponse(
+      "Failed to get replies",
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
   }
 }
 
@@ -46,23 +57,25 @@ async function getHandler(request: NextRequest, context: { params: Promise<{ id:
  * POST /api/comments/:id/replies
  * Reply to a comment
  */
-async function postHandler(request: NextRequest, context: { params: Promise<{ id: string }> }) {
+async function postHandler(
+  request: NextRequest,
+  context: {
+    user: { userId: string; email: string; role: string };
+    params: { id: string };
+  }
+) {
   try {
-    const user = getAuthenticatedUser(request);
+    const { user, params } = context;
+    const { id: parentId } = params;
 
-    if (!user) {
-      return errorResponse('Unauthorized', HTTP_STATUS.UNAUTHORIZED);
-    }
-
-    const { id: parentId } = await context.params;
-
-    // Get parent comment to get materialId
+    // Get parent comment to get material_id
     const parentComment = await commentService.getCommentById(parentId);
 
     const body = await request.json();
+    // Perbaikan: gunakan material_id yang benar dari parent comment
     const dataWithParent = {
       ...body,
-      materialId: parentComment.materialId,
+      materialId: parentComment.material_id, // Use material_id from the comment
       parentId,
     };
 
@@ -72,49 +85,53 @@ async function postHandler(request: NextRequest, context: { params: Promise<{ id
       return validationErrorResponse(validation.errors);
     }
 
-    const reply = await commentService.createComment(user.userId, validation.data);
+    const reply = await commentService.createComment(
+      user.userId,
+      validation.data
+    );
 
-    return successResponse(reply, 'Reply added successfully', HTTP_STATUS.CREATED);
+    return successResponse(
+      reply,
+      "Reply added successfully",
+      HTTP_STATUS.CREATED
+    );
   } catch (error) {
     if (error instanceof Error) {
       return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
     }
-    return errorResponse('Failed to add reply', HTTP_STATUS.INTERNAL_SERVER_ERROR);
+    return errorResponse(
+      "Failed to add reply",
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
   }
 }
 
-// Apply middlewares
-async function authenticatedPostHandler(
-  request: NextRequest,
-  context: { params: Promise<{ id: string }> }
-): Promise<NextResponse> {
-  const authResult = await authMiddleware(request);
-  if (authResult) return authResult;
-  return postHandler(request, context);
-}
-
+// Handler untuk GET dengan params
 export async function GET(
-  req: NextRequest,
-  context: { params: Promise<{ id: string }> }
+  request: NextRequest,
+  { params }: { params: { id: string } }
 ): Promise<NextResponse> {
-  return errorHandler(async (request: NextRequest) => {
-    return loggingMiddleware(async (r: NextRequest) => {
-      return corsMiddleware(async (rq: NextRequest) => {
-        return getHandler(rq, context);
-      })(r);
-    })(request);
-  })(req);
+  const handlerWithParams = async (req: NextRequest) =>
+    getHandler(req, { params });
+
+  return errorHandler(loggingMiddleware(corsMiddleware(handlerWithParams)))(
+    request
+  );
 }
 
+// Handler untuk POST dengan params
 export async function POST(
-  req: NextRequest,
-  context: { params: Promise<{ id: string }> }
+  request: NextRequest,
+  { params }: { params: { id: string } }
 ): Promise<NextResponse> {
-  return errorHandler(async (request: NextRequest) => {
-    return loggingMiddleware(async (r: NextRequest) => {
-      return corsMiddleware(async (rq: NextRequest) => {
-        return authenticatedPostHandler(rq, context);
-      })(r);
-    })(request);
-  })(req);
+  const handlerWithParams = async (req: NextRequest) => {
+    const authHandler = requireAuth(async (req: NextRequest, context: any) =>
+      postHandler(req, { ...context, params })
+    );
+    return authHandler(request);
+  };
+
+  return errorHandler(loggingMiddleware(corsMiddleware(handlerWithParams)))(
+    request
+  );
 }

@@ -1,26 +1,33 @@
-import { NextRequest } from 'next/server';
-import { forgotPasswordSchema } from '@/lib/validation'; // Reuse same schema (just email)
-import authService from '@/services/auth.service';
-import { successResponse, validationErrorResponse, errorResponse } from '@/utils/response.util';
-import { validateData } from '@/utils/validation.util';
-import { errorHandler } from '@/middlewares/error.middleware';
-import { corsMiddleware } from '@/middlewares/cors.middleware';
-import { loggingMiddleware } from '@/middlewares/logging.middleware';
-import { rateLimit } from '@/middlewares/ratelimit.middleware';
-import { HTTP_STATUS } from '@/lib/constants';
+import { NextRequest } from "next/server";
+import { resendVerificationSchema } from "@/lib/validation"; // PERBAIKI IMPORT
+import authService from "@/services/auth.service";
+import {
+  successResponse,
+  validationErrorResponse,
+  errorResponse,
+} from "@/utils/response.util";
+import { validateData } from "@/utils/validation.util";
+import { errorHandler } from "@/middlewares/error.middleware";
+import { corsMiddleware } from "@/middlewares/cors.middleware";
+import { loggingMiddleware } from "@/middlewares/logging.middleware";
+import { rateLimit } from "@/middlewares/ratelimit.middleware";
+import { HTTP_STATUS } from "@/lib/constants";
 
-/**
- * POST /api/auth/resend-verification
- * Resend email verification
- */
 async function handler(request: NextRequest) {
   try {
     // Parse request body
-    const body = await request.json();
+    let body;
+    try {
+      body = await request.json();
+    } catch {
+      return errorResponse(
+        "Invalid JSON in request body",
+        HTTP_STATUS.BAD_REQUEST
+      );
+    }
 
-    // Validate input
-    const validation = await validateData(forgotPasswordSchema, body);
-
+    // Validate input - GUNAKAN SCHEMA YANG BENAR
+    const validation = await validateData(resendVerificationSchema, body);
     if (!validation.success) {
       return validationErrorResponse(validation.errors);
     }
@@ -30,23 +37,25 @@ async function handler(request: NextRequest) {
 
     return successResponse(
       null,
-      'If an account exists with this email and is not verified, a verification email has been sent.'
+      "Verification email has been sent. Please check your inbox."
     );
   } catch (error) {
     if (error instanceof Error) {
       return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
     }
-    return errorResponse('Failed to send verification email', HTTP_STATUS.INTERNAL_SERVER_ERROR);
+    return errorResponse(
+      "Failed to send verification email",
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
   }
 }
 
-// Apply middlewares and export
 export const POST = errorHandler(
   loggingMiddleware(
     corsMiddleware(
       rateLimit({
-        windowMs: 15 * 60 * 1000, // 15 minutes
-        maxRequests: 3, // 3 requests per 15 minutes
+        windowMs: 15 * 60 * 1000,
+        maxRequests: 10,
       })(handler)
     )
   )

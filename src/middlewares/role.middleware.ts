@@ -1,7 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { getAuthenticatedUser } from './auth.middleware';
-import { forbiddenResponse } from '@/utils/response.util';
-import { USER_ROLES } from '@/lib/constants';
+import { NextRequest, NextResponse } from "next/server";
+import { authMiddleware, AuthenticatedUser } from "./auth.middleware";
+import { forbiddenResponse } from "@/utils/response.util";
+import { USER_ROLES } from "@/lib/constants";
 
 /**
  * Role-based Access Control Middleware
@@ -9,24 +9,29 @@ import { USER_ROLES } from '@/lib/constants';
 export function requireRole(
   allowedRoles: string[]
 ): (
-  handler: (request: NextRequest) => Promise<NextResponse>
+  handler: (
+    request: NextRequest,
+    user: AuthenticatedUser
+  ) => Promise<NextResponse>
 ) => (request: NextRequest) => Promise<NextResponse> {
   return (handler) => {
     return async (request: NextRequest) => {
-      // Get authenticated user
-      const user = getAuthenticatedUser(request);
+      // First authenticate the user
+      const authResult = await authMiddleware(request);
 
-      if (!user) {
-        return forbiddenResponse('Authentication required');
+      if (authResult instanceof NextResponse) {
+        return authResult;
       }
+
+      const user = authResult;
 
       // Check if user has required role
       if (!allowedRoles.includes(user.role)) {
-        return forbiddenResponse('Insufficient permissions');
+        return forbiddenResponse("Insufficient permissions");
       }
 
       // User has required role, proceed to handler
-      return handler(request);
+      return handler(request, user);
     };
   };
 }
@@ -35,7 +40,10 @@ export function requireRole(
  * Require Admin role
  */
 export function requireAdmin(
-  handler: (request: NextRequest) => Promise<NextResponse>
+  handler: (
+    request: NextRequest,
+    user: AuthenticatedUser
+  ) => Promise<NextResponse>
 ): (request: NextRequest) => Promise<NextResponse> {
   return requireRole([USER_ROLES.ADMIN])(handler);
 }
@@ -44,7 +52,10 @@ export function requireAdmin(
  * Require Mentor role
  */
 export function requireMentor(
-  handler: (request: NextRequest) => Promise<NextResponse>
+  handler: (
+    request: NextRequest,
+    user: AuthenticatedUser
+  ) => Promise<NextResponse>
 ): (request: NextRequest) => Promise<NextResponse> {
   return requireRole([USER_ROLES.MENTOR, USER_ROLES.ADMIN])(handler);
 }
@@ -53,9 +64,14 @@ export function requireMentor(
  * Require Student role (any authenticated user)
  */
 export function requireStudent(
-  handler: (request: NextRequest) => Promise<NextResponse>
+  handler: (
+    request: NextRequest,
+    user: AuthenticatedUser
+  ) => Promise<NextResponse>
 ): (request: NextRequest) => Promise<NextResponse> {
-  return requireRole([USER_ROLES.STUDENT, USER_ROLES.MENTOR, USER_ROLES.ADMIN])(handler);
+  return requireRole([USER_ROLES.STUDENT, USER_ROLES.MENTOR, USER_ROLES.ADMIN])(
+    handler
+  );
 }
 
 /**
@@ -65,11 +81,13 @@ export async function isResourceOwner(
   request: NextRequest,
   resourceUserId: string
 ): Promise<boolean> {
-  const user = getAuthenticatedUser(request);
+  const authResult = await authMiddleware(request);
 
-  if (!user) {
+  if (authResult instanceof NextResponse) {
     return false;
   }
+
+  const user = authResult;
 
   // Admin can access any resource
   if (user.role === USER_ROLES.ADMIN) {
@@ -81,39 +99,16 @@ export async function isResourceOwner(
 }
 
 /**
- * Require resource ownership or admin
+ * Get authenticated user from request
  */
-export function requireOwnership(
-  getResourceUserId: (request: NextRequest) => Promise<string | null>
-): (
-  handler: (request: NextRequest) => Promise<NextResponse>
-) => (request: NextRequest) => Promise<NextResponse> {
-  return (handler) => {
-    return async (request: NextRequest) => {
-      const user = getAuthenticatedUser(request);
+export async function getAuthenticatedUser(
+  request: NextRequest
+): Promise<AuthenticatedUser | null> {
+  const authResult = await authMiddleware(request);
 
-      if (!user) {
-        return forbiddenResponse('Authentication required');
-      }
+  if (authResult instanceof NextResponse) {
+    return null;
+  }
 
-      // Admin can access any resource
-      if (user.role === USER_ROLES.ADMIN) {
-        return handler(request);
-      }
-
-      // Get resource owner ID
-      const resourceUserId = await getResourceUserId(request);
-
-      if (!resourceUserId) {
-        return forbiddenResponse('Resource not found');
-      }
-
-      // Check ownership
-      if (user.userId !== resourceUserId) {
-        return forbiddenResponse('You do not have permission to access this resource');
-      }
-
-      return handler(request);
-    };
-  };
+  return authResult;
 }

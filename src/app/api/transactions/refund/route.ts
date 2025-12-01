@@ -1,6 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { sql } from '@vercel/postgres';
-import { verifyToken } from '@/lib/auth';
+import { NextRequest, NextResponse } from "next/server";
+import { sql } from "@vercel/postgres";
+import { verifyToken } from "@/lib/auth";
 
 interface RefundPolicy {
   can_refund: boolean;
@@ -39,15 +39,19 @@ function calculateRefundPolicy(
     return {
       can_refund: true,
       refund_percentage: 100,
-      reason: 'Full refund - Within 7 days with no progress',
+      reason: "Full refund - Within 7 days with no progress",
     };
   }
 
-  if (daysSinceEnrollment > 7 && daysSinceEnrollment <= 14 && enrollment.progress_percentage < 10) {
+  if (
+    daysSinceEnrollment > 7 &&
+    daysSinceEnrollment <= 14 &&
+    enrollment.progress_percentage < 10
+  ) {
     return {
       can_refund: true,
       refund_percentage: 80,
-      reason: 'Partial refund - 8-14 days with minimal progress',
+      reason: "Partial refund - 8-14 days with minimal progress",
     };
   }
 
@@ -59,7 +63,7 @@ function calculateRefundPolicy(
     return {
       can_refund: true,
       refund_percentage: 50,
-      reason: 'Partial refund - 15-30 days with low progress',
+      reason: "Partial refund - 15-30 days with low progress",
     };
   }
 
@@ -67,7 +71,7 @@ function calculateRefundPolicy(
     return {
       can_refund: false,
       refund_percentage: 0,
-      reason: 'Refund period expired (more than 30 days)',
+      reason: "Refund period expired (more than 30 days)",
     };
   }
 
@@ -75,27 +79,27 @@ function calculateRefundPolicy(
     return {
       can_refund: false,
       refund_percentage: 0,
-      reason: 'Significant course progress made (25% or more)',
+      reason: "Significant course progress made (25% or more)",
     };
   }
 
   return {
     can_refund: false,
     refund_percentage: 0,
-    reason: 'Does not meet refund criteria',
+    reason: "Does not meet refund criteria",
   };
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const token = request.headers.get('authorization')?.replace('Bearer ', '');
+    const token = request.headers.get("authorization")?.replace("Bearer ", "");
     if (!token) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const decoded = await verifyToken(token);
     if (!decoded) {
-      return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+      return NextResponse.json({ error: "Invalid token" }, { status: 401 });
     }
 
     const body = await request.json();
@@ -103,21 +107,24 @@ export async function POST(request: NextRequest) {
 
     if (!transaction_id || !reason) {
       return NextResponse.json(
-        { error: 'Transaction ID and reason are required' },
+        { error: "Transaction ID and reason are required" },
         { status: 400 }
       );
     }
 
     const validReasons = [
-      'course_not_as_expected',
-      'technical_issues',
-      'found_better_alternative',
-      'personal_reasons',
-      'other',
+      "course_not_as_expected",
+      "technical_issues",
+      "found_better_alternative",
+      "personal_reasons",
+      "other",
     ];
 
     if (!validReasons.includes(reason)) {
-      return NextResponse.json({ error: 'Invalid refund reason' }, { status: 400 });
+      return NextResponse.json(
+        { error: "Invalid refund reason" },
+        { status: 400 }
+      );
     }
 
     const transactionResult = await sql`
@@ -131,18 +138,21 @@ export async function POST(request: NextRequest) {
     `;
 
     if (transactionResult.rows.length === 0) {
-      return NextResponse.json({ error: 'Transaction not found' }, { status: 404 });
+      return NextResponse.json(
+        { error: "Transaction not found" },
+        { status: 404 }
+      );
     }
 
     const transaction = transactionResult.rows[0] as TransactionData;
 
     if (transaction.user_id !== decoded.userId) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    if (transaction.status !== 'success') {
+    if (transaction.status !== "success") {
       return NextResponse.json(
-        { error: 'Can only refund successful transactions' },
+        { error: "Can only refund successful transactions" },
         { status: 400 }
       );
     }
@@ -155,7 +165,7 @@ export async function POST(request: NextRequest) {
 
     if (existingRefund.rows.length > 0) {
       return NextResponse.json(
-        { error: 'Refund request already exists for this transaction' },
+        { error: "Refund request already exists for this transaction" },
         { status: 400 }
       );
     }
@@ -178,7 +188,10 @@ export async function POST(request: NextRequest) {
     `;
 
     if (enrollmentResult.rows.length === 0) {
-      return NextResponse.json({ error: 'Enrollment not found' }, { status: 404 });
+      return NextResponse.json(
+        { error: "Enrollment not found" },
+        { status: 404 }
+      );
     }
 
     const enrollment = enrollmentResult.rows[0] as EnrollmentData;
@@ -187,7 +200,7 @@ export async function POST(request: NextRequest) {
     if (!policy.can_refund) {
       return NextResponse.json(
         {
-          error: 'Refund not eligible',
+          error: "Refund not eligible",
           reason: policy.reason,
         },
         { status: 400 }
@@ -224,7 +237,10 @@ export async function POST(request: NextRequest) {
       RETURNING *
     `;
 
-    const refund = refundResult.rows[0] as { id: string; [key: string]: unknown };
+    const refund = refundResult.rows[0] as {
+      id: string;
+      [key: string]: unknown;
+    };
 
     await sql`
       INSERT INTO notifications (
@@ -272,35 +288,38 @@ export async function POST(request: NextRequest) {
           refund_id: refund.id,
           amount: refundAmount,
           percentage: policy.refund_percentage,
-          status: 'pending',
+          status: "pending",
           policy_reason: policy.reason,
         },
-        message: 'Refund request submitted successfully',
+        message: "Refund request submitted successfully",
       },
       { status: 201 }
     );
   } catch (error) {
-    console.error('Create refund error:', error);
-    return NextResponse.json({ error: 'Failed to create refund request' }, { status: 500 });
+    console.error("Create refund error:", error);
+    return NextResponse.json(
+      { error: "Failed to create refund request" },
+      { status: 500 }
+    );
   }
 }
 
 export async function GET(request: NextRequest) {
   try {
-    const token = request.headers.get('authorization')?.replace('Bearer ', '');
+    const token = request.headers.get("authorization")?.replace("Bearer ", "");
     if (!token) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const decoded = await verifyToken(token);
     if (!decoded) {
-      return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+      return NextResponse.json({ error: "Invalid token" }, { status: 401 });
     }
 
     const searchParams = request.nextUrl.searchParams;
-    const status = searchParams.get('status');
-    const limit = parseInt(searchParams.get('limit') || '10');
-    const page = parseInt(searchParams.get('page') || '1');
+    const status = searchParams.get("status");
+    const limit = parseInt(searchParams.get("limit") || "10");
+    const page = parseInt(searchParams.get("page") || "1");
     const offset = (page - 1) * limit;
 
     let query = `
@@ -320,7 +339,7 @@ export async function GET(request: NextRequest) {
 
     const params: (string | number)[] = [];
 
-    if (decoded.role !== 'admin') {
+    if (decoded.role !== "admin") {
       query += ` AND r.user_id = $${params.length + 1}`;
       params.push(decoded.userId);
     }
@@ -330,17 +349,17 @@ export async function GET(request: NextRequest) {
       params.push(status);
     }
 
-    query += ` ORDER BY r.requested_at DESC LIMIT $${params.length + 1} OFFSET $${
-      params.length + 2
-    }`;
+    query += ` ORDER BY r.requested_at DESC LIMIT $${
+      params.length + 1
+    } OFFSET $${params.length + 2}`;
     params.push(limit, offset);
 
     const result = await sql.query(query, params);
 
-    let countQuery = 'SELECT COUNT(*) as total FROM refunds WHERE 1=1';
+    let countQuery = "SELECT COUNT(*) as total FROM refunds WHERE 1=1";
     const countParams: (string | number)[] = [];
 
-    if (decoded.role !== 'admin') {
+    if (decoded.role !== "admin") {
       countQuery += ` AND user_id = $${countParams.length + 1}`;
       countParams.push(decoded.userId);
     }
@@ -359,35 +378,46 @@ export async function GET(request: NextRequest) {
         total: parseInt(countResult.rows[0].total as string),
         page,
         limit,
-        total_pages: Math.ceil(parseInt(countResult.rows[0].total as string) / limit),
+        total_pages: Math.ceil(
+          parseInt(countResult.rows[0].total as string) / limit
+        ),
       },
     });
   } catch (error) {
-    console.error('Get refunds error:', error);
-    return NextResponse.json({ error: 'Failed to fetch refunds' }, { status: 500 });
+    console.error("Get refunds error:", error);
+    return NextResponse.json(
+      { error: "Failed to fetch refunds" },
+      { status: 500 }
+    );
   }
 }
 
 export async function PATCH(request: NextRequest) {
   try {
-    const token = request.headers.get('authorization')?.replace('Bearer ', '');
+    const token = request.headers.get("authorization")?.replace("Bearer ", "");
     if (!token) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const decoded = await verifyToken(token);
-    if (!decoded || decoded.role !== 'admin') {
-      return NextResponse.json({ error: 'Forbidden - Admin access required' }, { status: 403 });
+    if (!decoded || decoded.role !== "admin") {
+      return NextResponse.json(
+        { error: "Forbidden - Admin access required" },
+        { status: 403 }
+      );
     }
 
     const body = await request.json();
     const { refund_id, action, admin_notes, refund_reference } = body;
 
     if (!refund_id || !action) {
-      return NextResponse.json({ error: 'Refund ID and action are required' }, { status: 400 });
+      return NextResponse.json(
+        { error: "Refund ID and action are required" },
+        { status: 400 }
+      );
     }
 
-    if (!['approve', 'reject'].includes(action)) {
+    if (!["approve", "reject"].includes(action)) {
       return NextResponse.json(
         { error: 'Invalid action. Must be "approve" or "reject"' },
         { status: 400 }
@@ -402,7 +432,7 @@ export async function PATCH(request: NextRequest) {
     `;
 
     if (refundResult.rows.length === 0) {
-      return NextResponse.json({ error: 'Refund not found' }, { status: 404 });
+      return NextResponse.json({ error: "Refund not found" }, { status: 404 });
     }
 
     const refund = refundResult.rows[0] as {
@@ -415,11 +445,14 @@ export async function PATCH(request: NextRequest) {
       [key: string]: unknown;
     };
 
-    if (refund.status !== 'pending') {
-      return NextResponse.json({ error: 'Refund has already been processed' }, { status: 400 });
+    if (refund.status !== "pending") {
+      return NextResponse.json(
+        { error: "Refund has already been processed" },
+        { status: 400 }
+      );
     }
 
-    const newStatus = action === 'approve' ? 'approved' : 'rejected';
+    const newStatus = action === "approve" ? "approved" : "rejected";
 
     await sql`
       UPDATE refunds
@@ -432,7 +465,7 @@ export async function PATCH(request: NextRequest) {
       WHERE id = ${refund_id}
     `;
 
-    if (action === 'approve') {
+    if (action === "approve") {
       await sql`
         UPDATE transactions
         SET status = 'refunded', updated_at = NOW()
@@ -447,13 +480,14 @@ export async function PATCH(request: NextRequest) {
       `;
     }
 
-    const notificationTitle = action === 'approve' ? 'Refund Approved' : 'Refund Request Rejected';
+    const notificationTitle =
+      action === "approve" ? "Refund Approved" : "Refund Request Rejected";
 
     const notificationMessage =
-      action === 'approve'
+      action === "approve"
         ? `Your refund of $${refund.amount} has been approved and will be processed within 3-5 business days.`
         : `Your refund request was not approved. ${
-            admin_notes || 'Please contact support for more information.'
+            admin_notes || "Please contact support for more information."
           }`;
 
     await sql`
@@ -469,7 +503,7 @@ export async function PATCH(request: NextRequest) {
         ${refund.user_id},
         ${notificationTitle},
         ${notificationMessage},
-        ${action === 'approve' ? 'refund_approved' : 'refund_rejected'},
+        ${action === "approve" ? "refund_approved" : "refund_rejected"},
         ${refund_id},
         'refund'
       )
@@ -477,10 +511,15 @@ export async function PATCH(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: `Refund ${action === 'approve' ? 'approved' : 'rejected'} successfully`,
+      message: `Refund ${
+        action === "approve" ? "approved" : "rejected"
+      } successfully`,
     });
   } catch (error) {
-    console.error('Process refund error:', error);
-    return NextResponse.json({ error: 'Failed to process refund' }, { status: 500 });
+    console.error("Process refund error:", error);
+    return NextResponse.json(
+      { error: "Failed to process refund" },
+      { status: 500 }
+    );
   }
 }

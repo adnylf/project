@@ -1,13 +1,13 @@
-import fs from 'fs/promises';
-import path from 'path';
-import { storageConfig } from '@/config/storage.config';
+import fs from "fs/promises";
+import path from "path";
+import { storageConfig } from "@/config/storage.config";
 import {
   ensureDirectoryExists,
   deleteFile,
   moveFile,
   copyFile,
   fileExists,
-} from '@/utils/file.util';
+} from "@/utils/file.util";
 
 /**
  * Storage Interface
@@ -109,37 +109,37 @@ export class S3Storage implements IStorage {
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async save(filePath: string, buffer: Buffer): Promise<string> {
-    throw new Error('S3 Storage not implemented yet');
+    throw new Error("S3 Storage not implemented yet");
   }
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async get(filePath: string): Promise<Buffer> {
-    throw new Error('S3 Storage not implemented yet');
+    throw new Error("S3 Storage not implemented yet");
   }
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async delete(filePath: string): Promise<void> {
-    throw new Error('S3 Storage not implemented yet');
+    throw new Error("S3 Storage not implemented yet");
   }
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async exists(filePath: string): Promise<boolean> {
-    throw new Error('S3 Storage not implemented yet');
+    throw new Error("S3 Storage not implemented yet");
   }
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async move(sourcePath: string, destinationPath: string): Promise<void> {
-    throw new Error('S3 Storage not implemented yet');
+    throw new Error("S3 Storage not implemented yet");
   }
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async copy(sourcePath: string, destinationPath: string): Promise<void> {
-    throw new Error('S3 Storage not implemented yet');
+    throw new Error("S3 Storage not implemented yet");
   }
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   getUrl(filePath: string): string {
-    throw new Error('S3 Storage not implemented yet');
+    throw new Error("S3 Storage not implemented yet");
   }
 }
 
@@ -152,10 +152,10 @@ export class StorageFactory {
   static getInstance(): IStorage {
     if (!this.instance) {
       switch (storageConfig.type) {
-        case 's3':
+        case "s3":
           this.instance = new S3Storage();
           break;
-        case 'local':
+        case "local":
         default:
           this.instance = new LocalStorage();
           break;

@@ -1,25 +1,34 @@
-import { NextRequest } from 'next/server';
-import prisma from '@/lib/prisma';
-import { Prisma } from '@prisma/client';
-import { successResponse, errorResponse } from '@/utils/response.util';
-import { errorHandler } from '@/middlewares/error.middleware';
-import { authMiddleware, getAuthenticatedUser } from '@/middlewares/auth.middleware';
-import { corsMiddleware } from '@/middlewares/cors.middleware';
-import { loggingMiddleware } from '@/middlewares/logging.middleware';
-import { HTTP_STATUS, USER_ROLES } from '@/lib/constants';
+import { NextRequest } from "next/server";
+import prisma from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
+import { successResponse, errorResponse } from "@/utils/response.util";
+import { errorHandler } from "@/middlewares/error.middleware";
+import { requireAuth } from "@/middlewares/auth.middleware";
+import { corsMiddleware } from "@/middlewares/cors.middleware";
+import { loggingMiddleware } from "@/middlewares/logging.middleware";
+import { HTTP_STATUS, USER_ROLES } from "@/lib/constants";
 
-async function revenueHandler(request: NextRequest) {
+interface TopCourse {
+  courseId: string | null;
+  _sum: { total_amount: number | null };
+  _count: number;
+}
+
+async function handler(
+  request: NextRequest,
+  context: { user: { userId: string; email: string; role: string } }
+) {
   try {
-    const user = getAuthenticatedUser(request);
+    const { user } = context;
 
-    if (!user || user.role !== USER_ROLES.ADMIN) {
-      return errorResponse('Insufficient permissions', HTTP_STATUS.FORBIDDEN);
+    if (user.role !== USER_ROLES.ADMIN) {
+      return errorResponse("Insufficient permissions", HTTP_STATUS.FORBIDDEN);
     }
 
     const { searchParams } = new URL(request.url);
-    const startDate = searchParams.get('startDate');
-    const endDate = searchParams.get('endDate');
-    const period = searchParams.get('period') || 'monthly';
+    const startDate = searchParams.get("startDate");
+    const endDate = searchParams.get("endDate");
+    const period = searchParams.get("period") || "monthly";
 
     // Build date filter
     const dateFilter: Prisma.DateTimeFilter = {};
@@ -45,35 +54,35 @@ async function revenueHandler(request: NextRequest) {
       // Total revenue
       prisma.transaction.aggregate({
         where: {
-          status: 'PAID',
-          ...(Object.keys(dateFilter).length > 0 && { paidAt: dateFilter }),
+          status: "PAID",
+          ...(Object.keys(dateFilter).length > 0 && { paid_at: dateFilter }),
         },
-        _sum: { totalAmount: true, discount: true },
+        _sum: { total_amount: true, discount: true },
         _count: true,
-        _avg: { totalAmount: true },
+        _avg: { total_amount: true },
       }),
 
       // By payment method
       prisma.transaction.groupBy({
-        by: ['paymentMethod'],
+        by: ["payment_method"],
         where: {
-          status: 'PAID',
-          ...(Object.keys(dateFilter).length > 0 && { paidAt: dateFilter }),
+          status: "PAID",
+          ...(Object.keys(dateFilter).length > 0 && { paid_at: dateFilter }),
         },
-        _sum: { totalAmount: true },
+        _sum: { total_amount: true },
         _count: true,
       }),
 
       // Top courses
       prisma.transaction.groupBy({
-        by: ['courseId'],
+        by: ["course_id"],
         where: {
-          status: 'PAID',
-          ...(Object.keys(dateFilter).length > 0 && { paidAt: dateFilter }),
+          status: "PAID",
+          ...(Object.keys(dateFilter).length > 0 && { paid_at: dateFilter }),
         },
-        _sum: { totalAmount: true },
+        _sum: { total_amount: true },
         _count: true,
-        orderBy: { _sum: { totalAmount: 'desc' } },
+        orderBy: { _sum: { total_amount: "desc" } },
         take: 10,
       }),
 
@@ -81,7 +90,7 @@ async function revenueHandler(request: NextRequest) {
       prisma.$queryRaw`
         SELECT 
           m.id as mentor_id,
-          u.name as mentor_name,
+          u.full_name as mentor_name,
           COUNT(DISTINCT t.id)::int as transaction_count,
           COALESCE(SUM(t.total_amount), 0) as total_revenue
         FROM mentor_profiles m
@@ -89,9 +98,17 @@ async function revenueHandler(request: NextRequest) {
         JOIN courses c ON m.id = c.mentor_id
         JOIN transactions t ON c.id = t.course_id
         WHERE t.status = 'PAID'
-          ${startDate ? Prisma.sql`AND t.paid_at >= ${new Date(startDate)}` : Prisma.empty}
-          ${endDate ? Prisma.sql`AND t.paid_at <= ${new Date(endDate)}` : Prisma.empty}
-        GROUP BY m.id, u.name
+          ${
+            startDate
+              ? Prisma.sql`AND t.paid_at >= ${new Date(startDate)}`
+              : Prisma.empty
+          }
+          ${
+            endDate
+              ? Prisma.sql`AND t.paid_at <= ${new Date(endDate)}`
+              : Prisma.empty
+          }
+        GROUP BY m.id, u.full_name
         ORDER BY total_revenue DESC
         LIMIT 10
       `,
@@ -100,11 +117,11 @@ async function revenueHandler(request: NextRequest) {
       prisma.$queryRaw`
         SELECT 
           ${
-            period === 'daily'
+            period === "daily"
               ? Prisma.sql`DATE(paid_at)`
-              : period === 'weekly'
+              : period === "weekly"
               ? Prisma.sql`DATE_TRUNC('week', paid_at)`
-              : period === 'monthly'
+              : period === "monthly"
               ? Prisma.sql`DATE_TRUNC('month', paid_at)`
               : Prisma.sql`DATE_TRUNC('year', paid_at)`
           } as period,
@@ -113,15 +130,25 @@ async function revenueHandler(request: NextRequest) {
           COALESCE(AVG(total_amount), 0) as avg_transaction
         FROM transactions
         WHERE status = 'PAID'
-          ${startDate ? Prisma.sql`AND paid_at >= ${new Date(startDate)}` : Prisma.empty}
-          ${endDate ? Prisma.sql`AND paid_at <= ${new Date(endDate)}` : Prisma.empty}
+          ${
+            startDate
+              ? Prisma.sql`AND paid_at >= ${new Date(startDate)}`
+              : Prisma.empty
+          }
+          ${
+            endDate
+              ? Prisma.sql`AND paid_at <= ${new Date(endDate)}`
+              : Prisma.empty
+          }
         GROUP BY period
         ORDER BY period ASC
       `,
     ]);
 
     // Enrich top courses with details
-    const courseIds = topCourses.map((tc) => tc.courseId).filter((id): id is string => id !== null);
+    const courseIds = (topCourses as TopCourse[])
+      .map((tc: TopCourse) => tc.courseId)
+      .filter((id): id is string => id !== null);
     const courses = await prisma.course.findMany({
       where: { id: { in: courseIds } },
       select: {
@@ -132,53 +159,56 @@ async function revenueHandler(request: NextRequest) {
         mentor: {
           select: {
             user: {
-              select: { name: true },
+              select: { full_name: true },
             },
           },
         },
       },
     });
 
-    const enrichedTopCourses = topCourses.map((tc) => {
-      const course = courses.find((c) => c.id === tc.courseId);
-      return {
-        courseId: tc.courseId,
-        courseName: course?.title || 'Unknown',
-        thumbnail: course?.thumbnail,
-        price: course?.price,
-        mentorName: course?.mentor.user.name,
-        revenue: tc._sum.totalAmount || 0,
-        transactions: tc._count,
-      };
-    });
+    const enrichedTopCourses = (topCourses as TopCourse[]).map(
+      (tc: TopCourse) => {
+        const course = courses.find((c: any) => c.id === tc.courseId);
+        return {
+          courseId: tc.courseId,
+          courseName: course?.title || "Unknown",
+          thumbnail: course?.thumbnail,
+          price: course?.price,
+          mentorName: course?.mentor.user.full_name,
+          revenue: tc._sum.total_amount || 0,
+          transactions: tc._count,
+        };
+      }
+    );
 
     return successResponse(
       {
         summary: {
-          totalRevenue: totalRevenue._sum.totalAmount || 0,
+          totalRevenue: totalRevenue._sum.total_amount || 0,
           totalDiscount: totalRevenue._sum.discount || 0,
           transactionCount: totalRevenue._count,
-          averageTransaction: totalRevenue._avg.totalAmount || 0,
+          averageTransaction: totalRevenue._avg.total_amount || 0,
         },
         byPaymentMethod: revenueByPaymentMethod,
         topCourses: enrichedTopCourses,
         topMentors,
         trend: revenueTrend,
       },
-      'Revenue report retrieved successfully'
+      "Revenue report retrieved successfully"
     );
   } catch (error) {
     if (error instanceof Error) {
       return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
     }
-    return errorResponse('Failed to generate revenue report', HTTP_STATUS.INTERNAL_SERVER_ERROR);
+    return errorResponse(
+      "Failed to generate revenue report",
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
   }
 }
 
-async function authenticatedRevenueHandler(request: NextRequest) {
-  const authResult = await authMiddleware(request);
-  if (authResult) return authResult;
-  return revenueHandler(request);
-}
+const authenticatedHandler = requireAuth(handler);
 
-export const GET = errorHandler(loggingMiddleware(corsMiddleware(authenticatedRevenueHandler)));
+export const GET = errorHandler(
+  loggingMiddleware(corsMiddleware(authenticatedHandler))
+);

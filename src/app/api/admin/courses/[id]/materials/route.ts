@@ -1,11 +1,11 @@
-import { NextRequest } from 'next/server';
-import prisma from '@/lib/prisma';
-import { successResponse, errorResponse } from '@/utils/response.util';
-import { errorHandler } from '@/middlewares/error.middleware';
-import { authMiddleware, getAuthenticatedUser } from '@/middlewares/auth.middleware';
-import { corsMiddleware } from '@/middlewares/cors.middleware';
-import { loggingMiddleware } from '@/middlewares/logging.middleware';
-import { HTTP_STATUS } from '@/lib/constants';
+import { NextRequest } from "next/server";
+import prisma from "@/lib/prisma";
+import { successResponse, errorResponse } from "@/utils/response.util";
+import { errorHandler } from "@/middlewares/error.middleware";
+import { requireAuth } from "@/middlewares/auth.middleware";
+import { corsMiddleware } from "@/middlewares/cors.middleware";
+import { loggingMiddleware } from "@/middlewares/logging.middleware";
+import { HTTP_STATUS } from "@/lib/constants";
 
 interface Section {
   id: string;
@@ -22,30 +22,39 @@ interface Material {
   type: string;
   duration: number | null;
   order: number;
-  isFree: boolean;
-  videoId: string | null;
-  contentUrl: string | null;
+  is_free: boolean;
+  video_id: string | null;
+  document_url: string | null;
   resources: Resource[];
 }
 
 interface Resource {
   id: string;
   title: string;
-  fileUrl: string;
-  fileType: string | null;
-  fileSize: number | null;
+  file_url: string;
+  file_type: string | null;
+  file_size: number | null;
 }
 
-async function adminMaterialsHandler(
+// Main handler function - PERBAIKAN: menerima context bukan user langsung
+async function handler(
   request: NextRequest,
-  context: { params: Promise<{ id: string }> }
+  context: { user: { userId: string; email: string; role: string } }
 ) {
   try {
-    const user = getAuthenticatedUser(request);
-    const { id: courseId } = await context.params;
+    const { user } = context;
 
-    if (!user || user.role !== 'ADMIN') {
-      return errorResponse('Admin access required', HTTP_STATUS.FORBIDDEN);
+    if (user.role !== "ADMIN") {
+      return errorResponse("Admin access required", HTTP_STATUS.FORBIDDEN);
+    }
+
+    // Extract courseId from URL
+    const url = new URL(request.url);
+    const pathSegments = url.pathname.split("/");
+    const courseId = pathSegments[pathSegments.length - 2]; // Get ID from /api/admin/courses/[id]/materials
+
+    if (!courseId) {
+      return errorResponse("Course ID is required", HTTP_STATUS.BAD_REQUEST);
     }
 
     // Get course with sections and materials
@@ -56,14 +65,14 @@ async function adminMaterialsHandler(
         title: true,
         status: true,
         sections: {
-          orderBy: { order: 'asc' },
+          orderBy: { order: "asc" },
           select: {
             id: true,
             title: true,
             description: true,
             order: true,
             materials: {
-              orderBy: { order: 'asc' },
+              orderBy: { order: "asc" },
               select: {
                 id: true,
                 title: true,
@@ -71,16 +80,16 @@ async function adminMaterialsHandler(
                 type: true,
                 duration: true,
                 order: true,
-                isFree: true,
-                videoId: true,
-                contentUrl: true,
+                is_free: true,
+                video_id: true,
+                document_url: true,
                 resources: {
                   select: {
                     id: true,
                     title: true,
-                    fileUrl: true,
-                    fileType: true,
-                    fileSize: true,
+                    file_url: true,
+                    file_type: true,
+                    file_size: true,
                   },
                 },
               },
@@ -91,7 +100,7 @@ async function adminMaterialsHandler(
     });
 
     if (!course) {
-      return errorResponse('Course not found', HTTP_STATUS.NOT_FOUND);
+      return errorResponse("Course not found", HTTP_STATUS.NOT_FOUND);
     }
 
     // Admin can see all materials
@@ -112,30 +121,28 @@ async function adminMaterialsHandler(
           })),
         })),
         totalSections: sections.length,
-        totalMaterials: sections.reduce((acc: number, s: Section) => acc + s.materials.length, 0),
+        totalMaterials: sections.reduce(
+          (acc: number, s: Section) => acc + s.materials.length,
+          0
+        ),
       },
-      'Course materials retrieved successfully'
+      "Course materials retrieved successfully"
     );
   } catch (error) {
     if (error instanceof Error) {
       return errorResponse(error.message, HTTP_STATUS.NOT_FOUND);
     }
-    return errorResponse('Failed to get materials', HTTP_STATUS.INTERNAL_SERVER_ERROR);
+    return errorResponse(
+      "Failed to get materials",
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
   }
 }
 
-async function authenticatedAdminMaterialsHandler(
-  request: NextRequest,
-  context: { params: Promise<{ id: string }> }
-) {
-  const authResult = await authMiddleware(request);
-  if (authResult) return authResult;
-  return adminMaterialsHandler(request, context);
-}
+// Apply authentication - PERBAIKAN: langsung gunakan requireAuth tanpa wrapper tambahan
+const authenticatedHandler = requireAuth(handler);
 
-export const GET = (request: NextRequest, context: { params: Promise<{ id: string }> }) =>
-  errorHandler((req: NextRequest) =>
-    loggingMiddleware((req2: NextRequest) =>
-      corsMiddleware((req3: NextRequest) => authenticatedAdminMaterialsHandler(req3, context))(req2)
-    )(req)
-  )(request);
+// Export with proper middleware chain
+export const GET = errorHandler(
+  loggingMiddleware(corsMiddleware(authenticatedHandler))
+);

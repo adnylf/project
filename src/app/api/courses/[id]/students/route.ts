@@ -1,48 +1,64 @@
-import { NextRequest, NextResponse } from 'next/server';
-import prisma from '@/lib/prisma';
-import { paginatedResponse, errorResponse } from '@/utils/response.util';
-import { validatePagination } from '@/utils/validation.util';
-import { errorHandler } from '@/middlewares/error.middleware';
-import { authMiddleware, getAuthenticatedUser } from '@/middlewares/auth.middleware';
-import { corsMiddleware } from '@/middlewares/cors.middleware';
-import { loggingMiddleware } from '@/middlewares/logging.middleware';
-import { HTTP_STATUS, USER_ROLES } from '@/lib/constants';
-import type { Prisma, EnrollmentStatus } from '@prisma/client';
+// app/api/courses/[id]/students/route.ts
+import { NextRequest } from "next/server";
+import prisma from "@/lib/prisma";
+import { successResponse, errorResponse } from "@/utils/response.util"; // PERBAIKAN: Gunakan successResponse bukan paginatedResponse
+import { validatePagination } from "@/utils/validation.util";
+import { errorHandler } from "@/middlewares/error.middleware";
+import { requireAuth } from "@/middlewares/auth.middleware";
+import { corsMiddleware } from "@/middlewares/cors.middleware";
+import { loggingMiddleware } from "@/middlewares/logging.middleware";
+import { HTTP_STATUS, USER_ROLES } from "@/lib/constants";
 
-async function handler(request: NextRequest, context: { params: Promise<{ id: string }> }) {
+async function handler(
+  request: NextRequest,
+  context: { user: { userId: string; email: string; role: string } }
+) {
+  const { user } = context;
+
   try {
-    const user = getAuthenticatedUser(request);
+    // Extract course ID from URL
+    const url = new URL(request.url);
+    const pathSegments = url.pathname.split("/");
+    const courseId = pathSegments[pathSegments.length - 2]; // Get ID from /api/courses/[id]/students
 
-    if (!user) {
-      return errorResponse('Unauthorized', HTTP_STATUS.UNAUTHORIZED);
+    if (!courseId) {
+      return errorResponse("Course ID is required", HTTP_STATUS.BAD_REQUEST);
     }
-
-    const { id: courseId } = await context.params;
 
     const course = await prisma.course.findUnique({
       where: { id: courseId },
-      include: { mentor: true },
+      include: {
+        mentor: {
+          select: {
+            user_id: true, // PERBAIKAN: Gunakan snake_case
+          },
+        },
+      },
     });
 
     if (!course) {
-      return errorResponse('Course not found', HTTP_STATUS.NOT_FOUND);
+      return errorResponse("Course not found", HTTP_STATUS.NOT_FOUND);
     }
 
-    if (user.role !== USER_ROLES.ADMIN && course.mentor.userId !== user.userId) {
-      return errorResponse('Only course mentor or admin can view students', HTTP_STATUS.FORBIDDEN);
+    if (
+      user.role !== USER_ROLES.ADMIN &&
+      course.mentor.user_id !== user.userId // PERBAIKAN: Gunakan snake_case
+    ) {
+      return errorResponse(
+        "Only course mentor or admin can view students",
+        HTTP_STATUS.FORBIDDEN
+      );
     }
 
     const { searchParams } = new URL(request.url);
-    const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '20');
-    const status = searchParams.get('status') as EnrollmentStatus | undefined;
-    const search = searchParams.get('search') || undefined;
-    const sortBy = searchParams.get('sortBy') || 'createdAt';
-    const sortOrder = (searchParams.get('sortOrder') || 'desc') as 'asc' | 'desc';
+    const page = parseInt(searchParams.get("page") || "1");
+    const limit = parseInt(searchParams.get("limit") || "20");
+    const status = searchParams.get("status") || undefined;
+    const search = searchParams.get("search") || undefined;
 
     const validatedPagination = validatePagination(page, limit);
 
-    const where: Prisma.EnrollmentWhereInput = { courseId };
+    const where: any = { course_id: courseId }; // PERBAIKAN: Gunakan snake_case
 
     if (status) {
       where.status = status;
@@ -51,8 +67,8 @@ async function handler(request: NextRequest, context: { params: Promise<{ id: st
     if (search) {
       where.user = {
         OR: [
-          { name: { contains: search, mode: 'insensitive' } },
-          { email: { contains: search, mode: 'insensitive' } },
+          { full_name: { contains: search, mode: "insensitive" } }, // PERBAIKAN: Gunakan snake_case
+          { email: { contains: search, mode: "insensitive" } },
         ],
       };
     }
@@ -64,51 +80,47 @@ async function handler(request: NextRequest, context: { params: Promise<{ id: st
         where,
         skip,
         take: validatedPagination.limit,
-        orderBy: { [sortBy]: sortOrder },
+        orderBy: { created_at: "desc" }, // PERBAIKAN: Gunakan snake_case
         include: {
           user: {
             select: {
               id: true,
-              name: true,
+              full_name: true, // PERBAIKAN: Gunakan snake_case
               email: true,
-              profilePicture: true,
+              avatar_url: true, // PERBAIKAN: Gunakan snake_case
             },
           },
           certificate: {
             select: {
               id: true,
-              certificateNumber: true,
-              issuedAt: true,
-            },
-          },
-          _count: {
-            select: {
-              progressRecords: true,
+              certificate_number: true, // PERBAIKAN: Gunakan snake_case
+              issued_at: true, // PERBAIKAN: Gunakan snake_case
             },
           },
         },
       }),
       prisma.enrollment.count({ where }),
       prisma.enrollment.groupBy({
-        by: ['status'],
-        where: { courseId },
+        by: ["status"],
+        where: { course_id: courseId }, // PERBAIKAN: Gunakan snake_case
         _count: true,
         _avg: { progress: true },
       }),
     ]);
 
+    // Enrich enrollments with progress data
     const enrichedEnrollments = await Promise.all(
-      enrollments.map(async (enrollment) => {
+      enrollments.map(async (enrollment: any) => {
         const completedMaterials = await prisma.progress.count({
           where: {
-            enrollmentId: enrollment.id,
-            isCompleted: true,
+            enrollment_id: enrollment.id, // PERBAIKAN: Gunakan snake_case
+            is_completed: true, // PERBAIKAN: Gunakan snake_case
           },
         });
 
         const lastProgress = await prisma.progress.findFirst({
-          where: { enrollmentId: enrollment.id },
-          orderBy: { updatedAt: 'desc' },
+          where: { enrollment_id: enrollment.id }, // PERBAIKAN: Gunakan snake_case
+          orderBy: { updated_at: "desc" }, // PERBAIKAN: Gunakan snake_case
           include: {
             material: {
               select: {
@@ -130,57 +142,41 @@ async function handler(request: NextRequest, context: { params: Promise<{ id: st
     const enrollmentStats = {
       total,
       byStatus: Object.fromEntries(
-        stats.map((stat) => [
+        stats.map((stat: any) => [
           stat.status,
           { count: stat._count, avgProgress: stat._avg.progress || 0 },
         ])
       ),
     };
 
-    // Fix: Use proper pagination meta type
-    const paginationMeta = {
-      page: validatedPagination.page,
-      limit: validatedPagination.limit,
-      total,
-    };
-
-    // Add stats to response data instead of meta
-    const responseData = enrichedEnrollments.map((e) => ({
-      ...e,
-      _stats: enrollmentStats,
-    }));
-
-    return paginatedResponse(
-      enrichedEnrollments,
-      paginationMeta,
-      'Students retrieved successfully'
+    // PERBAIKAN: Kembalikan data menggunakan successResponse bukan paginatedResponse
+    return successResponse(
+      {
+        enrollments: enrichedEnrollments,
+        stats: enrollmentStats,
+        pagination: {
+          page: validatedPagination.page,
+          limit: validatedPagination.limit,
+          total,
+          totalPages: Math.ceil(total / validatedPagination.limit),
+        },
+      },
+      "Students retrieved successfully"
     );
   } catch (error) {
     if (error instanceof Error) {
       return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
     }
-    return errorResponse('Failed to get students', HTTP_STATUS.INTERNAL_SERVER_ERROR);
+    return errorResponse(
+      "Failed to get students",
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
   }
 }
 
-async function authenticatedHandler(
-  request: NextRequest,
-  context: { params: Promise<{ id: string }> }
-): Promise<NextResponse> {
-  const authResult = await authMiddleware(request);
-  if (authResult) return authResult;
-  return handler(request, context);
-}
+// Gunakan requireAuth untuk wrap handler
+const authenticatedHandler = requireAuth(handler);
 
-export async function GET(
-  req: NextRequest,
-  context: { params: Promise<{ id: string }> }
-): Promise<NextResponse> {
-  return errorHandler(async (request: NextRequest) => {
-    return loggingMiddleware(async (r: NextRequest) => {
-      return corsMiddleware(async (rq: NextRequest) => {
-        return authenticatedHandler(rq, context);
-      })(r);
-    })(request);
-  })(req);
-}
+export const GET = errorHandler(
+  loggingMiddleware(corsMiddleware(authenticatedHandler))
+);

@@ -1,38 +1,41 @@
-import { NextRequest } from 'next/server';
-import prisma from '@/lib/prisma';
-import { paginatedResponse, errorResponse } from '@/utils/response.util';
-import { validatePagination } from '@/utils/validation.util';
-import { errorHandler } from '@/middlewares/error.middleware';
-import { authMiddleware, getAuthenticatedUser } from '@/middlewares/auth.middleware';
-import { corsMiddleware } from '@/middlewares/cors.middleware';
-import { loggingMiddleware } from '@/middlewares/logging.middleware';
-import { HTTP_STATUS } from '@/lib/constants';
-import type { NotificationStatus, NotificationType, Prisma } from '@prisma/client';
+import { NextRequest } from "next/server";
+import prisma from "@/lib/prisma";
+import { paginatedResponse, errorResponse } from "@/utils/response.util";
+import { validatePagination } from "@/utils/validation.util";
+import { errorHandler } from "@/middlewares/error.middleware";
+import { requireAuth } from "@/middlewares/auth.middleware";
+import { corsMiddleware } from "@/middlewares/cors.middleware";
+import { loggingMiddleware } from "@/middlewares/logging.middleware";
+import { HTTP_STATUS } from "@/lib/constants";
+import type {
+  NotificationStatus,
+  NotificationType,
+  Prisma,
+} from "@prisma/client";
 
 /**
  * GET /api/users/notifications
  * Get user notifications
  */
-async function handler(request: NextRequest) {
+async function handler(
+  request: NextRequest,
+  context: { user: { userId: string; email: string; role: string } }
+) {
+  const { user } = context;
+
   try {
-    const user = getAuthenticatedUser(request);
-
-    if (!user) {
-      return errorResponse('Unauthorized', HTTP_STATUS.UNAUTHORIZED);
-    }
-
     // Parse query parameters
     const { searchParams } = new URL(request.url);
-    const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '20');
-    const status = searchParams.get('status') as NotificationStatus | undefined;
-    const type = searchParams.get('type') as NotificationType | undefined;
+    const page = parseInt(searchParams.get("page") || "1");
+    const limit = parseInt(searchParams.get("limit") || "20");
+    const status = searchParams.get("status") as NotificationStatus | undefined;
+    const type = searchParams.get("type") as NotificationType | undefined;
 
     // Validate pagination
     const validatedPagination = validatePagination(page, limit);
 
     // Build where clause
-    const where: Prisma.NotificationWhereInput = { userId: user.userId };
+    const where: Prisma.NotificationWhereInput = { user_id: user.userId };
     if (status) {
       where.status = status;
     }
@@ -49,7 +52,7 @@ async function handler(request: NextRequest) {
         where,
         skip,
         take: validatedPagination.limit,
-        orderBy: { createdAt: 'desc' },
+        orderBy: { created_at: "desc" },
         select: {
           id: true,
           type: true,
@@ -57,15 +60,15 @@ async function handler(request: NextRequest) {
           message: true,
           status: true,
           data: true,
-          readAt: true,
-          createdAt: true,
+          read_at: true,
+          created_at: true,
         },
       }),
       prisma.notification.count({ where }),
       prisma.notification.count({
         where: {
-          userId: user.userId,
-          status: 'UNREAD',
+          user_id: user.userId,
+          status: "UNREAD",
         },
       }),
     ]);
@@ -83,20 +86,25 @@ async function handler(request: NextRequest) {
       unreadCount,
     };
 
-    return paginatedResponse(notifications, metadata, 'Notifications retrieved successfully');
+    return paginatedResponse(
+      notifications,
+      metadata,
+      "Notifications retrieved successfully"
+    );
   } catch (error) {
     if (error instanceof Error) {
       return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
     }
-    return errorResponse('Failed to get notifications', HTTP_STATUS.INTERNAL_SERVER_ERROR);
+    return errorResponse(
+      "Failed to get notifications",
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
   }
 }
 
-// Apply middlewares and export
-async function authenticatedHandler(request: NextRequest) {
-  const authResult = await authMiddleware(request);
-  if (authResult) return authResult;
-  return handler(request);
-}
+// Apply authentication
+const authenticatedHandler = requireAuth(handler);
 
-export const GET = errorHandler(loggingMiddleware(corsMiddleware(authenticatedHandler)));
+export const GET = errorHandler(
+  loggingMiddleware(corsMiddleware(authenticatedHandler))
+);

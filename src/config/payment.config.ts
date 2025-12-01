@@ -1,32 +1,37 @@
 export const paymentConfig = {
   // Provider
-  provider: 'midtrans',
+  provider: "midtrans",
 
   // Midtrans Settings
   midtrans: {
-    serverKey: process.env.MIDTRANS_SERVER_KEY || '',
-    clientKey: process.env.MIDTRANS_CLIENT_KEY || '',
-    merchantId: process.env.MIDTRANS_MERCHANT_ID || '',
-    isProduction: process.env.MIDTRANS_IS_PRODUCTION === 'true',
+    serverKey: process.env.MIDTRANS_SERVER_KEY || "",
+    clientKey: process.env.MIDTRANS_CLIENT_KEY || "",
+    merchantId: process.env.MIDTRANS_MERCHANT_ID || "",
+    isProduction: process.env.MIDTRANS_IS_PRODUCTION === "true",
 
     // API Endpoints
     apiUrl:
-      process.env.MIDTRANS_IS_PRODUCTION === 'true'
-        ? 'https://api.midtrans.com'
-        : 'https://api.sandbox.midtrans.com',
+      process.env.MIDTRANS_IS_PRODUCTION === "true"
+        ? "https://api.midtrans.com"
+        : "https://api.sandbox.midtrans.com",
 
     snapUrl:
-      process.env.MIDTRANS_IS_PRODUCTION === 'true'
-        ? 'https://app.midtrans.com/snap/v1/transactions'
-        : 'https://app.sandbox.midtrans.com/snap/v1/transactions',
+      process.env.MIDTRANS_IS_PRODUCTION === "true"
+        ? "https://app.midtrans.com/snap/v1/transactions"
+        : "https://app.sandbox.midtrans.com/snap/v1/transactions",
   },
 
   // Payment Methods
-  enabledMethods: ['credit_card', 'bank_transfer', 'e_wallet', 'virtual_account'],
+  enabledMethods: [
+    "credit_card",
+    "bank_transfer",
+    "e_wallet",
+    "virtual_account",
+  ],
 
   // Payment Settings
   settings: {
-    currency: 'IDR',
+    currency: "IDR",
     minAmount: 10000, // 10,000 IDR
     maxAmount: 100000000, // 100,000,000 IDR (100 million)
     expiryDuration: 24 * 60 * 60 * 1000, // 24 hours
@@ -65,7 +70,7 @@ export const paymentConfig = {
 
   // Webhook Settings
   webhook: {
-    secret: process.env.MIDTRANS_SERVER_KEY || '',
+    secret: process.env.MIDTRANS_SERVER_KEY || "",
     timeout: 30000, // 30 seconds
     retryAttempts: 3,
   },

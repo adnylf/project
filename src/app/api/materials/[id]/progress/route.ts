@@ -1,21 +1,19 @@
-import { NextRequest, NextResponse } from 'next/server';
-import prisma from '@/lib/prisma';
-import enrollmentService from '@/services/enrollment.service';
-import { successResponse, errorResponse } from '@/utils/response.util';
-import { errorHandler } from '@/middlewares/error.middleware';
-import { authMiddleware, getAuthenticatedUser } from '@/middlewares/auth.middleware';
-import { corsMiddleware } from '@/middlewares/cors.middleware';
-import { loggingMiddleware } from '@/middlewares/logging.middleware';
-import { HTTP_STATUS } from '@/lib/constants';
+import { NextRequest, NextResponse } from "next/server";
+import prisma from "@/lib/prisma";
+import enrollmentService from "@/services/enrollment.service";
+import { successResponse, errorResponse } from "@/utils/response.util";
+import { errorHandler } from "@/middlewares/error.middleware";
+import { authMiddleware } from "@/middlewares/auth.middleware";
+import { corsMiddleware } from "@/middlewares/cors.middleware";
+import { loggingMiddleware } from "@/middlewares/logging.middleware";
+import { HTTP_STATUS } from "@/lib/constants";
 
-async function handler(request: NextRequest, context: { params: Promise<{ id: string }> }) {
+async function handler(
+  request: NextRequest,
+  user: any,
+  context: { params: Promise<{ id: string }> }
+) {
   try {
-    const user = getAuthenticatedUser(request);
-
-    if (!user) {
-      return errorResponse('Unauthorized', HTTP_STATUS.UNAUTHORIZED);
-    }
-
     const { id: materialId } = await context.params;
 
     const body = await request.json();
@@ -31,7 +29,7 @@ async function handler(request: NextRequest, context: { params: Promise<{ id: st
     });
 
     if (!material) {
-      return errorResponse('Material not found', HTTP_STATUS.NOT_FOUND);
+      return errorResponse("Material not found", HTTP_STATUS.NOT_FOUND);
     }
 
     const enrollment = await prisma.enrollment.findUnique({
@@ -44,7 +42,10 @@ async function handler(request: NextRequest, context: { params: Promise<{ id: st
     });
 
     if (!enrollment) {
-      return errorResponse('You must be enrolled to track progress', HTTP_STATUS.FORBIDDEN);
+      return errorResponse(
+        "You must be enrolled to track progress",
+        HTTP_STATUS.FORBIDDEN
+      );
     }
 
     const progress = await prisma.progress.upsert({
@@ -87,24 +88,29 @@ async function handler(request: NextRequest, context: { params: Promise<{ id: st
         isCompleted: progress.isCompleted,
         completedAt: progress.completedAt,
       },
-      'Progress updated successfully'
+      "Progress updated successfully"
     );
   } catch (error) {
     if (error instanceof Error) {
       return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
     }
-    return errorResponse('Failed to update progress', HTTP_STATUS.INTERNAL_SERVER_ERROR);
+    return errorResponse(
+      "Failed to update progress",
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
   }
 }
 
-async function authenticatedHandler(
+const authenticatedHandler = async (
   request: NextRequest,
   context: { params: Promise<{ id: string }> }
-): Promise<NextResponse> {
+): Promise<NextResponse> => {
   const authResult = await authMiddleware(request);
-  if (authResult) return authResult;
-  return handler(request, context);
-}
+  if (authResult instanceof NextResponse) {
+    return authResult;
+  }
+  return handler(request, authResult, context);
+};
 
 export async function POST(
   req: NextRequest,

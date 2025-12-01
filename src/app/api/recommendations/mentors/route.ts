@@ -1,79 +1,86 @@
-import { NextRequest } from 'next/server';
-import prisma from '@/lib/prisma';
-import { successResponse, errorResponse } from '@/utils/response.util';
-import { errorHandler } from '@/middlewares/error.middleware';
-import { authMiddleware, getAuthenticatedUser } from '@/middlewares/auth.middleware';
-import { corsMiddleware } from '@/middlewares/cors.middleware';
-import { loggingMiddleware } from '@/middlewares/logging.middleware';
-import { HTTP_STATUS } from '@/lib/constants';
+import { NextRequest } from "next/server";
+import prisma from "@/lib/prisma";
+import { successResponse, errorResponse } from "@/utils/response.util";
+import { errorHandler } from "@/middlewares/error.middleware";
+import { requireAuth } from "@/middlewares/auth.middleware";
+import { corsMiddleware } from "@/middlewares/cors.middleware";
+import { loggingMiddleware } from "@/middlewares/logging.middleware";
+import { HTTP_STATUS } from "@/lib/constants";
 
 interface CourseData {
-  mentorId: string;
-  categoryId: string;
+  mentor_id: string;
+  category_id: string;
   level: string;
 }
 
-async function mentorRecommendationsHandler(request: NextRequest) {
-  try {
-    const user = getAuthenticatedUser(request);
+async function handler(
+  request: NextRequest,
+  context: { user?: { userId: string; email: string; role: string } }
+) {
+  const { user } = context;
 
+  try {
     const { searchParams } = new URL(request.url);
-    const limit = parseInt(searchParams.get('limit') || '10');
+    const limit = parseInt(searchParams.get("limit") || "10");
 
     if (user) {
       const userEnrollments = await prisma.enrollment.findMany({
-        where: { userId: user.userId },
+        where: { user_id: user.userId },
         select: {
           course: {
             select: {
-              mentorId: true,
-              categoryId: true,
+              mentor_id: true,
+              category_id: true,
               level: true,
             },
           },
         },
       });
 
-      const enrolledMentorIds = userEnrollments.map((e) => e.course.mentorId);
-      const preferredCategories = [...new Set(userEnrollments.map((e) => e.course.categoryId))];
+      const enrolledMentorIds = userEnrollments.map(
+        (e: any) => e.course.mentor_id
+      );
+      const preferredCategories = [
+        ...new Set(userEnrollments.map((e: any) => e.course.category_id)),
+      ];
 
       const recommendedMentors = await prisma.mentorProfile.findMany({
         where: {
-          status: 'APPROVED',
+          status: "APPROVED",
           id: { notIn: enrolledMentorIds },
           courses: {
             some: {
-              categoryId: { in: preferredCategories },
-              status: 'PUBLISHED',
+              category_id: { in: preferredCategories },
+              status: "PUBLISHED",
             },
           },
         },
         take: limit,
-        orderBy: [{ averageRating: 'desc' }, { totalStudents: 'desc' }],
+        orderBy: [{ average_rating: "desc" }, { total_students: "desc" }],
         select: {
           id: true,
           bio: true,
           headline: true,
           expertise: true,
           experience: true,
-          averageRating: true,
-          totalStudents: true,
-          totalCourses: true,
-          totalReviews: true,
+          average_rating: true,
+          total_students: true,
+          total_courses: true,
+          total_reviews: true,
           user: {
             select: {
-              name: true,
-              profilePicture: true,
+              full_name: true,
+              avatar_url: true,
             },
           },
           courses: {
-            where: { status: 'PUBLISHED' },
+            where: { status: "PUBLISHED" },
             take: 3,
             select: {
               id: true,
               title: true,
               thumbnail: true,
-              averageRating: true,
+              average_rating: true,
             },
           },
         },
@@ -82,43 +89,43 @@ async function mentorRecommendationsHandler(request: NextRequest) {
       return successResponse(
         {
           mentors: recommendedMentors,
-          reason: 'Based on your enrolled courses',
+          reason: "Based on your enrolled courses",
         },
-        'Mentor recommendations retrieved successfully'
+        "Mentor recommendations retrieved successfully"
       );
     }
 
     const topMentors = await prisma.mentorProfile.findMany({
       where: {
-        status: 'APPROVED',
-        totalCourses: { gt: 0 },
+        status: "APPROVED",
+        total_courses: { gt: 0 },
       },
       take: limit,
-      orderBy: [{ averageRating: 'desc' }, { totalStudents: 'desc' }],
+      orderBy: [{ average_rating: "desc" }, { total_students: "desc" }],
       select: {
         id: true,
         bio: true,
         headline: true,
         expertise: true,
         experience: true,
-        averageRating: true,
-        totalStudents: true,
-        totalCourses: true,
-        totalReviews: true,
+        average_rating: true,
+        total_students: true,
+        total_courses: true,
+        total_reviews: true,
         user: {
           select: {
-            name: true,
-            profilePicture: true,
+            full_name: true,
+            avatar_url: true,
           },
         },
         courses: {
-          where: { status: 'PUBLISHED' },
+          where: { status: "PUBLISHED" },
           take: 3,
           select: {
             id: true,
             title: true,
             thumbnail: true,
-            averageRating: true,
+            average_rating: true,
           },
         },
       },
@@ -127,23 +134,34 @@ async function mentorRecommendationsHandler(request: NextRequest) {
     return successResponse(
       {
         mentors: topMentors,
-        reason: 'Top rated mentors',
+        reason: "Top rated mentors",
       },
-      'Mentor recommendations retrieved successfully'
+      "Mentor recommendations retrieved successfully"
     );
   } catch (error) {
     if (error instanceof Error) {
       return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
     }
-    return errorResponse('Failed to get mentor recommendations', HTTP_STATUS.INTERNAL_SERVER_ERROR);
+    return errorResponse(
+      "Failed to get mentor recommendations",
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
   }
 }
 
-async function optionalAuthMentorRecommendationsHandler(request: NextRequest) {
-  await authMiddleware(request);
-  return mentorRecommendationsHandler(request);
-}
+// Optional authentication - user parameter is optional
+const optionalAuthHandler = async (request: NextRequest) => {
+  try {
+    // Try to get authenticated user, but don't require it
+    const authHandler = requireAuth(handler);
+    return authHandler(request);
+  } catch {
+    // If authentication fails, call handler without user
+    // PERBAIKAN: Kirim context kosong sebagai parameter kedua
+    return handler(request, {});
+  }
+};
 
 export const GET = errorHandler(
-  loggingMiddleware(corsMiddleware(optionalAuthMentorRecommendationsHandler))
+  loggingMiddleware(corsMiddleware(optionalAuthHandler))
 );

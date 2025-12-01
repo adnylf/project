@@ -1,33 +1,55 @@
-import { NextRequest } from 'next/server';
-import prisma from '@/lib/prisma';
-import { successResponse, noContentResponse, errorResponse } from '@/utils/response.util';
-import { errorHandler } from '@/middlewares/error.middleware';
-import { authMiddleware, getAuthenticatedUser } from '@/middlewares/auth.middleware';
-import { corsMiddleware } from '@/middlewares/cors.middleware';
-import { loggingMiddleware } from '@/middlewares/logging.middleware';
-import { HTTP_STATUS, USER_ROLES } from '@/lib/constants';
+import { NextRequest } from "next/server";
+import prisma from "@/lib/prisma";
+import {
+  successResponse,
+  noContentResponse,
+  errorResponse,
+} from "@/utils/response.util";
+import { errorHandler } from "@/middlewares/error.middleware";
+import { requireAuth } from "@/middlewares/auth.middleware";
+import { corsMiddleware } from "@/middlewares/cors.middleware";
+import { loggingMiddleware } from "@/middlewares/logging.middleware";
+import { HTTP_STATUS, USER_ROLES } from "@/lib/constants";
 
 /**
  * PUT /api/notifications/:id
  * Update notification status
  */
-async function putHandler(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  try {
-    const user = getAuthenticatedUser(request);
+async function putHandler(
+  request: NextRequest,
+  context: { user: { userId: string; email: string; role: string } }
+) {
+  const { user } = context;
 
-    if (!user) {
-      return errorResponse('Unauthorized', HTTP_STATUS.UNAUTHORIZED);
+  try {
+    // Extract notification ID from URL
+    const url = new URL(request.url);
+    const pathSegments = url.pathname.split("/");
+    const id = pathSegments[pathSegments.length - 1];
+
+    if (!id) {
+      return errorResponse(
+        "Notification ID is required",
+        HTTP_STATUS.BAD_REQUEST
+      );
     }
 
-    const { id } = await params;
-
     // Parse request body
-    const body = await request.json();
+    let body;
+    try {
+      body = await request.json();
+    } catch {
+      return errorResponse(
+        "Invalid JSON in request body",
+        HTTP_STATUS.BAD_REQUEST
+      );
+    }
+
     const { status } = body;
 
     // Validate status
-    if (!status || !['UNREAD', 'READ', 'ARCHIVED'].includes(status)) {
-      return errorResponse('Invalid status', HTTP_STATUS.BAD_REQUEST);
+    if (!status || !["UNREAD", "READ", "ARCHIVED"].includes(status)) {
+      return errorResponse("Invalid status", HTTP_STATUS.BAD_REQUEST);
     }
 
     // Check notification exists
@@ -36,12 +58,15 @@ async function putHandler(request: NextRequest, { params }: { params: Promise<{ 
     });
 
     if (!notification) {
-      return errorResponse('Notification not found', HTTP_STATUS.NOT_FOUND);
+      return errorResponse("Notification not found", HTTP_STATUS.NOT_FOUND);
     }
 
     // Check permission (own notification or admin)
-    if (notification.userId !== user.userId && user.role !== USER_ROLES.ADMIN) {
-      return errorResponse('Insufficient permissions', HTTP_STATUS.FORBIDDEN);
+    if (
+      notification.user_id !== user.userId &&
+      user.role !== USER_ROLES.ADMIN
+    ) {
+      return errorResponse("Insufficient permissions", HTTP_STATUS.FORBIDDEN);
     }
 
     // Update notification
@@ -49,7 +74,7 @@ async function putHandler(request: NextRequest, { params }: { params: Promise<{ 
       where: { id },
       data: {
         status,
-        readAt: status === 'READ' ? new Date() : notification.readAt,
+        read_at: status === "READ" ? new Date() : notification.read_at,
       },
     });
 
@@ -57,15 +82,18 @@ async function putHandler(request: NextRequest, { params }: { params: Promise<{ 
       {
         id: updated.id,
         status: updated.status,
-        readAt: updated.readAt,
+        read_at: updated.read_at,
       },
-      'Notification updated successfully'
+      "Notification updated successfully"
     );
   } catch (error) {
     if (error instanceof Error) {
       return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
     }
-    return errorResponse('Failed to update notification', HTTP_STATUS.INTERNAL_SERVER_ERROR);
+    return errorResponse(
+      "Failed to update notification",
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
   }
 }
 
@@ -75,16 +103,22 @@ async function putHandler(request: NextRequest, { params }: { params: Promise<{ 
  */
 async function deleteHandler(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  context: { user: { userId: string; email: string; role: string } }
 ) {
+  const { user } = context;
+
   try {
-    const user = getAuthenticatedUser(request);
+    // Extract notification ID from URL
+    const url = new URL(request.url);
+    const pathSegments = url.pathname.split("/");
+    const id = pathSegments[pathSegments.length - 1];
 
-    if (!user) {
-      return errorResponse('Unauthorized', HTTP_STATUS.UNAUTHORIZED);
+    if (!id) {
+      return errorResponse(
+        "Notification ID is required",
+        HTTP_STATUS.BAD_REQUEST
+      );
     }
-
-    const { id } = await params;
 
     // Check notification exists
     const notification = await prisma.notification.findUnique({
@@ -92,12 +126,15 @@ async function deleteHandler(
     });
 
     if (!notification) {
-      return errorResponse('Notification not found', HTTP_STATUS.NOT_FOUND);
+      return errorResponse("Notification not found", HTTP_STATUS.NOT_FOUND);
     }
 
     // Check permission (own notification or admin)
-    if (notification.userId !== user.userId && user.role !== USER_ROLES.ADMIN) {
-      return errorResponse('Insufficient permissions', HTTP_STATUS.FORBIDDEN);
+    if (
+      notification.user_id !== user.userId &&
+      user.role !== USER_ROLES.ADMIN
+    ) {
+      return errorResponse("Insufficient permissions", HTTP_STATUS.FORBIDDEN);
     }
 
     // Delete notification
@@ -110,40 +147,20 @@ async function deleteHandler(
     if (error instanceof Error) {
       return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
     }
-    return errorResponse('Failed to delete notification', HTTP_STATUS.INTERNAL_SERVER_ERROR);
+    return errorResponse(
+      "Failed to delete notification",
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
   }
 }
 
-// Apply middlewares and export
-async function authenticatedPutHandler(
-  request: NextRequest,
-  context: { params: Promise<{ id: string }> }
-) {
-  const authResult = await authMiddleware(request);
-  if (authResult) return authResult;
-  return putHandler(request, context);
-}
+// Apply authentication
+const authenticatedPutHandler = requireAuth(putHandler);
+const authenticatedDeleteHandler = requireAuth(deleteHandler);
 
-async function authenticatedDeleteHandler(
-  request: NextRequest,
-  context: { params: Promise<{ id: string }> }
-) {
-  const authResult = await authMiddleware(request);
-  if (authResult) return authResult;
-  return deleteHandler(request, context);
-}
-
-// Properly typed exports
-export const PUT = (request: NextRequest, context: { params: Promise<{ id: string }> }) =>
-  errorHandler((req: NextRequest) =>
-    loggingMiddleware((req2: NextRequest) =>
-      corsMiddleware((req3: NextRequest) => authenticatedPutHandler(req3, context))(req2)
-    )(req)
-  )(request);
-
-export const DELETE = (request: NextRequest, context: { params: Promise<{ id: string }> }) =>
-  errorHandler((req: NextRequest) =>
-    loggingMiddleware((req2: NextRequest) =>
-      corsMiddleware((req3: NextRequest) => authenticatedDeleteHandler(req3, context))(req2)
-    )(req)
-  )(request);
+export const PUT = errorHandler(
+  loggingMiddleware(corsMiddleware(authenticatedPutHandler))
+);
+export const DELETE = errorHandler(
+  loggingMiddleware(corsMiddleware(authenticatedDeleteHandler))
+);

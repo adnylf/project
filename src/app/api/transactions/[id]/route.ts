@@ -1,42 +1,47 @@
-import { NextRequest, NextResponse } from 'next/server';
-import transactionService from '@/services/transaction.service';
-import { verifyToken } from '@/lib/auth';
+import { NextRequest, NextResponse } from "next/server";
+import transactionService from "@/services/transaction.service";
+import { authMiddleware } from "@/middlewares/auth.middleware";
+import { errorHandler } from "@/middlewares/error.middleware";
+import { corsMiddleware } from "@/middlewares/cors.middleware";
+import { loggingMiddleware } from "@/middlewares/logging.middleware";
+import { HTTP_STATUS } from "@/lib/constants";
 
-export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+/**
+ * GET /api/transactions/:id
+ * Get transaction by ID
+ */
+async function getHandler(
+  request: NextRequest,
+  user: any,
+  context: { params: Promise<{ id: string }> }
+) {
   try {
-    // Verify authentication
-    const token = request.headers.get('authorization')?.replace('Bearer ', '');
-    if (!token) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const decoded = await verifyToken(token);
-    if (!decoded) {
-      return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
-    }
-
-    const transactionId = params.id;
+    const { id: transactionId } = await context.params;
 
     // Get transaction details
-    const transaction = await transactionService.getTransactionById(transactionId);
+    const transaction = await transactionService.getTransactionById(
+      transactionId,
+      user.userId
+    );
 
     if (!transaction) {
-      return NextResponse.json({ error: 'Transaction not found' }, { status: 404 });
-    }
-
-    // Check authorization - only owner or admin can view
-    if (transaction.user_id !== decoded.userId && decoded.role !== 'admin') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      return NextResponse.json(
+        { error: "Transaction not found" },
+        { status: HTTP_STATUS.NOT_FOUND }
+      );
     }
 
     // Check if transaction is expired and update status
     if (
-      transaction.status === 'pending' &&
-      transaction.expired_at &&
-      new Date(transaction.expired_at) < new Date()
+      transaction.status === "PENDING" &&
+      transaction.expiredAt &&
+      new Date(transaction.expiredAt) < new Date()
     ) {
-      await transactionService.updateTransactionStatus(transactionId, 'expired');
-      transaction.status = 'expired';
+      await transactionService.updateTransactionStatus(
+        transactionId,
+        "EXPIRED"
+      );
+      transaction.status = "EXPIRED";
     }
 
     return NextResponse.json({
@@ -44,92 +49,158 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       data: transaction,
     });
   } catch (error) {
-    console.error('GET transaction detail error:', error);
-    return NextResponse.json({ error: 'Failed to fetch transaction details' }, { status: 500 });
+    console.error("GET transaction detail error:", error);
+    return NextResponse.json(
+      { error: "Failed to fetch transaction details" },
+      { status: HTTP_STATUS.INTERNAL_SERVER_ERROR }
+    );
   }
 }
 
-export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
+/**
+ * PATCH /api/transactions/:id
+ * Update transaction (cancel, confirm, reject)
+ */
+async function patchHandler(
+  request: NextRequest,
+  user: any,
+  context: { params: Promise<{ id: string }> }
+) {
   try {
-    // Verify authentication
-    const token = request.headers.get('authorization')?.replace('Bearer ', '');
-    if (!token) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const decoded = await verifyToken(token);
-    if (!decoded) {
-      return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
-    }
-
-    const transactionId = params.id;
+    const { id: transactionId } = await context.params;
     const body = await request.json();
     const { action } = body;
 
     // Get transaction
-    const transaction = await transactionService.getTransactionById(transactionId);
+    const transaction = await transactionService.getTransactionById(
+      transactionId,
+      user.userId
+    );
 
     if (!transaction) {
-      return NextResponse.json({ error: 'Transaction not found' }, { status: 404 });
-    }
-
-    // Check authorization
-    if (transaction.user_id !== decoded.userId && decoded.role !== 'admin') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      return NextResponse.json(
+        { error: "Transaction not found" },
+        { status: HTTP_STATUS.NOT_FOUND }
+      );
     }
 
     // Handle different actions
-    if (action === 'cancel') {
+    if (action === "cancel") {
       // Only allow canceling pending transactions
-      if (transaction.status !== 'pending') {
+      if (transaction.status !== "PENDING") {
         return NextResponse.json(
-          { error: 'Can only cancel pending transactions' },
-          { status: 400 }
+          { error: "Can only cancel pending transactions" },
+          { status: HTTP_STATUS.BAD_REQUEST }
         );
       }
 
-      const success = await transactionService.cancelTransaction(transactionId);
-
-      if (!success) {
-        return NextResponse.json({ error: 'Failed to cancel transaction' }, { status: 500 });
-      }
+      const updatedTransaction = await transactionService.cancelTransaction(
+        transactionId,
+        user.userId
+      );
 
       return NextResponse.json({
         success: true,
-        message: 'Transaction cancelled successfully',
+        data: updatedTransaction,
+        message: "Transaction cancelled successfully",
       });
     }
 
     // Admin-only actions
-    if (decoded.role === 'admin') {
-      if (action === 'confirm') {
+    if (user.role === "ADMIN") {
+      if (action === "confirm") {
         // Confirm manual payment
-        const updated = await transactionService.updateTransactionStatus(transactionId, 'success', {
-          paid_at: new Date(),
-        });
+        const updatedTransaction =
+          await transactionService.updateTransactionStatus(
+            transactionId,
+            "PAID",
+            {
+              paidAt: new Date(),
+            }
+          );
 
         return NextResponse.json({
           success: true,
-          data: updated,
-          message: 'Payment confirmed successfully',
+          data: updatedTransaction,
+          message: "Payment confirmed successfully",
         });
       }
 
-      if (action === 'reject') {
+      if (action === "reject") {
         // Reject manual payment
-        const updated = await transactionService.updateTransactionStatus(transactionId, 'failed');
+        const updatedTransaction =
+          await transactionService.updateTransactionStatus(
+            transactionId,
+            "FAILED"
+          );
 
         return NextResponse.json({
           success: true,
-          data: updated,
-          message: 'Payment rejected',
+          data: updatedTransaction,
+          message: "Payment rejected",
         });
       }
     }
 
-    return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
+    return NextResponse.json(
+      { error: "Invalid action" },
+      { status: HTTP_STATUS.BAD_REQUEST }
+    );
   } catch (error) {
-    console.error('PATCH transaction error:', error);
-    return NextResponse.json({ error: 'Failed to update transaction' }, { status: 500 });
+    console.error("PATCH transaction error:", error);
+    return NextResponse.json(
+      { error: "Failed to update transaction" },
+      { status: HTTP_STATUS.INTERNAL_SERVER_ERROR }
+    );
   }
+}
+
+// Apply middlewares
+async function authenticatedGetHandler(
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
+): Promise<NextResponse> {
+  const authResult = await authMiddleware(request);
+  if (authResult instanceof NextResponse) {
+    return authResult;
+  }
+  return getHandler(request, authResult, context);
+}
+
+async function authenticatedPatchHandler(
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
+): Promise<NextResponse> {
+  const authResult = await authMiddleware(request);
+  if (authResult instanceof NextResponse) {
+    return authResult;
+  }
+  return patchHandler(request, authResult, context);
+}
+
+// Export handlers
+export async function GET(
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
+): Promise<NextResponse> {
+  return errorHandler(async (req: NextRequest) => {
+    return loggingMiddleware(async (r: NextRequest) => {
+      return corsMiddleware(async (rq: NextRequest) => {
+        return authenticatedGetHandler(rq, context);
+      })(r);
+    })(req);
+  })(request);
+}
+
+export async function PATCH(
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
+): Promise<NextResponse> {
+  return errorHandler(async (req: NextRequest) => {
+    return loggingMiddleware(async (r: NextRequest) => {
+      return corsMiddleware(async (rq: NextRequest) => {
+        return authenticatedPatchHandler(rq, context);
+      })(r);
+    })(req);
+  })(request);
 }

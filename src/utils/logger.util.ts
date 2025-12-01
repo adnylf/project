@@ -1,5 +1,12 @@
-import winston from 'winston';
-import path from 'path';
+import winston from "winston";
+import path from "path";
+import fs from "fs";
+
+// Ensure log directory exists
+const logDir = process.env.LOG_FILE_PATH || "./logs";
+if (!fs.existsSync(logDir)) {
+  fs.mkdirSync(logDir, { recursive: true });
+}
 
 // Define log levels
 const levels = {
@@ -10,94 +17,117 @@ const levels = {
   debug: 4,
 };
 
-// Define log colors
-const colors = {
-  error: 'red',
-  warn: 'yellow',
-  info: 'green',
-  http: 'magenta',
-  debug: 'white',
-};
-
-// Add colors to winston
-winston.addColors(colors);
-
 // Define log format
 const format = winston.format.combine(
-  winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss:ms' }),
-  winston.format.colorize({ all: true }),
-  winston.format.printf((info) => `${info.timestamp} ${info.level}: ${info.message}`)
+  winston.format.timestamp({ format: "YYYY-MM-DD HH:mm:ss" }),
+  winston.format.errors({ stack: true }),
+  winston.format.printf(({ timestamp, level, message, stack, ...meta }) => {
+    let log = `${timestamp} [${level.toUpperCase()}]: ${message}`;
+
+    if (stack) {
+      log += `\n${stack}`;
+    }
+
+    if (Object.keys(meta).length > 0) {
+      log += `\n${JSON.stringify(meta, null, 2)}`;
+    }
+
+    return log;
+  })
 );
 
 // Define transports
 const transports = [
   // Console transport
-  new winston.transports.Console(),
+  new winston.transports.Console({
+    format: winston.format.combine(
+      winston.format.colorize(),
+      winston.format.simple()
+    ),
+  }),
 
   // Error log file
   new winston.transports.File({
-    filename: path.join(process.env.LOG_FILE_PATH || './logs', 'error.log'),
-    level: 'error',
+    filename: path.join(logDir, "error.log"),
+    level: "error",
+    format,
   }),
 
   // Combined log file
   new winston.transports.File({
-    filename: path.join(process.env.LOG_FILE_PATH || './logs', 'combined.log'),
+    filename: path.join(logDir, "combined.log"),
+    format,
   }),
 ];
 
 // Create logger instance
 const logger = winston.createLogger({
-  level: process.env.LOG_LEVEL || 'info',
+  level: process.env.LOG_LEVEL || "info",
   levels,
   format,
   transports,
+  exceptionHandlers: [
+    new winston.transports.File({
+      filename: path.join(logDir, "exceptions.log"),
+    }),
+  ],
+  rejectionHandlers: [
+    new winston.transports.File({
+      filename: path.join(logDir, "rejections.log"),
+    }),
+  ],
 });
 
 // Export logger methods
 export default logger;
 
 /**
- * Log error
+ * Log error dengan stack trace
  */
 export function logError(message: string, error?: unknown): void {
-  const errorData = error instanceof Error ? error.stack : error;
-  logger.error(message, { error: errorData });
+  if (error instanceof Error) {
+    logger.error(message, {
+      error: error.message,
+      stack: error.stack,
+    });
+  } else {
+    logger.error(message, { error });
+  }
 }
 
 /**
  * Log warning
  */
-export function logWarning(message: string, meta?: unknown): void {
-  logger.warn(message, meta as Record<string, unknown>);
+export function logWarn(message: string, meta?: unknown): void {
+  logger.warn(message, meta);
 }
 
 /**
  * Log info
  */
 export function logInfo(message: string, meta?: unknown): void {
-  logger.info(message, meta as Record<string, unknown>);
+  logger.info(message, meta);
 }
 
 /**
  * Log debug
  */
 export function logDebug(message: string, meta?: unknown): void {
-  logger.debug(message, meta as Record<string, unknown>);
+  logger.debug(message, meta);
 }
 
 /**
  * Log HTTP request
  */
 export function logHttp(message: string, meta?: unknown): void {
-  logger.http(message, meta as Record<string, unknown>);
+  logger.http(message, meta);
 }
 
 /**
  * Log database query
  */
 export function logQuery(query: string, duration?: number): void {
-  logger.debug(`DB Query: ${query}${duration ? ` (${duration}ms)` : ''}`);
+  logger.debug(`DB Query: ${query}${duration ? ` (${duration}ms)` : ""}`);
 }
 
 /**
@@ -118,11 +148,4 @@ export function logApiRequest(
   } else {
     logger.http(message);
   }
-}
-
-/**
- * Create child logger with context
- */
-export function createChildLogger(context: string) {
-  return logger.child({ context });
 }
