@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import UserLayout from "@/components/user/user-layout";
+import ProtectedRoute from "@/components/ui/protected-route";
 import {
   Select,
   SelectContent,
@@ -56,8 +57,8 @@ const transactions = [
     paymentDetails: {
       cardNumber: "**** **** **** 1234",
       bankName: "BCA",
-      paymentTime: "2024-09-15 14:30:25"
-    }
+      paymentTime: "2024-09-15 14:30:25",
+    },
   },
   {
     id: "TRX-2024-002",
@@ -73,8 +74,8 @@ const transactions = [
     paymentDetails: {
       accountNumber: "123-456-789",
       bankName: "Mandiri",
-      paymentTime: "2024-08-10 09:15:42"
-    }
+      paymentTime: "2024-08-10 09:15:42",
+    },
   },
   {
     id: "TRX-2024-003",
@@ -89,8 +90,8 @@ const transactions = [
     invoice: null,
     paymentDetails: {
       walletType: "Gopay",
-      paymentTime: "2024-10-05 16:20:15"
-    }
+      paymentTime: "2024-10-05 16:20:15",
+    },
   },
   {
     id: "TRX-2024-004",
@@ -106,8 +107,8 @@ const transactions = [
     paymentDetails: {
       cardNumber: "**** **** **** 5678",
       bankName: "BNI",
-      paymentTime: "2024-07-20 11:45:30"
-    }
+      paymentTime: "2024-07-20 11:45:30",
+    },
   },
   {
     id: "TRX-2024-005",
@@ -124,8 +125,8 @@ const transactions = [
     paymentDetails: {
       accountNumber: "987-654-321",
       bankName: "BRI",
-      paymentTime: "2024-09-01 13:20:10"
-    }
+      paymentTime: "2024-09-01 13:20:10",
+    },
   },
   {
     id: "TRX-2024-006",
@@ -141,8 +142,8 @@ const transactions = [
     paymentDetails: {
       cardNumber: "**** **** **** 9012",
       bankName: "BCA",
-      paymentTime: "2024-10-01 10:05:22"
-    }
+      paymentTime: "2024-10-01 10:05:22",
+    },
   },
 ];
 
@@ -246,224 +247,227 @@ export default function UserTransaction() {
   };
 
   return (
-    <UserLayout>
-      <div className="space-y-8">
-        <div className="animate-fadeIn">
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-            Riwayat Transaksi
-          </h1>
-          <p className="text-gray-600 dark:text-gray-400">
-            Kelola transaksi dan ajukan refund untuk kursus berbayar
-          </p>
-        </div>
-
-        <div className="grid md:grid-cols-3 gap-6">
-          <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 animate-scaleIn">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="h-12 w-12 rounded-full bg-[#008A00]/10 flex items-center justify-center">
-                  <CheckCircle className="h-6 w-6 text-[#008A00]" />
-                </div>
-              </div>
-              <div className="space-y-1">
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Total Pengeluaran
-                </p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {formatCurrency(totalSpent)}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 animate-scaleIn delay-100">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="h-12 w-12 rounded-full bg-[#005EB8]/10 flex items-center justify-center">
-                  <Receipt className="h-6 w-6 text-[#005EB8]" />
-                </div>
-              </div>
-              <div className="space-y-1">
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Total Refund
-                </p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {formatCurrency(totalRefunded)}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 animate-scaleIn delay-200">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="h-12 w-12 rounded-full bg-[#F4B400]/10 flex items-center justify-center">
-                  <CreditCard className="h-6 w-6 text-[#F4B400]" />
-                </div>
-              </div>
-              <div className="space-y-1">
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Total Transaksi
-                </p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {transactions.length}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 animate-fadeSlide">
-          <CardContent className="p-6">
-            <div className="flex flex-col md:flex-row gap-4">
-              <div className="flex-1 relative">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                <Input
-                  type="search"
-                  placeholder="Cari transaksi atau kursus..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
-              <Select value={filterStatus} onValueChange={setFilterStatus}>
-                <SelectTrigger className="w-full md:w-[200px]">
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Semua Status</SelectItem>
-                  <SelectItem value="completed">Berhasil</SelectItem>
-                  <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="refunded">Refund</SelectItem>
-                  <SelectItem value="failed">Gagal</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 animate-fadeSlide delay-100">
-          <CardHeader>
-            <CardTitle className="text-xl font-bold">
-              Daftar Transaksi
-            </CardTitle>
-            <CardDescription>
-              Riwayat lengkap transaksi pembelian kursus
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>ID Transaksi</TableHead>
-                    <TableHead>Kursus</TableHead>
-                    <TableHead>Tanggal</TableHead>
-                    <TableHead>Metode</TableHead>
-                    <TableHead>Jumlah</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Aksi</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredTransactions.map((trx) => (
-                    <TableRow key={trx.id} className="table-row">
-                      <TableCell className="font-mono text-sm">
-                        {trx.id}
-                      </TableCell>
-                      <TableCell>
-                        <div>
-                          <p className="font-medium text-gray-900 dark:text-white">
-                            {trx.courseName}
-                          </p>
-                          <p className="text-xs text-gray-500 dark:text-gray-400">
-                            Progress: {trx.progress}%
-                          </p>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        {new Date(trx.date).toLocaleDateString("id-ID", {
-                          day: "2-digit",
-                          month: "short",
-                          year: "numeric",
-                        })}
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        {trx.paymentMethod}
-                      </TableCell>
-                      <TableCell className="font-semibold">
-                        {formatCurrency(trx.amount)}
-                      </TableCell>
-                      <TableCell>{getStatusBadge(trx.status)}</TableCell>
-                      <TableCell className="text-right">
-                        {getActionButton(trx)}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-
-            {filteredTransactions.length === 0 && (
-              <div className="text-center py-12">
-                <div className="flex flex-col items-center gap-4">
-                  <div className="h-20 w-20 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
-                    <CreditCard className="h-10 w-10 text-gray-400" />
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-                      Tidak ada transaksi
-                    </h3>
-                    <p className="text-gray-600 dark:text-gray-400">
-                      Belum ada transaksi yang sesuai dengan pencarian
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="rounded-lg border bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-[#005EB8]/20 animate-fadeIn">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-xl font-bold">
-              <Receipt className="h-6 w-6 text-[#005EB8]" />
-              Kebijakan Refund
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
+    <ProtectedRoute allowedRoles={["STUDENT"]}>
+      <UserLayout>
+        <div className="space-y-8">
+          <div className="animate-fadeIn">
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
+              Riwayat Transaksi
+            </h1>
             <p className="text-gray-600 dark:text-gray-400">
-              Anda dapat mengajukan refund dengan syarat berikut:
+              Kelola transaksi dan ajukan refund untuk kursus berbayar
             </p>
-            <ul className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
-              <li className="flex items-start gap-2">
-                <CheckCircle className="h-5 w-5 text-[#008A00] flex-shrink-0 mt-0.5" />
-                <span>Maksimal 30 hari setelah pembelian</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <CheckCircle className="h-5 w-5 text-[#008A00] flex-shrink-0 mt-0.5" />
-                <span>Progress kursus maksimal 20%</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <CheckCircle className="h-5 w-5 text-[#008A00] flex-shrink-0 mt-0.5" />
-                <span>Maksimal 5 materi yang sudah diakses</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <CheckCircle className="h-5 w-5 text-[#008A00] flex-shrink-0 mt-0.5" />
-                <span>Proses refund memakan waktu 5-7 hari kerja</span>
-              </li>
-            </ul>
-            <Card className="rounded-lg border bg-[#F4B400]/10 border-[#F4B400]/20">
-              <CardContent className="p-4">
-                <p className="text-sm text-gray-700 dark:text-gray-300">
-                  <strong>Catatan:</strong> Setelah refund disetujui, akses ke
-                  kursus akan dicabut dan sertifikat (jika ada) akan dibatalkan.
-                </p>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-6">
+            <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 animate-scaleIn">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="h-12 w-12 rounded-full bg-[#008A00]/10 flex items-center justify-center">
+                    <CheckCircle className="h-6 w-6 text-[#008A00]" />
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    Total Pengeluaran
+                  </p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                    {formatCurrency(totalSpent)}
+                  </p>
+                </div>
               </CardContent>
             </Card>
-          </CardContent>
-        </Card>
-      </div>
-    </UserLayout>
+
+            <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 animate-scaleIn delay-100">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="h-12 w-12 rounded-full bg-[#005EB8]/10 flex items-center justify-center">
+                    <Receipt className="h-6 w-6 text-[#005EB8]" />
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    Total Refund
+                  </p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                    {formatCurrency(totalRefunded)}
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 animate-scaleIn delay-200">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="h-12 w-12 rounded-full bg-[#F4B400]/10 flex items-center justify-center">
+                    <CreditCard className="h-6 w-6 text-[#F4B400]" />
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    Total Transaksi
+                  </p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                    {transactions.length}
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 animate-fadeSlide">
+            <CardContent className="p-6">
+              <div className="flex flex-col md:flex-row gap-4">
+                <div className="flex-1 relative">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                  <Input
+                    type="search"
+                    placeholder="Cari transaksi atau kursus..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+                <Select value={filterStatus} onValueChange={setFilterStatus}>
+                  <SelectTrigger className="w-full md:w-[200px]">
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Semua Status</SelectItem>
+                    <SelectItem value="completed">Berhasil</SelectItem>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="refunded">Refund</SelectItem>
+                    <SelectItem value="failed">Gagal</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 animate-fadeSlide delay-100">
+            <CardHeader>
+              <CardTitle className="text-xl font-bold">
+                Daftar Transaksi
+              </CardTitle>
+              <CardDescription>
+                Riwayat lengkap transaksi pembelian kursus
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>ID Transaksi</TableHead>
+                      <TableHead>Kursus</TableHead>
+                      <TableHead>Tanggal</TableHead>
+                      <TableHead>Metode</TableHead>
+                      <TableHead>Jumlah</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Aksi</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredTransactions.map((trx) => (
+                      <TableRow key={trx.id} className="table-row">
+                        <TableCell className="font-mono text-sm">
+                          {trx.id}
+                        </TableCell>
+                        <TableCell>
+                          <div>
+                            <p className="font-medium text-gray-900 dark:text-white">
+                              {trx.courseName}
+                            </p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                              Progress: {trx.progress}%
+                            </p>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-sm">
+                          {new Date(trx.date).toLocaleDateString("id-ID", {
+                            day: "2-digit",
+                            month: "short",
+                            year: "numeric",
+                          })}
+                        </TableCell>
+                        <TableCell className="text-sm">
+                          {trx.paymentMethod}
+                        </TableCell>
+                        <TableCell className="font-semibold">
+                          {formatCurrency(trx.amount)}
+                        </TableCell>
+                        <TableCell>{getStatusBadge(trx.status)}</TableCell>
+                        <TableCell className="text-right">
+                          {getActionButton(trx)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {filteredTransactions.length === 0 && (
+                <div className="text-center py-12">
+                  <div className="flex flex-col items-center gap-4">
+                    <div className="h-20 w-20 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+                      <CreditCard className="h-10 w-10 text-gray-400" />
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+                        Tidak ada transaksi
+                      </h3>
+                      <p className="text-gray-600 dark:text-gray-400">
+                        Belum ada transaksi yang sesuai dengan pencarian
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-lg border bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-[#005EB8]/20 animate-fadeIn">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-xl font-bold">
+                <Receipt className="h-6 w-6 text-[#005EB8]" />
+                Kebijakan Refund
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-gray-600 dark:text-gray-400">
+                Anda dapat mengajukan refund dengan syarat berikut:
+              </p>
+              <ul className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
+                <li className="flex items-start gap-2">
+                  <CheckCircle className="h-5 w-5 text-[#008A00] flex-shrink-0 mt-0.5" />
+                  <span>Maksimal 30 hari setelah pembelian</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle className="h-5 w-5 text-[#008A00] flex-shrink-0 mt-0.5" />
+                  <span>Progress kursus maksimal 20%</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle className="h-5 w-5 text-[#008A00] flex-shrink-0 mt-0.5" />
+                  <span>Maksimal 5 materi yang sudah diakses</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle className="h-5 w-5 text-[#008A00] flex-shrink-0 mt-0.5" />
+                  <span>Proses refund memakan waktu 5-7 hari kerja</span>
+                </li>
+              </ul>
+              <Card className="rounded-lg border bg-[#F4B400]/10 border-[#F4B400]/20">
+                <CardContent className="p-4">
+                  <p className="text-sm text-gray-700 dark:text-gray-300">
+                    <strong>Catatan:</strong> Setelah refund disetujui, akses ke
+                    kursus akan dicabut dan sertifikat (jika ada) akan
+                    dibatalkan.
+                  </p>
+                </CardContent>
+              </Card>
+            </CardContent>
+          </Card>
+        </div>
+      </UserLayout>
+    </ProtectedRoute>
   );
 }

@@ -16,6 +16,7 @@ import {
   UserCircle
 } from 'lucide-react';
 import MentorLayout from '@/components/mentor/mentor-layout';
+import ProtectedRoute from "@/components/ui/protected-route";
 import {
   Select,
   SelectContent,
@@ -131,6 +132,7 @@ export default function MentorProfile() {
   };
 
   return (
+    <ProtectedRoute allowedRoles={["MENTOR"]}>
     <MentorLayout>
       <div className="space-y-8">
         {/* Header Section */}
@@ -483,5 +485,6 @@ export default function MentorProfile() {
         </div>
       </div>
     </MentorLayout>
+    </ProtectedRoute>
   );
 }

@@ -16,6 +16,7 @@ import {
   Download
 } from 'lucide-react';
 import AdminLayout from '@/components/admin/admin-layout';
+import ProtectedRoute from "@/components/ui/protected-route";
 import {
   Table,
   TableBody,
@@ -160,6 +161,7 @@ export default function AdminDashboard() {
   };
 
   return (
+    <ProtectedRoute allowedRoles={["ADMIN"]}>
     <AdminLayout>
       <div className="space-y-8">
         {/* Header Section */}
@@ -406,5 +408,6 @@ export default function AdminDashboard() {
         </Card>
       </div>
     </AdminLayout>
+    </ProtectedRoute>
   );
 }

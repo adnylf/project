@@ -12,6 +12,7 @@ import {
   CheckCircle,
 } from 'lucide-react';
 import MentorLayout from '@/components/mentor/mentor-layout';
+import ProtectedRoute from "@/components/ui/protected-route";
 
 export default function MentorSettings() {
   const [notificationSettings, setNotificationSettings] = useState({
@@ -53,6 +54,7 @@ export default function MentorSettings() {
   };
 
   return (
+    <ProtectedRoute allowedRoles={["MENTOR"]}>
     <MentorLayout>
       <div className="space-y-8">
         <div className="animate-fadeIn">
@@ -261,5 +263,6 @@ export default function MentorSettings() {
         </div>
       </div>
     </MentorLayout>
+    </ProtectedRoute>
   );
 }

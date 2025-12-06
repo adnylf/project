@@ -18,15 +18,19 @@ import {
   NotFoundError,
   ValidationError,
 } from "@/utils/error.util";
-import { HTTP_STATUS, USER_STATUS } from "@/lib/constants";
+import { 
+  HTTP_STATUS, 
+  USER_STATUS, 
+  USER_ROLES,
+  DISABILITY_TYPES 
+} from "@/lib/constants";
 
 // Types
 interface RegistrationData {
   email: string;
   password: string;
   name: string;
-  disability_type?: string;
-  role?: string;
+  disability_type: string; // Will be validated against DISABILITY_TYPES
 }
 
 interface LoginCredentials {
@@ -39,7 +43,7 @@ interface AuthResponse {
     id: string;
     email: string;
     name: string;
-    disability_type?: string;
+    disability_type: string | null;
     role: string;
   };
   tokens: {
@@ -65,11 +69,11 @@ export class AuthService {
     try {
       console.log("👤 Starting user registration for:", data.email);
 
-      const { email, password, name, disability_type, role = "STUDENT" } = data;
+      const { email, password, name, disability_type } = data;
 
       // Validate input
-      if (!email || !password || !name) {
-        throw new ValidationError("Email, password, and name are required");
+      if (!email || !password || !name || !disability_type) {
+        throw new ValidationError("Email, password, name, and disability type are required");
       }
 
       if (password.length < 8) {
@@ -77,6 +81,16 @@ export class AuthService {
           "Password must be at least 8 characters long"
         );
       }
+
+      // Validate disability type against allowed values
+      if (!DISABILITY_TYPES.includes(disability_type as (typeof DISABILITY_TYPES)[number])) {
+        throw new ValidationError("Invalid disability type selected");
+      }
+
+      // Determine role based on disability type
+      const role = disability_type === "MENTOR" 
+        ? USER_ROLES.MENTOR 
+        : USER_ROLES.STUDENT;
 
       // Check if user already exists
       console.log("🔍 Checking if user exists:", email);
@@ -150,7 +164,7 @@ export class AuthService {
           id: user.id,
           email: user.email,
           name: user.full_name,
-          disability_type: user.disability_type || undefined,
+          disability_type: user.disability_type || null,
           role: user.role,
         },
         tokens,
@@ -226,7 +240,7 @@ export class AuthService {
           id: user.id,
           email: user.email,
           name: user.full_name,
-          disability_type: user.disability_type || undefined,
+          disability_type: user.disability_type || null,
           role: user.role,
         },
         tokens,

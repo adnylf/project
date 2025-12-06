@@ -28,6 +28,7 @@ import {
   CheckCircle,
 } from "lucide-react";
 import AdminLayout from "@/components/admin/admin-layout";
+import ProtectedRoute from "@/components/ui/protected-route";
 import {
   Select,
   SelectContent,
@@ -738,6 +739,7 @@ export default function AdminSettings() {
   };
 
   return (
+    <ProtectedRoute allowedRoles={["ADMIN"]}>
     <AdminLayout>
       <div className="space-y-8">
         {/* Header Section */}
@@ -870,5 +872,6 @@ export default function AdminSettings() {
         </div>
       </div>
     </AdminLayout>
+    </ProtectedRoute>
   );
 }

@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import MentorLayout from '@/components/mentor/mentor-layout';
+import ProtectedRoute from "@/components/ui/protected-route";
 import {
   Select,
   SelectContent,
@@ -154,6 +155,7 @@ export default function MentorCourses() {
   };
 
   return (
+    <ProtectedRoute allowedRoles={["MENTOR"]}>
     <MentorLayout>
       <div className="space-y-8">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 animate-fadeIn">
@@ -377,5 +379,6 @@ export default function MentorCourses() {
         )}
       </div>
     </MentorLayout>
+    </ProtectedRoute>
   );
 }

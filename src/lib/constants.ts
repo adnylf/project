@@ -12,6 +12,16 @@ export const USER_ROLES = {
   STUDENT: "STUDENT",
 } as const;
 
+export const DISABILITY_TYPES = [
+  "BUTA_WARNA",
+  "DISLEKSIA",
+  "KOGNITIF",
+  "LOW_VISION",
+  "MENTOR",
+  "MOTORIK",
+  "TUNARUNGU"
+] as const;
+
 // User Status
 export const USER_STATUS = {
   ACTIVE: "ACTIVE",

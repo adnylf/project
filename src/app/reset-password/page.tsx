@@ -1,13 +1,17 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ResetPasswordPage, Testimonial } from "@/components/ui/reset-password";
+import { ResetPasswordSuccessModal } from "@/components/ui/reset-password-modal";
 
 export default function ResetPasswordPageComponent() {
   const [isLoading, setIsLoading] = useState(false);
-  const [isSuccess, setIsSuccess] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [token, setToken] = useState<string | null>(null);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   // Sample testimonials data
   const sampleTestimonials: Testimonial[] = [
@@ -31,46 +35,127 @@ export default function ResetPasswordPageComponent() {
     },
   ];
 
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setIsLoading(true);
+  useEffect(() => {
+    // Get token from URL query parameters
+    const tokenParam = searchParams.get("token");
+    if (!tokenParam) {
+      setError("Token reset password tidak ditemukan. Silakan minta link reset password baru.");
+      return;
+    }
+    setToken(tokenParam);
+  }, [searchParams]);
 
-    // Mengambil data form dari event
-    const formData = new FormData(event.currentTarget);
-    const password = formData.get("password") as string;
-    const confirmPassword = formData.get("confirmPassword") as string;
-
-    // Validasi sederhana
-    if (password !== confirmPassword) {
-      alert("Password dan konfirmasi password tidak cocok!");
-      setIsLoading(false);
+  const handleSubmit = async (newPassword: string) => {
+    if (!token) {
+      setError("Token reset password tidak valid");
       return;
     }
 
-    // Simulasi loading
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-    setIsLoading(false);
-    setIsSuccess(true);
+    setIsLoading(true);
+    setError(null);
 
-    // Di sini Anda bisa menambahkan logika reset password ke backend
-    console.log("Reset password dengan:", { password });
+    try {
+      const response = await fetch('http://localhost:3000/api/auth/reset-password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          token: token,
+          password: newPassword
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        let errorMessage = "Gagal mengubah password";
+        
+        if (data.message?.includes("Invalid or expired reset token")) {
+          errorMessage = "Token reset password tidak valid atau sudah kadaluarsa";
+        } else if (data.message?.includes("Password must be at least 8 characters long")) {
+          errorMessage = "Password minimal 8 karakter";
+        } else if (data.message) {
+          errorMessage = data.message;
+        }
+
+        setError(errorMessage);
+        return;
+      }
+
+      // Show success modal
+      setShowSuccessModal(true);
+      
+    } catch (error) {
+      console.error('Reset password failed:', error);
+      setError("Terjadi kesalahan saat mengubah password. Silakan coba lagi nanti.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleBackToLogin = () => {
     router.push("/login");
   };
 
+  const handleCloseModal = () => {
+    setShowSuccessModal(false);
+    handleBackToLogin();
+  };
+
+  // Don't render page if token hasn't been retrieved or is invalid
+  if (token === null) {
+    return (
+      <div className="h-[100dvh] flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Memeriksa token reset password...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="h-[100dvh] flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-card rounded-lg border border-border p-6 text-center">
+          <div className="text-red-500 mb-4">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <h2 className="text-xl font-semibold mb-2">Token Tidak Valid</h2>
+          <p className="text-muted-foreground mb-6">{error}</p>
+          <button
+            onClick={handleBackToLogin}
+            className="w-full bg-primary text-primary-foreground py-3 rounded-lg font-medium hover:bg-primary/90 transition-colors"
+          >
+            Kembali ke Halaman Login
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <ResetPasswordPage
-      title="Reset Password"
-      description="Masukkan password baru Anda"
-      successDescription="Password Anda telah berhasil direset"
-      heroImageSrc="https://images.unsplash.com/photo-1642615835477-d303d7dc9ee9?w=2160&q=80"
-      testimonials={sampleTestimonials}
-      onSubmit={handleSubmit}
-      onBackToLogin={handleBackToLogin}
-      isLoading={isLoading}
-      isSuccess={isSuccess}
-    />
+    <div className="relative">
+      {/* Success Modal */}
+      <ResetPasswordSuccessModal
+        onClose={handleCloseModal}
+        onBackToLogin={handleBackToLogin}
+        isOpen={showSuccessModal}
+      />
+
+      <ResetPasswordPage
+        title="Reset Password"
+        description="Masukkan password baru Anda"
+        heroImageSrc="https://images.unsplash.com/photo-1642615835477-d303d7dc9ee9?w=2160&q=80"
+        testimonials={sampleTestimonials}
+        onSubmit={handleSubmit}
+        onBackToLogin={handleBackToLogin}
+        isLoading={isLoading}
+        error={error}
+      />
+    </div>
   );
 }

@@ -2,10 +2,10 @@ import React, { useState } from "react";
 import {
   ArrowLeft,
   Loader2,
-  CircleCheck as CheckCircle2,
   Eye,
   EyeOff,
 } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
 
 // --- TYPE DEFINITIONS ---
 
@@ -19,21 +19,22 @@ export interface Testimonial {
 interface ResetPasswordPageProps {
   title?: React.ReactNode;
   description?: React.ReactNode;
-  successDescription?: React.ReactNode;
   heroImageSrc?: string;
   testimonials?: Testimonial[];
-  onSubmit?: (event: React.FormEvent<HTMLFormElement>) => void;
+  onSubmit?: (password: string) => void;
   onBackToLogin?: () => void;
   isLoading?: boolean;
-  isSuccess?: boolean;
+  error?: string | null;
 }
 
 // --- SUB-COMPONENTS ---
 
 const GlassInputWrapper = ({ children }: { children: React.ReactNode }) => (
-  <div className="rounded-lg border border-border bg-foreground/5 backdrop-blur-sm transition-colors focus-within:border-violet-400/70 focus-within:bg-violet-500/10">
-    {children}
-  </div>
+  <Card className="rounded-lg border bg-card/5 text-card-foreground shadow-sm transition-all duration-300 border-gray-200 dark:border-gray-700 backdrop-blur-sm focus-within:border-violet-400/70 focus-within:bg-violet-500/10">
+    <CardContent className="p-0">
+      {children}
+    </CardContent>
+  </Card>
 );
 
 const PasswordInput = ({
@@ -82,21 +83,87 @@ const TestimonialCard = ({
   testimonial: Testimonial;
   delay: string;
 }) => (
-  <div
-    className={`animate-testimonial ${delay} flex items-start gap-3 rounded-lg bg-card/40 dark:bg-zinc-800/40 backdrop-blur-xl border border-white/10 p-5 w-64`}
-  >
-    <img
-      src={testimonial.avatarSrc}
-      className="h-10 w-10 object-cover rounded-lg"
-      alt="avatar"
-    />
-    <div className="text-sm leading-snug">
-      <p className="flex items-center gap-1 font-medium">{testimonial.name}</p>
-      <p className="text-muted-foreground">{testimonial.handle}</p>
-      <p className="mt-1 text-foreground/80">{testimonial.text}</p>
-    </div>
-  </div>
+  <Card className={`animate-testimonial ${delay} rounded-lg border bg-card/40 text-card-foreground shadow-sm transition-all duration-300 backdrop-blur-xl border-white/10 w-64`}>
+    <CardContent className="p-5">
+      <div className="flex items-start gap-3">
+        <img
+          src={testimonial.avatarSrc}
+          className="h-10 w-10 object-cover rounded-lg"
+          alt="avatar"
+        />
+        <div className="text-sm leading-snug">
+          <p className="flex items-center gap-1 font-medium">{testimonial.name}</p>
+          <p className="text-muted-foreground">{testimonial.handle}</p>
+          <p className="mt-1 text-foreground/80">{testimonial.text}</p>
+        </div>
+      </div>
+    </CardContent>
+  </Card>
 );
+
+const ValidationMessage = ({
+  message,
+  type = "error",
+}: {
+  message: string;
+  type?: "error" | "info";
+}) => (
+  <p
+    className={`text-xs mt-1 ${
+      type === "error" ? "text-red-500" : "text-blue-500"
+    } flex items-center gap-1`}
+  >
+    <span
+      className={`w-1.5 h-1.5 rounded-full ${
+        type === "error" ? "bg-red-500" : "bg-blue-500"
+      }`}
+    ></span>
+    {message}
+  </p>
+);
+
+// --- VALIDATION UTILS ---
+
+const validatePassword = (password: string): string => {
+  if (!password) return "Password harus diisi.";
+
+  const errors: string[] = [];
+
+  if (password.length < 8) {
+    errors.push("Minimal 8 karakter");
+  }
+
+  if (!/[A-Z]/.test(password)) {
+    errors.push("huruf kapital");
+  }
+
+  if (!/[a-z]/.test(password)) {
+    errors.push("huruf kecil");
+  }
+
+  if (!/[0-9]/.test(password)) {
+    errors.push("angka");
+  }
+
+  if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) {
+    errors.push("simbol");
+  }
+
+  if (errors.length > 0) {
+    return `Password tidak memenuhi kriteria (${errors.join(", ")}).`;
+  }
+
+  return "";
+};
+
+const validateConfirmPassword = (
+  password: string,
+  confirmPassword: string
+): string => {
+  if (!confirmPassword) return "Konfirmasi password harus diisi.";
+  if (password !== confirmPassword) return "Konfirmasi password tidak cocok.";
+  return "";
+};
 
 // --- MAIN COMPONENT ---
 
@@ -107,34 +174,73 @@ export const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({
     </span>
   ),
   description = "Masukkan password baru Anda",
-  successDescription = "Password Anda telah berhasil direset",
   heroImageSrc,
   testimonials = [],
   onSubmit,
   onBackToLogin,
   isLoading = false,
-  isSuccess = false,
+  error = null,
 }) => {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [touched, setTouched] = useState({
+    password: false,
+    confirmPassword: false,
+  });
+  const [validationErrors, setValidationErrors] = useState({
+    password: "",
+    confirmPassword: "",
+  });
 
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  // Real-time validation on input change
+  const handleInputChange = (setter: React.Dispatch<React.SetStateAction<string>>, field: keyof typeof touched) => {
+    return (e: React.ChangeEvent<HTMLInputElement>) => {
+      setter(e.target.value);
+      
+      // Mark field as touched when user starts typing
+      if (!touched[field]) {
+        setTouched(prev => ({ ...prev, [field]: true }));
+      }
+    };
+  };
 
-    // Validasi sederhana di client side
-    if (password !== confirmPassword) {
-      alert("Password dan konfirmasi password tidak cocok!");
+  // Validate form on submit
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+
+    // Mark all fields as touched
+    setTouched({ password: true, confirmPassword: true });
+
+    // Validate all fields
+    const passwordError = validatePassword(password);
+    const confirmPasswordError = validateConfirmPassword(password, confirmPassword);
+
+    setValidationErrors({
+      password: passwordError,
+      confirmPassword: confirmPasswordError,
+    });
+
+    // If there are validation errors, don't submit
+    if (passwordError || confirmPasswordError) {
       return;
     }
 
-    if (password.length < 6) {
-      alert("Password harus minimal 6 karakter!");
-      return;
-    }
+    // Submit the form with the new password
+    onSubmit?.(password);
+  };
 
-    onSubmit?.(event);
+  // Check if password meets all criteria for progress indicator
+  const getPasswordStrength = () => {
+    const criteria = [
+      password.length >= 8,
+      /[A-Z]/.test(password),
+      /[a-z]/.test(password),
+      /[0-9]/.test(password),
+      /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password),
+    ];
+    return criteria.filter(Boolean).length;
   };
 
   return (
@@ -147,91 +253,127 @@ export const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({
               {title}
             </h1>
 
-            {!isSuccess ? (
-              <>
-                <p className="animate-element animate-delay-200 text-muted-foreground">
-                  {description}
-                </p>
+            <>
+              <p className="animate-element animate-delay-200 text-muted-foreground">
+                {description}
+              </p>
 
-                <form className="space-y-5" onSubmit={handleSubmit}>
-                  <div className="animate-element animate-delay-300">
-                    <label className="text-sm font-medium text-muted-foreground">
-                      Password Baru
-                    </label>
-                    <GlassInputWrapper>
-                      <PasswordInput
-                        name="password"
-                        placeholder="Masukkan password baru"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        showPassword={showPassword}
-                        onToggleVisibility={() =>
-                          setShowPassword(!showPassword)
-                        }
-                      />
-                    </GlassInputWrapper>
-                  </div>
+              {/* Global Error Message */}
+              {error && (
+                <Card className="rounded-lg border bg-red-500/10 text-card-foreground shadow-sm border-red-500/20 animate-element animate-delay-250">
+                  <CardContent className="p-4">
+                    <p className="text-red-500 text-sm text-center">{error}</p>
+                  </CardContent>
+                </Card>
+              )}
 
-                  <div className="animate-element animate-delay-400">
-                    <label className="text-sm font-medium text-muted-foreground">
-                      Konfirmasi Password Baru
-                    </label>
-                    <GlassInputWrapper>
-                      <PasswordInput
-                        name="confirmPassword"
-                        placeholder="Konfirmasi password baru"
-                        value={confirmPassword}
-                        onChange={(e) => setConfirmPassword(e.target.value)}
-                        showPassword={showConfirmPassword}
-                        onToggleVisibility={() =>
-                          setShowConfirmPassword(!showConfirmPassword)
-                        }
-                      />
-                    </GlassInputWrapper>
-                  </div>
+              <form className="space-y-5" onSubmit={handleSubmit}>
+                <div className="animate-element animate-delay-300">
+                  <label className="text-sm font-medium text-muted-foreground">
+                    Password Baru
+                  </label>
+                  <GlassInputWrapper>
+                    <PasswordInput
+                      name="password"
+                      placeholder="Minimal 8 karakter dengan huruf kapital, huruf kecil, angka, dan simbol"
+                      value={password}
+                      onChange={handleInputChange(setPassword, "password")}
+                      showPassword={showPassword}
+                      onToggleVisibility={() =>
+                        setShowPassword(!showPassword)
+                      }
+                    />
+                  </GlassInputWrapper>
 
-                  <button
-                    type="submit"
-                    disabled={isLoading}
-                    className="animate-element animate-delay-500 w-full rounded-lg bg-primary py-4 font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                  >
-                    {isLoading ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        Mengatur Ulang...
-                      </>
-                    ) : (
-                      "Atur Ulang Password"
-                    )}
-                  </button>
+                  {/* Password strength indicator */}
+                  {password && (
+                    <div className="mt-2">
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="text-xs text-muted-foreground">
+                          Kekuatan password:
+                        </span>
+                        <span className="text-xs font-medium">
+                          {getPasswordStrength()}/5 kriteria terpenuhi
+                        </span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-1.5">
+                        <div
+                          className={`h-1.5 rounded-full transition-all duration-300 ${
+                            getPasswordStrength() === 5
+                              ? "bg-green-500"
+                              : getPasswordStrength() === 4
+                              ? "bg-yellow-500"
+                              : getPasswordStrength() === 3
+                              ? "bg-orange-500"
+                              : getPasswordStrength() === 2
+                              ? "bg-orange-400"
+                              : "bg-red-500"
+                          }`}
+                          style={{
+                            width: `${(getPasswordStrength() / 5) * 100}%`,
+                          }}
+                        ></div>
+                      </div>
+                    </div>
+                  )}
 
-                  <button
-                    type="button"
-                    onClick={onBackToLogin}
-                    className="animate-element animate-delay-600 w-full flex items-center justify-center gap-2 border border-border rounded-lg py-4 hover:bg-secondary transition-colors"
-                  >
-                    <ArrowLeft className="w-4 h-4" />
-                    Kembali ke Login
-                  </button>
-                </form>
-              </>
-            ) : (
-              <div className="animate-element animate-delay-200 space-y-5">
-                <div className="flex justify-center">
-                  <CheckCircle2 className="h-16 w-16 text-success" />
+                  {touched.password && validationErrors.password && (
+                    <ValidationMessage
+                      message={validationErrors.password}
+                      type="error"
+                    />
+                  )}
                 </div>
-                <p className="text-muted-foreground text-center">
-                  {successDescription}
-                </p>
+
+                <div className="animate-element animate-delay-400">
+                  <label className="text-sm font-medium text-muted-foreground">
+                    Konfirmasi Password Baru
+                  </label>
+                  <GlassInputWrapper>
+                    <PasswordInput
+                      name="confirmPassword"
+                      placeholder="Konfirmasi password baru"
+                      value={confirmPassword}
+                      onChange={handleInputChange(setConfirmPassword, "confirmPassword")}
+                      showPassword={showConfirmPassword}
+                      onToggleVisibility={() =>
+                        setShowConfirmPassword(!showConfirmPassword)
+                      }
+                    />
+                  </GlassInputWrapper>
+                  {touched.confirmPassword && validationErrors.confirmPassword && (
+                    <ValidationMessage
+                      message={validationErrors.confirmPassword}
+                      type="error"
+                    />
+                  )}
+                </div>
+
                 <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="animate-element animate-delay-500 w-full rounded-lg bg-primary py-4 font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Mengatur Ulang...
+                    </>
+                  ) : (
+                    "Atur Ulang Password"
+                  )}
+                </button>
+
+                <button
+                  type="button"
                   onClick={onBackToLogin}
-                  className="animate-element animate-delay-300 w-full flex items-center justify-center gap-2 border border-border rounded-lg py-4 hover:bg-secondary transition-colors"
+                  className="animate-element animate-delay-600 w-full flex items-center justify-center gap-2 border border-border rounded-lg py-4 hover:bg-secondary transition-colors"
                 >
                   <ArrowLeft className="w-4 h-4" />
-                  Kembali ke Halaman Login
+                  Kembali ke Login
                 </button>
-              </div>
-            )}
+              </form>
+            </>
           </div>
         </div>
       </section>

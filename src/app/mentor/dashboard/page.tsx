@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import MentorLayout from '@/components/mentor/mentor-layout';
+import ProtectedRoute from "@/components/ui/protected-route";
 import { useState } from 'react';
 
 const mentorCourses = [
@@ -134,6 +135,7 @@ export default function MentorDashboard() {
   const averageRating = (mentorCourses.reduce((sum, course) => sum + course.rating, 0) / mentorCourses.length).toFixed(1);
 
   return (
+    <ProtectedRoute allowedRoles={["MENTOR"]}>
     <MentorLayout>
       <div className="space-y-8">
         {/* Header Section */}
@@ -437,5 +439,6 @@ export default function MentorDashboard() {
         </div>
       </div>
     </MentorLayout>
+    </ProtectedRoute>
   );
 }

@@ -20,6 +20,7 @@ import {
   Clock
 } from 'lucide-react';
 import AdminLayout from '@/components/admin/admin-layout';
+import ProtectedRoute from "@/components/ui/protected-route";
 import {
   Table,
   TableBody,
@@ -223,6 +224,7 @@ export default function AdminMentors() {
   };
 
   return (
+    <ProtectedRoute allowedRoles={["ADMIN"]}>
     <AdminLayout>
       <div className="space-y-8">
         {/* Header Section */}
@@ -477,5 +479,6 @@ export default function AdminMentors() {
         </Card>
       </div>
     </AdminLayout>
+    </ProtectedRoute>
   );
 }
