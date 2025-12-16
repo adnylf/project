@@ -1,111 +1,96 @@
-export interface JWTPayload {
+// Auth Types
+import { UserRole, UserStatus } from '@prisma/client';
+
+// JWT Payload
+export interface JwtPayload {
   userId: string;
   email: string;
-  role: string;
+  role: UserRole;
   iat?: number;
   exp?: number;
 }
 
-/**
- * Token Pair
- */
-export interface TokenPair {
-  accessToken: string;
-  refreshToken: string;
+// Auth User (extracted from token)
+export interface AuthUser {
+  userId: string;
+  email: string;
+  role: UserRole;
 }
 
-/**
- * Login Credentials
- */
+// Login credentials
 export interface LoginCredentials {
   email: string;
   password: string;
 }
 
-/**
- * Registration Data
- */
-export interface RegistrationData {
+// Register data
+export interface RegisterData {
+  full_name: string;
   email: string;
   password: string;
-  name: string;
-  disability_type?:
-    | "BUTA_WARNA"
-    | "DISLEKSIA"
-    | "KOGNITIF"
-    | "LOW_VISION"
-    | "MENTOR"
-    | "MOTORIK"
-    | "TUNARUNGU";
-  role?: "STUDENT" | "MENTOR";
+  confirm_password?: string;
 }
 
-/**
- * Auth Response
- */
+// Token pair
+export interface TokenPair {
+  accessToken: string;
+  refreshToken: string;
+}
+
+// Auth response
 export interface AuthResponse {
-  user: {
-    id: string;
-    email: string;
-    name: string;
-    disability_type?: string | null;
-    role: string;
-  };
+  user: SessionUser;
   tokens: TokenPair;
 }
 
-/**
- * Password Reset Request
- */
+// Session user (safe to expose)
+export interface SessionUser {
+  id: string;
+  email: string;
+  full_name: string;
+  avatar_url: string | null;
+  role: UserRole;
+  status: UserStatus;
+}
+
+// Password reset request
 export interface PasswordResetRequest {
   email: string;
 }
 
-/**
- * Password Reset
- */
+// Password reset
 export interface PasswordReset {
   token: string;
-  newPassword: string;
+  password: string;
+  confirm_password: string;
 }
 
-/**
- * Change Password
- */
-export interface ChangePassword {
-  currentPassword: string;
-  newPassword: string;
+// Password change
+export interface PasswordChange {
+  current_password: string;
+  new_password: string;
+  confirm_password: string;
 }
 
-/**
- * Email Verification
- */
+// Email verification
 export interface EmailVerification {
   token: string;
 }
 
-/**
- * Session Data
- */
-export interface SessionData {
-  userId: string;
-  email: string;
-  role: string;
-  lastActivity: Date;
+// Token verification result
+export interface TokenVerificationResult {
+  valid: boolean;
+  expired?: boolean;
+  payload?: JwtPayload;
 }
 
-/**
- * User Profile
- */
-export interface UserProfile {
-  id: string;
-  email: string;
-  name: string;
-  disability_type?: string | null;
-  role: string;
-  status: string;
-  avatar_url?: string;
-  bio?: string;
-  email_verified: boolean;
-  created_at: Date;
+// Refresh token request
+export interface RefreshTokenRequest {
+  refreshToken: string;
+}
+
+// Permission check
+export interface PermissionCheck {
+  allowed: boolean;
+  reason?: string;
 }

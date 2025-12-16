@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ResetPasswordPage, Testimonial } from "@/components/ui/reset-password";
-import { ResetPasswordSuccessModal } from "@/components/ui/reset-password-modal";
+import { ResetPasswordPage, Testimonial } from "@/components/auth/reset-password";
+import { ResetPasswordSuccessModal } from "@/components/modal/reset-password-modal";
 
 export default function ResetPasswordPageComponent() {
   const [isLoading, setIsLoading] = useState(false);

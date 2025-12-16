@@ -1,604 +1,767 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
+import { useState, useEffect, useCallback, useRef } from "react";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
 import {
+  Award,
   Search,
-  Filter,
+  Loader2,
+  ChevronLeft,
+  ChevronRight,
+  Plus,
+  Upload,
+  FileText,
+  Trash2,
   Eye,
+  CheckCircle,
+  Clock,
+  XCircle,
+  AlertCircle,
+  Code,
   Download,
   Edit,
-  Trash2,
-  Plus,
-  MoreHorizontal,
-  Award,
-  FileText,
-  CheckCircle,
-  XCircle,
-  Upload,
-  Star
-} from 'lucide-react';
-import AdminLayout from '@/components/admin/admin-layout';
-import ProtectedRoute from "@/components/ui/protected-route";
+} from "lucide-react";
+import AdminLayout from "@/components/admin/admin-layout";
+import ProtectedRoute from "@/components/auth/protected-route";
+import SweetAlert, { AlertType } from "@/components/ui/sweet-alert";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
+} from "@/components/ui/select";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
 
-// Data dummy
-const certificateTemplates = [
-  {
-    id: 1,
-    name: 'Template Standar',
-    description: 'Template sertifikat default untuk semua kursus',
-    category: 'General',
-    isDefault: true,
-    createdAt: '2024-01-15',
-    updatedAt: '2024-06-20',
-    usageCount: 1250
-  },
-  {
-    id: 2,
-    name: 'Template Programming',
-    description: 'Khusus untuk kursus programming dan coding',
-    category: 'Programming',
-    isDefault: false,
-    createdAt: '2024-02-10',
-    updatedAt: '2024-08-15',
-    usageCount: 890
-  },
-  {
-    id: 3,
-    name: 'Template Design',
-    description: 'Untuk kursus design dan kreatif',
-    category: 'Design',
-    isDefault: false,
-    createdAt: '2024-03-05',
-    updatedAt: '2024-07-30',
-    usageCount: 420
-  },
-  {
-    id: 4,
-    name: 'Template Business',
-    description: 'Khusus kursus bisnis dan manajemen',
-    category: 'Business',
-    isDefault: false,
-    createdAt: '2024-04-20',
-    updatedAt: '2024-09-10',
-    usageCount: 320
+const API_BASE_URL = "http://localhost:3000/api";
+
+interface Certificate {
+  id: string;
+  certificate_number: string;
+  status: "PENDING" | "ISSUED" | "REVOKED";
+  issued_at: string | null;
+  pdf_url: string | null;
+  created_at: string;
+  user: { id: string; full_name: string; email: string };
+  course: { id: string; title: string };
+}
+
+interface Template {
+  id: string;
+  key: string;
+  value: string;
+  created_at: string;
+}
+
+interface ParsedTemplate {
+  name: string;
+  content: string;
+  is_default: boolean;
+}
+
+interface Pagination {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
+const formatDate = (dateString: string) => {
+  return new Date(dateString).toLocaleDateString("id-ID", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+};
+
+const getStatusBadge = (status: string) => {
+  switch (status) {
+    case "ISSUED":
+      return <Badge className="bg-[#008A00] text-white border border-[#008A00] pointer-events-none"><CheckCircle className="h-3 w-3 mr-1" />Terbit</Badge>;
+    case "PENDING":
+      return <Badge className="bg-[#F4B400] text-[#1A1A1A] border border-[#F4B400] pointer-events-none"><Clock className="h-3 w-3 mr-1" />Pending</Badge>;
+    case "REVOKED":
+      return <Badge className="bg-[#D93025] text-white border border-[#D93025] pointer-events-none"><XCircle className="h-3 w-3 mr-1" />Dicabut</Badge>;
+    default:
+      return <Badge className="bg-gray-100 text-gray-800 border border-gray-300 pointer-events-none">{status}</Badge>;
   }
-];
+};
 
-const issuedCertificates = [
-  {
-    id: 'CERT-2024-001',
-    user: 'Ahmad Fauzi',
-    course: 'Web Development Basics',
-    mentor: 'Ahmad Hidayat',
-    issueDate: '2024-10-15',
-    expirationDate: '2025-10-15',
-    status: 'active',
-    template: 'Template Standar',
-    certificateUrl: '/certificates/ahmad-fauzi-web-dev.pdf'
-  },
-  {
-    id: 'CERT-2024-002',
-    user: 'Sarah Putri',
-    course: 'JavaScript Advanced',
-    mentor: 'Sarah Johnson',
-    issueDate: '2024-10-14',
-    expirationDate: '2025-10-14',
-    status: 'active',
-    template: 'Template Programming',
-    certificateUrl: '/certificates/sarah-putri-js-advanced.pdf'
-  },
-  {
-    id: 'CERT-2024-003',
-    user: 'John Smith',
-    course: 'UI/UX Design Fundamentals',
-    mentor: 'Maria Garcia',
-    issueDate: '2024-10-13',
-    expirationDate: '2025-10-13',
-    status: 'revoked',
-    template: 'Template Design',
-    certificateUrl: '/certificates/john-smith-uiux.pdf'
-  },
-  {
-    id: 'CERT-2024-004',
-    user: 'Maria Chen',
-    course: 'Python Data Science',
-    mentor: 'David Lee',
-    issueDate: '2024-10-12',
-    expirationDate: '2025-10-12',
-    status: 'active',
-    template: 'Template Programming',
-    certificateUrl: '/certificates/maria-chen-python.pdf'
-  },
-  {
-    id: 'CERT-2024-005',
-    user: 'David Lee',
-    course: 'Mobile App Development',
-    mentor: 'Robert Brown',
-    issueDate: '2024-10-11',
-    expirationDate: '2025-10-11',
-    status: 'expired',
-    template: 'Template Standar',
-    certificateUrl: '/certificates/david-lee-mobile.pdf'
-  },
-  {
-    id: 'CERT-2024-006',
-    user: 'Lisa Wang',
-    course: 'Cloud Computing',
-    mentor: 'Emily Davis',
-    issueDate: '2024-10-10',
-    expirationDate: '2025-10-10',
-    status: 'active',
-    template: 'Template Standar',
-    certificateUrl: '/certificates/lisa-wang-cloud.pdf'
-  }
-];
+const DEFAULT_TEMPLATE = `<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: 'Georgia', serif; text-align: center; padding: 60px; background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); }
+    .certificate { border: 8px solid #005EB8; padding: 60px; background: white; max-width: 800px; margin: auto; box-shadow: 0 10px 40px rgba(0,0,0,0.1); }
+    .header { font-size: 42px; color: #005EB8; margin-bottom: 20px; font-weight: bold; }
+    .subtitle { font-size: 18px; color: #666; margin-bottom: 40px; }
+    .recipient { font-size: 32px; color: #333; margin: 30px 0; font-style: italic; }
+    .course { font-size: 24px; color: #005EB8; margin: 20px 0; font-weight: bold; }
+    .date { font-size: 14px; color: #888; margin-top: 40px; }
+    .signature { margin-top: 60px; border-top: 2px solid #333; width: 200px; margin-left: auto; margin-right: auto; padding-top: 10px; }
+    .signature img { max-height: 60px; }
+    .cert-number { font-size: 12px; color: #aaa; margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <div class="certificate">
+    <div class="header">SERTIFIKAT</div>
+    <div class="subtitle">Dengan bangga diberikan kepada</div>
+    <div class="recipient">{{STUDENT_NAME}}</div>
+    <p>Telah berhasil menyelesaikan kursus</p>
+    <div class="course">{{COURSE_TITLE}}</div>
+    <p>dengan mentor {{MENTOR_NAME}}</p>
+    <div class="date">Diterbitkan pada {{ISSUED_DATE}}</div>
+    <div class="signature">
+      {{SIGNATURE_IMAGE}}
+      <p>{{MENTOR_NAME}}</p>
+    </div>
+    <div class="cert-number">No. Sertifikat: {{CERTIFICATE_NUMBER}}</div>
+  </div>
+</body>
+</html>`;
 
-export default function AdminCertificates() {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterStatus, setFilterStatus] = useState('all');
-  const [filterTemplate, setFilterTemplate] = useState('all');
-  const [activeTab, setActiveTab] = useState('templates');
-  const [isClient, setIsClient] = useState(false);
+export default function AdminCertificatesPage() {
+  const [activeTab, setActiveTab] = useState("certificates");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  // Certificates state
+  const [certificates, setCertificates] = useState<Certificate[]>([]);
+  const [pagination, setPagination] = useState<Pagination>({ page: 1, limit: 10, total: 0, totalPages: 0 });
+  const [filterStatus, setFilterStatus] = useState("all");
+  const [searchTerm, setSearchTerm] = useState("");
+
+  // Templates state
+  const [templates, setTemplates] = useState<Template[]>([]);
+  const [loadingTemplates, setLoadingTemplates] = useState(false);
+  const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
+  const [editingTemplate, setEditingTemplate] = useState<Template | null>(null);
+  const [templateForm, setTemplateForm] = useState({ name: "", content: DEFAULT_TEMPLATE, is_default: false });
+  const [saving, setSaving] = useState(false);
+  const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
+  const [templateToDelete, setTemplateToDelete] = useState<Template | null>(null);
+  
+  // SweetAlert states
+  const [showAlert, setShowAlert] = useState(false);
+  const [alertConfig, setAlertConfig] = useState<{
+    type: AlertType;
+    title: string;
+    message: string;
+  }>({
+    type: "success",
+    title: "",
+    message: "",
+  });
+  const [showDeleteAlert, setShowDeleteAlert] = useState(false);
+  
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const getAuthToken = useCallback(() => typeof window !== "undefined" ? localStorage.getItem("token") || localStorage.getItem("accessToken") : null, []);
+
+  // Fetch certificates
+  const fetchCertificates = useCallback(async () => {
+    try {
+      setLoading(true);
+      const token = getAuthToken();
+      const params = new URLSearchParams({
+        page: pagination.page.toString(),
+        limit: pagination.limit.toString(),
+      });
+      if (filterStatus !== "all") params.append("status", filterStatus);
+
+      const response = await fetch(`${API_BASE_URL}/admin/certificates?${params}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!response.ok) throw new Error("Gagal memuat sertifikat");
+
+      const data = await response.json();
+      setCertificates(data.certificates || []);
+      setPagination(prev => ({
+        ...prev,
+        total: data.pagination?.total || 0,
+        totalPages: data.pagination?.totalPages || 0,
+      }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Terjadi kesalahan");
+    } finally {
+      setLoading(false);
+    }
+  }, [getAuthToken, pagination.page, pagination.limit, filterStatus]);
+
+  // Fetch templates
+  const fetchTemplates = useCallback(async () => {
+    try {
+      setLoadingTemplates(true);
+      const token = getAuthToken();
+      const response = await fetch(`${API_BASE_URL}/admin/certificates/templates`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!response.ok) throw new Error("Gagal memuat template");
+
+      const data = await response.json();
+      setTemplates(data.templates || []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Terjadi kesalahan");
+    } finally {
+      setLoadingTemplates(false);
+    }
+  }, [getAuthToken]);
 
   useEffect(() => {
-    setIsClient(true);
-  }, []);
+    fetchCertificates();
+    fetchTemplates();
+  }, [fetchCertificates, fetchTemplates]);
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'active':
-        return <Badge className="bg-[#008A00]">Aktif</Badge>;
-      case 'revoked':
-        return <Badge className="bg-[#D93025]">Dicabut</Badge>;
-      case 'expired':
-        return <Badge className="bg-[#F4B400]">Kadaluarsa</Badge>;
-      default:
-        return <Badge>Unknown</Badge>;
+  // Parse template value
+  const parseTemplate = (template: Template): ParsedTemplate => {
+    try {
+      return JSON.parse(template.value);
+    } catch {
+      return { name: "Unknown", content: "", is_default: false };
     }
   };
 
-  const getDefaultBadge = (isDefault: boolean) => {
-    if (isDefault) {
-      return <Badge className="bg-[#005EB8]">Default</Badge>;
+  // Handle file upload
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const content = event.target?.result as string;
+      setTemplateForm(prev => ({ ...prev, content, name: file.name.replace(".html", "") }));
+    };
+    reader.readAsText(file);
+  };
+
+  // Open create template dialog
+  const openCreateTemplate = () => {
+    setEditingTemplate(null);
+    setTemplateForm({ name: "", content: DEFAULT_TEMPLATE, is_default: false });
+    setTemplateDialogOpen(true);
+  };
+
+  // Open edit template dialog
+  const openEditTemplate = (template: Template) => {
+    const parsed = parseTemplate(template);
+    setEditingTemplate(template);
+    setTemplateForm({ name: parsed.name, content: parsed.content, is_default: parsed.is_default });
+    setTemplateDialogOpen(true);
+  };
+
+  // Save template
+  const handleSaveTemplate = async () => {
+    if (!templateForm.name.trim() || !templateForm.content.trim()) {
+      setAlertConfig({
+        type: "error",
+        title: "Error",
+        message: "Nama dan konten template wajib diisi"
+      });
+      setShowAlert(true);
+      return;
     }
-    return null;
+
+    try {
+      setSaving(true);
+      setError(null);
+      const token = getAuthToken();
+
+      const url = editingTemplate
+        ? `${API_BASE_URL}/admin/certificates/templates/${editingTemplate.id}`
+        : `${API_BASE_URL}/admin/certificates/templates`;
+
+      const response = await fetch(url, {
+        method: editingTemplate ? "PUT" : "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(templateForm),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Gagal menyimpan template");
+      }
+
+      setAlertConfig({
+        type: "success",
+        title: "Berhasil",
+        message: editingTemplate ? "Template berhasil diperbarui" : "Template berhasil dibuat"
+      });
+      setShowAlert(true);
+      
+      setTemplateDialogOpen(false);
+      fetchTemplates();
+    } catch (err) {
+      setAlertConfig({
+        type: "error",
+        title: "Gagal",
+        message: err instanceof Error ? err.message : "Gagal menyimpan template"
+      });
+      setShowAlert(true);
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const filteredCertificates = issuedCertificates.filter((cert) => {
-    const matchesSearch = 
-      cert.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      cert.user.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      cert.course.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = filterStatus === 'all' || cert.status === filterStatus;
-    const matchesTemplate = filterTemplate === 'all' || cert.template === filterTemplate;
-    
-    return matchesSearch && matchesStatus && matchesTemplate;
-  });
+  // Delete template
+  const handleDeleteTemplate = async () => {
+    if (!templateToDelete) return;
 
-  const handleSetDefaultTemplate = (templateId: number) => {
-    console.log(`Set default template: ${templateId}`);
-    // API call: PUT /api/admin/certificates/set-default
+    try {
+      setSaving(true);
+      const token = getAuthToken();
+      const response = await fetch(`${API_BASE_URL}/admin/certificates/templates/${templateToDelete.id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!response.ok) throw new Error("Gagal menghapus template");
+
+      setAlertConfig({
+        type: "success",
+        title: "Berhasil",
+        message: "Template berhasil dihapus"
+      });
+      setShowAlert(true);
+      
+      setShowDeleteAlert(false);
+      setTemplateToDelete(null);
+      fetchTemplates();
+    } catch (err) {
+      setAlertConfig({
+        type: "error",
+        title: "Gagal",
+        message: err instanceof Error ? err.message : "Gagal menghapus template"
+      });
+      setShowAlert(true);
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const handleEditTemplate = (templateId: number) => {
-    console.log(`Edit template: ${templateId}`);
-    // API call: GET /api/admin/certificates/templates/:id
+  // Open delete confirmation
+  const openDeleteConfirmation = (template: Template) => {
+    setTemplateToDelete(template);
+    setShowDeleteAlert(true);
   };
 
-  const handleDeleteTemplate = (templateId: number) => {
-    console.log(`Delete template: ${templateId}`);
-    // API call: DELETE /api/admin/certificates/templates/:id
-  };
-
-  const handleRevokeCertificate = (certificateId: string) => {
-    console.log(`Revoke certificate: ${certificateId}`);
-    // API call: POST /api/certificates/:id/revoke
-  };
-
-  const handleDownloadCertificate = (certificateUrl: string) => {
-    console.log(`Download certificate: ${certificateUrl}`);
-    // Implement download functionality
-  };
-
-  const handleUploadTemplate = () => {
-    console.log('Upload new template');
-    // Implement upload functionality
-  };
-
+  // Stats
   const stats = {
-    totalTemplates: certificateTemplates.length,
-    totalIssued: issuedCertificates.length,
-    activeCertificates: issuedCertificates.filter(c => c.status === 'active').length,
-    revokedCertificates: issuedCertificates.filter(c => c.status === 'revoked').length
+    total: pagination.total,
+    issued: certificates.filter(c => c.status === "ISSUED").length,
+    pending: certificates.filter(c => c.status === "PENDING").length,
+    templates: templates.length,
   };
 
   return (
     <ProtectedRoute allowedRoles={["ADMIN"]}>
-    <AdminLayout>
-      <div className="space-y-8">
-        {/* Header Section */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 animate-fadeIn">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-              Certificates Management
-            </h1>
-            <p className="text-gray-600 dark:text-gray-400">
-              Template dan sertifikat yang dikeluarkan
-            </p>
-          </div>
-          <div className="flex gap-3">
-            <Button 
-              className="bg-[#005EB8] hover:bg-[#004A93]"
-              onClick={handleUploadTemplate}
+      <AdminLayout>
+        {/* SweetAlert Component untuk notifikasi biasa */}
+        <SweetAlert
+          type={alertConfig.type}
+          title={alertConfig.title}
+          message={alertConfig.message}
+          show={showAlert}
+          onClose={() => setShowAlert(false)}
+          duration={3000}
+          showCloseButton={true}
+        />
+
+        {/* SweetAlert untuk konfirmasi hapus template */}
+        <SweetAlert
+          type="error"
+          title="Hapus Template?"
+          message="Tindakan ini tidak dapat dibatalkan. Template akan dihapus permanen."
+          show={showDeleteAlert}
+          onClose={() => setShowDeleteAlert(false)}
+          duration={0} // Tidak auto close untuk konfirmasi
+          showCloseButton={true}
+        >
+          {/* Tombol konfirmasi */}
+          <div className="mt-6 flex gap-3">
+            <button
+              onClick={() => setShowDeleteAlert(false)}
+              disabled={saving}
+              className="flex-1 py-2 px-4 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors disabled:opacity-50 font-medium"
             >
-              <Upload className="h-4 w-4 mr-2" />
-              Upload Template
-            </Button>
+              Batal
+            </button>
+            <button
+              onClick={handleDeleteTemplate}
+              disabled={saving}
+              className="flex-1 py-2 px-4 bg-[#D93025] hover:bg-[#c41c1c] text-white rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center font-medium"
+            >
+              {saving ? (
+                <>
+                  <div className="h-5 w-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                  Menghapus...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Hapus
+                </>
+              )}
+            </button>
           </div>
-        </div>
+        </SweetAlert>
 
-        {/* Stats Cards */}
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 animate-scaleIn">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="h-12 w-12 rounded-full bg-[#005EB8]/10 flex items-center justify-center">
-                  <FileText className="h-6 w-6 text-[#005EB8]" />
-                </div>
-              </div>
-              <div className="space-y-1">
-                <p className="text-3xl font-bold text-gray-900 dark:text-white">{stats.totalTemplates}</p>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Total Template</p>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 animate-scaleIn delay-100">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="h-12 w-12 rounded-full bg-[#008A00]/10 flex items-center justify-center">
-                  <Award className="h-6 w-6 text-[#008A00]" />
-                </div>
-              </div>
-              <div className="space-y-1">
-                <p className="text-3xl font-bold text-gray-900 dark:text-white">{stats.totalIssued}</p>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Sertifikat Dikeluarkan</p>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 animate-scaleIn delay-200">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="h-12 w-12 rounded-full bg-[#008A00]/10 flex items-center justify-center">
-                  <CheckCircle className="h-6 w-6 text-[#008A00]" />
-                </div>
-              </div>
-              <div className="space-y-1">
-                <p className="text-3xl font-bold text-gray-900 dark:text-white">{stats.activeCertificates}</p>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Aktif</p>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 animate-scaleIn delay-300">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="h-12 w-12 rounded-full bg-[#D93025]/10 flex items-center justify-center">
-                  <XCircle className="h-6 w-6 text-[#D93025]" />
-                </div>
-              </div>
-              <div className="space-y-1">
-                <p className="text-3xl font-bold text-gray-900 dark:text-white">{stats.revokedCertificates}</p>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Dicabut</p>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Tabs */}
-        <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 animate-fadeSlide">
-          <CardContent className="p-0">
-            <div className="border-b border-gray-200 dark:border-gray-700">
-              <div className="flex">
-                <button
-                  onClick={() => setActiveTab('templates')}
-                  className={`px-6 py-4 border-b-2 font-medium text-sm ${
-                    activeTab === 'templates'
-                      ? 'border-[#005EB8] text-[#005EB8]'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
-                  }`}
-                >
-                  Template Sertifikat
-                </button>
-                <button
-                  onClick={() => setActiveTab('issued')}
-                  className={`px-6 py-4 border-b-2 font-medium text-sm ${
-                    activeTab === 'issued'
-                      ? 'border-[#005EB8] text-[#005EB8]'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
-                  }`}
-                >
-                  Sertifikat Dikeluarkan
-                </button>
-              </div>
+        <div className="space-y-8 max-w-6xl mx-auto">
+          {/* Header */}
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-3">
+                <Award className="h-8 w-8 text-[#005EB8]" />
+                Manajemen Sertifikat
+              </h1>
+              <p className="text-gray-600 dark:text-gray-400">
+                Kelola sertifikat dan template sertifikat platform
+              </p>
             </div>
+          </div>
 
-            {/* Tab Content */}
-            <div className="p-6">
-              {activeTab === 'templates' ? (
-                <div className="space-y-6">
-                  {/* Template Cards Grid */}
-                  <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {certificateTemplates.map((template) => (
-                      <Card 
-                        key={template.id}
-                        className={`rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md ${
-                          template.isDefault 
-                            ? 'border-[#005EB8] ring-1 ring-[#005EB8]' 
-                            : 'border-gray-200 dark:border-gray-700'
-                        }`}
-                      >
-                        <CardContent className="p-6">
-                          <div className="flex items-start justify-between mb-4">
-                            <div className="h-12 w-12 rounded-full bg-[#005EB8]/10 flex items-center justify-center">
-                              <FileText className="h-6 w-6 text-[#005EB8]" />
-                            </div>
-                            {getDefaultBadge(template.isDefault)}
-                          </div>
-                          
-                          <h3 className="font-bold text-lg text-gray-900 dark:text-white mb-2">
-                            {template.name}
-                          </h3>
-                          <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                            {template.description}
-                          </p>
-                          
-                          <div className="space-y-3">
-                            <div className="flex justify-between text-sm">
-                              <span className="text-gray-600 dark:text-gray-400">Kategori</span>
-                              <Badge variant="outline" className="text-xs">
-                                {template.category}
-                              </Badge>
-                            </div>
-                            <div className="flex justify-between text-sm">
-                              <span className="text-gray-600 dark:text-gray-400">Digunakan</span>
-                              <span className="font-medium">{template.usageCount} kali</span>
-                            </div>
-                            <div className="flex justify-between text-sm">
-                              <span className="text-gray-600 dark:text-gray-400">Update</span>
-                              <span className="text-gray-500">
-                                {new Date(template.updatedAt).toLocaleDateString('id-ID')}
-                              </span>
-                            </div>
-                          </div>
+          {/* Alerts */}
+          {error && (
+            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 text-[#D93025] flex items-center gap-2">
+              <AlertCircle className="h-5 w-5" />{error}
+            </div>
+          )}
+          {success && (
+            <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4 text-[#008A00] flex items-center gap-2">
+              <CheckCircle className="h-5 w-5" />{success}
+            </div>
+          )}
 
-                          <div className="flex gap-2 mt-6">
-                            {!template.isDefault && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="flex-1 border-gray-300 dark:border-gray-600"
-                                onClick={() => handleSetDefaultTemplate(template.id)}
-                              >
-                                <Star className="h-4 w-4 mr-1" />
-                                Set Default
-                              </Button>
-                            )}
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="outline" size="sm" className="border-gray-300 dark:border-gray-600">
-                                  <MoreHorizontal className="h-4 w-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end" className="w-48">
-                                <DropdownMenuItem 
-                                  onClick={() => handleEditTemplate(template.id)}
-                                >
-                                  <Edit className="h-4 w-4 mr-2" />
-                                  Edit
-                                </DropdownMenuItem>
-                                <DropdownMenuItem 
-                                  onClick={() => handleDownloadCertificate(`/templates/${template.id}.pdf`)}
-                                >
-                                  <Download className="h-4 w-4 mr-2" />
-                                  Download
-                                </DropdownMenuItem>
-                                <DropdownMenuSeparator />
-                                {!template.isDefault && (
-                                  <DropdownMenuItem 
-                                    onClick={() => handleDeleteTemplate(template.id)}
-                                    className="text-[#D93025]"
-                                  >
-                                    <Trash2 className="h-4 w-4 mr-2" />
-                                    Hapus
-                                  </DropdownMenuItem>
-                                )}
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))}
+          {/* Stats */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 border-gray-200 dark:border-gray-700">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-[#005EB8]/10">
+                    <Award className="h-5 w-5 text-[#005EB8]" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Total Sertifikat</p>
+                    <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.total}</p>
                   </div>
                 </div>
-              ) : (
-                <div className="space-y-6">
-                  {/* Search and Filter for Certificates */}
+              </CardContent>
+            </Card>
+            <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 border-gray-200 dark:border-gray-700">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-[#008A00]/10">
+                    <CheckCircle className="h-5 w-5 text-[#008A00]" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Terbit</p>
+                    <p className="text-2xl font-bold text-[#008A00]">{stats.issued}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 border-gray-200 dark:border-gray-700">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-[#F4B400]/10">
+                    <Clock className="h-5 w-5 text-[#F4B400]" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Pending</p>
+                    <p className="text-2xl font-bold text-[#F4B400]">{stats.pending}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 border-gray-200 dark:border-gray-700">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-[#D93025]/10">
+                    <FileText className="h-5 w-5 text-[#D93025]" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Template</p>
+                    <p className="text-2xl font-bold text-[#D93025]">{stats.templates}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Tabs */}
+          <Tabs value={activeTab} onValueChange={setActiveTab}>
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="certificates">Daftar Sertifikat</TabsTrigger>
+              <TabsTrigger value="templates">Template Sertifikat</TabsTrigger>
+            </TabsList>
+
+            {/* Certificates Tab */}
+            <TabsContent value="certificates" className="space-y-4">
+              {/* Filter */}
+              <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
+                <CardContent className="p-4">
                   <div className="flex flex-col md:flex-row gap-4">
                     <div className="flex-1 relative">
                       <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                      <Input
-                        type="search"
-                        placeholder="Cari ID sertifikat, user, atau kursus..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="pl-10"
-                      />
+                      <Input placeholder="Cari sertifikat..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-10" />
                     </div>
-                    <div className="flex gap-2">
-                      <Select value={filterStatus} onValueChange={setFilterStatus}>
-                        <SelectTrigger className="w-[150px]">
-                          <SelectValue placeholder="Status" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">Semua Status</SelectItem>
-                          <SelectItem value="active">Aktif</SelectItem>
-                          <SelectItem value="revoked">Dicabut</SelectItem>
-                          <SelectItem value="expired">Kadaluarsa</SelectItem>
-                        </SelectContent>
-                      </Select>
+                    <Select value={filterStatus} onValueChange={setFilterStatus}>
+                      <SelectTrigger className="w-[180px]">
+                        <SelectValue placeholder="Status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Semua Status</SelectItem>
+                        <SelectItem value="ISSUED">Terbit</SelectItem>
+                        <SelectItem value="PENDING">Pending</SelectItem>
+                        <SelectItem value="REVOKED">Dicabut</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </CardContent>
+              </Card>
 
-                      <Select value={filterTemplate} onValueChange={setFilterTemplate}>
-                        <SelectTrigger className="w-[150px]">
-                          <SelectValue placeholder="Template" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">Semua Template</SelectItem>
-                          {certificateTemplates.map(template => (
-                            <SelectItem key={template.id} value={template.name}>
-                              {template.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+              {/* Certificates List */}
+              <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
+                <CardHeader>
+                  <CardTitle className="text-xl font-bold text-gray-900 dark:text-white">Daftar Sertifikat</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {loading ? (
+                    <div className="flex items-center justify-center py-12">
+                      <Loader2 className="h-8 w-8 animate-spin text-[#005EB8]" />
                     </div>
-                  </div>
-
-                  {/* Certificates Table */}
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>ID Sertifikat</TableHead>
-                          <TableHead>User</TableHead>
-                          <TableHead>Kursus</TableHead>
-                          <TableHead>Mentor</TableHead>
-                          <TableHead>Tanggal Keluar</TableHead>
-                          <TableHead>Kadaluarsa</TableHead>
-                          <TableHead>Template</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead className="text-right">Aksi</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {filteredCertificates.map((certificate) => (
-                          <TableRow key={certificate.id} className="table-row">
-                            <TableCell className="font-mono text-sm">
-                              {certificate.id}
-                            </TableCell>
-                            <TableCell>
-                              <p className="font-medium text-gray-900 dark:text-white">
-                                {certificate.user}
-                              </p>
-                            </TableCell>
-                            <TableCell>
-                              <p className="text-sm text-gray-900 dark:text-white">
-                                {certificate.course}
-                              </p>
-                            </TableCell>
-                            <TableCell className="text-sm">
-                              {certificate.mentor}
-                            </TableCell>
-                            <TableCell className="text-sm">
-                              {new Date(certificate.issueDate).toLocaleDateString('id-ID')}
-                            </TableCell>
-                            <TableCell className="text-sm">
-                              {new Date(certificate.expirationDate).toLocaleDateString('id-ID')}
-                            </TableCell>
-                            <TableCell>
-                              <Badge variant="outline" className="text-xs">
-                                {certificate.template}
-                              </Badge>
-                            </TableCell>
-                            <TableCell>{getStatusBadge(certificate.status)}</TableCell>
-                            <TableCell className="text-right">
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button variant="ghost" size="sm">
-                                    <MoreHorizontal className="h-4 w-4" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="w-48">
-                                  <DropdownMenuItem 
-                                    onClick={() => handleDownloadCertificate(certificate.certificateUrl)}
-                                  >
-                                    <Download className="h-4 w-4 mr-2" />
-                                    Download
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem>
-                                    <Eye className="h-4 w-4 mr-2" />
-                                    Lihat Detail
-                                  </DropdownMenuItem>
-                                  <DropdownMenuSeparator />
-                                  {certificate.status === 'active' && (
-                                    <DropdownMenuItem 
-                                      onClick={() => handleRevokeCertificate(certificate.id)}
-                                      className="text-[#D93025]"
-                                    >
-                                      <XCircle className="h-4 w-4 mr-2" />
-                                      Cabut Sertifikat
-                                    </DropdownMenuItem>
-                                  )}
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-
-                  {filteredCertificates.length === 0 && (
+                  ) : certificates.length === 0 ? (
                     <div className="text-center py-12">
-                      <div className="flex flex-col items-center gap-4">
-                        <div className="h-20 w-20 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
-                          <Award className="h-10 w-10 text-gray-400" />
+                      <Award className="h-16 w-16 text-gray-300 dark:text-gray-700 mx-auto mb-4" />
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Belum Ada Sertifikat</h3>
+                      <p className="text-gray-500 dark:text-gray-400">Sertifikat akan muncul setelah siswa menyelesaikan kursus</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {certificates.map((cert) => (
+                        <div key={cert.id} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-4">
+                              <div className="p-3 rounded-lg bg-[#005EB8]/10">
+                                <Award className="h-6 w-6 text-[#005EB8]" />
+                              </div>
+                              <div>
+                                <p className="font-medium text-gray-900 dark:text-white">{cert.user.full_name}</p>
+                                <p className="text-sm text-gray-500 dark:text-gray-400">{cert.course.title}</p>
+                                <p className="text-xs text-gray-400 mt-1">
+                                  No: {cert.certificate_number} • {formatDate(cert.created_at)}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              {getStatusBadge(cert.status)}
+                              {cert.pdf_url && (
+                                <Button variant="outline" size="sm" asChild>
+                                  <a href={cert.pdf_url} target="_blank"><Download className="h-4 w-4" /></a>
+                                </Button>
+                              )}
+                            </div>
+                          </div>
                         </div>
-                        <div>
-                          <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-                            Tidak ada sertifikat ditemukan
-                          </h3>
-                          <p className="text-gray-600 dark:text-gray-400">
-                            Coba ubah filter atau kata kunci pencarian
-                          </p>
-                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Pagination */}
+                  {pagination.totalPages > 1 && (
+                    <div className="flex items-center justify-between mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
+                      <p className="text-sm text-gray-500 dark:text-gray-400">
+                        Halaman {pagination.page} dari {pagination.totalPages}
+                      </p>
+                      <div className="flex gap-2">
+                        <Button variant="outline" size="sm" disabled={pagination.page === 1} onClick={() => setPagination(p => ({ ...p, page: p.page - 1 }))}>
+                          <ChevronLeft className="h-4 w-4" />
+                        </Button>
+                        <Button variant="outline" size="sm" disabled={pagination.page === pagination.totalPages} onClick={() => setPagination(p => ({ ...p, page: p.page + 1 }))}>
+                          <ChevronRight className="h-4 w-4" />
+                        </Button>
                       </div>
                     </div>
                   )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* Templates Tab */}
+            <TabsContent value="templates" className="space-y-4">
+              <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle className="text-xl font-bold text-gray-900 dark:text-white">Template Sertifikat</CardTitle>
+                      <CardDescription>Upload dan kelola template HTML sertifikat</CardDescription>
+                    </div>
+                    <Button onClick={openCreateTemplate} className="bg-[#005EB8] hover:bg-[#004A93] text-white">
+                      <Plus className="h-4 w-4 mr-2" />
+                      Tambah Template
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {loadingTemplates ? (
+                    <div className="flex items-center justify-center py-12">
+                      <Loader2 className="h-8 w-8 animate-spin text-[#005EB8]" />
+                    </div>
+                  ) : templates.length === 0 ? (
+                    <div className="text-center py-12">
+                      <FileText className="h-16 w-16 text-gray-300 dark:text-gray-700 mx-auto mb-4" />
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Belum Ada Template</h3>
+                      <p className="text-gray-500 dark:text-gray-400 mb-4">Buat template sertifikat pertama Anda</p>
+                      <Button onClick={openCreateTemplate} className="bg-[#005EB8] hover:bg-[#004A93] text-white">
+                        <Plus className="h-4 w-4 mr-2" />
+                        Buat Template
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {templates.map((template) => {
+                        const parsed = parseTemplate(template);
+                        return (
+                          <Card key={template.id} className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
+                            <CardContent className="p-4">
+                              <div className="flex items-start justify-between mb-3">
+                                <div className="flex items-center gap-2">
+                                  <FileText className="h-5 w-5 text-[#005EB8]" />
+                                  <h4 className="font-medium text-gray-900 dark:text-white">{parsed.name}</h4>
+                                </div>
+                                {parsed.is_default && <Badge className="bg-[#008A00] text-white border border-[#008A00] pointer-events-none">Default</Badge>}
+                              </div>
+                              <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">Dibuat: {formatDate(template.created_at)}</p>
+                              <div className="flex gap-2">
+                                <Button 
+                                  variant="outline" 
+                                  size="sm" 
+                                  onClick={() => { setTemplateForm(prev => ({ ...prev, content: parsed.content })); setPreviewDialogOpen(true); }}
+                                  className="border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10 dark:border-[#005EB8] dark:text-[#005EB8]"
+                                >
+                                  <Eye className="h-4 w-4 mr-1" />Preview
+                                </Button>
+                                <Button 
+                                  variant="outline" 
+                                  size="sm" 
+                                  onClick={() => openEditTemplate(template)}
+                                  className="border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10 dark:border-[#005EB8] dark:text-[#005EB8]"
+                                >
+                                  <Edit className="h-4 w-4 mr-1" />Edit
+                                </Button>
+                                <Button 
+                                  variant="outline" 
+                                  size="sm" 
+                                  onClick={() => openDeleteConfirmation(template)}
+                                  className="border-[#D93025] text-[#D93025] hover:bg-[#D93025]/10 dark:border-[#D93025] dark:text-[#D93025]"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Variables Info */}
+                  <Card className="mt-6 rounded-lg border bg-[#005EB8]/10 dark:bg-[#005EB8]/20 border-[#005EB8]/20 dark:border-[#005EB8]/30">
+                    <CardContent className="p-4">
+                      <h4 className="font-semibold text-[#005EB8] dark:text-[#005EB8] mb-2 flex items-center gap-2">
+                        <Code className="h-4 w-4" />
+                        Variabel Template
+                      </h4>
+                      <p className="text-sm text-[#005EB8]/80 dark:text-[#005EB8] mb-2">Gunakan variabel berikut dalam template HTML:</p>
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm">
+                        <code className="bg-white/50 dark:bg-gray-800 px-2 py-1 rounded text-[#005EB8]">{"{{STUDENT_NAME}}"}</code>
+                        <code className="bg-white/50 dark:bg-gray-800 px-2 py-1 rounded text-[#005EB8]">{"{{COURSE_TITLE}}"}</code>
+                        <code className="bg-white/50 dark:bg-gray-800 px-2 py-1 rounded text-[#005EB8]">{"{{MENTOR_NAME}}"}</code>
+                        <code className="bg-white/50 dark:bg-gray-800 px-2 py-1 rounded text-[#005EB8]">{"{{ISSUED_DATE}}"}</code>
+                        <code className="bg-white/50 dark:bg-gray-800 px-2 py-1 rounded text-[#005EB8]">{"{{CERTIFICATE_NUMBER}}"}</code>
+                        <code className="bg-white/50 dark:bg-gray-800 px-2 py-1 rounded text-[#005EB8]">{"{{SIGNATURE_IMAGE}}"}</code>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
+        </div>
+
+        {/* Template Dialog */}
+        <Dialog open={templateDialogOpen} onOpenChange={setTemplateDialogOpen}>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>{editingTemplate ? "Edit Template" : "Buat Template Baru"}</DialogTitle>
+              <DialogDescription>Upload file HTML atau edit langsung di editor</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Nama Template *</Label>
+                  <Input value={templateForm.name} onChange={(e) => setTemplateForm(prev => ({ ...prev, name: e.target.value }))} placeholder="Contoh: Template Default" />
                 </div>
-              )}
+                <div className="space-y-2">
+                  <Label>Upload File HTML</Label>
+                  <Input ref={fileInputRef} type="file" accept=".html,.htm" onChange={handleFileUpload} />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Konten HTML *</Label>
+                <Textarea value={templateForm.content} onChange={(e) => setTemplateForm(prev => ({ ...prev, content: e.target.value }))} rows={15} className="font-mono text-sm" placeholder="Paste konten HTML di sini..." />
+              </div>
+              <div className="flex items-center gap-2">
+                <input type="checkbox" id="is_default" checked={templateForm.is_default} onChange={(e) => setTemplateForm(prev => ({ ...prev, is_default: e.target.checked }))} className="rounded" />
+                <Label htmlFor="is_default">Jadikan template default</Label>
+              </div>
             </div>
-          </CardContent>
-        </Card>
-      </div>
-    </AdminLayout>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setTemplateDialogOpen(false)}>Batal</Button>
+              <Button onClick={handleSaveTemplate} disabled={saving} className="bg-[#005EB8] hover:bg-[#004A93] text-white">
+                {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <></>}
+                {editingTemplate ? "Simpan Perubahan" : "Buat Template"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Preview Dialog */}
+        <Dialog open={previewDialogOpen} onOpenChange={setPreviewDialogOpen}>
+          <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Preview Template</DialogTitle>
+            </DialogHeader>
+            <div className="border rounded-lg p-4 bg-white">
+              <iframe srcDoc={templateForm.content.replace(/\{\{STUDENT_NAME\}\}/g, "John Doe").replace(/\{\{COURSE_TITLE\}\}/g, "Web Development").replace(/\{\{MENTOR_NAME\}\}/g, "Jane Smith").replace(/\{\{ISSUED_DATE\}\}/g, formatDate(new Date().toISOString())).replace(/\{\{CERTIFICATE_NUMBER\}\}/g, "CERT-2024-001").replace(/\{\{SIGNATURE_IMAGE\}\}/g, "")} className="w-full h-[600px] border-0" />
+            </div>
+          </DialogContent>
+        </Dialog>
+      </AdminLayout>
     </ProtectedRoute>
   );
 }

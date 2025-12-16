@@ -1,124 +1,44 @@
-import { NextRequest, NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
-import {
-  successResponse,
-  validationErrorResponse,
-  errorResponse,
-} from "@/utils/response.util";
-import { errorHandler } from "@/middlewares/error.middleware";
-import { authMiddleware } from "@/middlewares/auth.middleware";
-import { corsMiddleware } from "@/middlewares/cors.middleware";
-import { loggingMiddleware } from "@/middlewares/logging.middleware";
-import { HTTP_STATUS } from "@/lib/constants";
+import { NextRequest, NextResponse } from 'next/server';
+import prisma from '@/lib/prisma';
+import { getAuthUser, unauthorizedResponse } from '@/lib/auth';
+import { reportSchema } from '@/lib/validation';
 
-async function reportReviewHandler(request: NextRequest) {
+// POST /api/reviews/report - Report a review
+export async function POST(request: NextRequest) {
   try {
-    const authResult = await authMiddleware(request);
-
-    // Check if authentication failed
-    if (authResult instanceof NextResponse) {
-      return authResult;
-    }
-
-    const user = authResult;
+    const authUser = getAuthUser(request);
+    if (!authUser) return unauthorizedResponse();
 
     const body = await request.json();
-    const { reviewId, reason, details } = body;
+    const { review_id, reason, description } = body;
 
-    if (!reviewId || !reason) {
-      return validationErrorResponse({
-        reviewId: !reviewId ? ["Review ID is required"] : [],
-        reason: !reason ? ["Reason is required"] : [],
-      });
+    if (!review_id) {
+      return NextResponse.json({ error: 'Review ID wajib diisi' }, { status: 400 });
     }
 
-    const validReasons = [
-      "SPAM",
-      "OFFENSIVE",
-      "INAPPROPRIATE",
-      "FALSE_INFORMATION",
-      "OTHER",
-    ];
-
-    if (!validReasons.includes(reason)) {
-      return errorResponse("Invalid reason", HTTP_STATUS.BAD_REQUEST);
+    const result = reportSchema.safeParse({ reason, description });
+    if (!result.success) {
+      return NextResponse.json({ error: 'Validasi gagal', details: result.error.flatten().fieldErrors }, { status: 400 });
     }
 
-    const review = await prisma.review.findUnique({
-      where: { id: reviewId },
-      select: {
-        id: true,
-        userId: true,
-        courseId: true,
-        rating: true,
-        comment: true,
-      },
-    });
-
+    const review = await prisma.review.findUnique({ where: { id: review_id } });
     if (!review) {
-      return errorResponse("Review not found", HTTP_STATUS.NOT_FOUND);
+      return NextResponse.json({ error: 'Review tidak ditemukan' }, { status: 404 });
     }
 
-    // For this implementation, we'll log the report in activity logs
-    // since CommentReport model may not exist in the schema
     await prisma.activityLog.create({
       data: {
-        userId: user.userId,
-        action: "report_review",
-        entityType: "REVIEW",
-        entityId: reviewId,
-        metadata: {
-          reason,
-          details: details || null,
-          reportedReview: {
-            id: review.id,
-            rating: review.rating,
-          },
-        },
+        user_id: authUser.userId,
+        action: 'REPORT_REVIEW',
+        entity_type: 'review',
+        entity_id: review_id,
+        metadata: { reason: result.data.reason, description: result.data.description },
       },
     });
 
-    const admins = await prisma.user.findMany({
-      where: { role: "ADMIN" },
-      select: { id: true },
-    });
-
-    // Use valid NotificationType from your schema
-    const notificationType = "SYSTEM" as const;
-
-    await prisma.notification.createMany({
-      data: admins.map((admin: { id: string }) => ({
-        userId: admin.id,
-        type: notificationType,
-        title: "Review Reported",
-        message: `A review has been reported for: ${reason}`,
-        data: { reviewId, reason },
-        status: "UNREAD",
-      })),
-    });
-
-    return successResponse(
-      {
-        status: "PENDING",
-        message: "Report submitted successfully",
-      },
-      "Review reported successfully",
-      HTTP_STATUS.CREATED
-    );
+    return NextResponse.json({ message: 'Laporan berhasil dikirim' });
   } catch (error) {
-    if (error instanceof Error) {
-      return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
-    }
-    return errorResponse(
-      "Failed to report review",
-      HTTP_STATUS.INTERNAL_SERVER_ERROR
-    );
+    console.error('Report review error:', error);
+    return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 });
   }
 }
-
-// Apply middlewares
-const handlerWithMiddlewares = errorHandler(
-  loggingMiddleware(corsMiddleware(reportReviewHandler))
-);
-
-export const POST = handlerWithMiddlewares;

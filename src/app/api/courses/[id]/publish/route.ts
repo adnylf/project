@@ -1,58 +1,94 @@
-import { NextRequest } from "next/server";
-import courseService from "@/services/course.service";
-import { successResponse, errorResponse } from "@/utils/response.util";
-import { errorHandler } from "@/middlewares/error.middleware";
-import { requireAuth } from "@/middlewares/auth.middleware";
-import { corsMiddleware } from "@/middlewares/cors.middleware";
-import { loggingMiddleware } from "@/middlewares/logging.middleware";
-import { HTTP_STATUS } from "@/lib/constants";
+import { NextRequest, NextResponse } from 'next/server';
+import prisma from '@/lib/prisma';
+import { getAuthUser, hasRole } from '@/lib/auth';
+import { CourseStatus, UserRole } from '@prisma/client';
 
-async function handler(
-  request: NextRequest,
-  context: { user: { userId: string; email: string; role: string } }
-) {
-  const { user } = context;
+interface RouteParams {
+  params: { id: string };
+}
 
+// POST /api/courses/[id]/publish - Publish a course
+export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
-    // Extract course ID from URL
-    const url = new URL(request.url);
-    const pathSegments = url.pathname.split("/");
-    const id = pathSegments[pathSegments.length - 2]; // Get ID from /api/courses/[id]/publish
-
-    if (!id) {
-      return errorResponse("Course ID is required", HTTP_STATUS.BAD_REQUEST);
+    const authUser = getAuthUser(request);
+    if (!authUser) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Publish course
-    const result = await courseService.publishCourse(
-      id,
-      user.userId,
-      user.role
-    );
+    const { id } = params;
 
-    return successResponse(
-      {
-        id: result.id,
-        title: result.title,
-        status: result.status,
-        published_at: result.published_at,
+    // Find course and check ownership
+    const course = await prisma.course.findUnique({
+      where: { id },
+      include: {
+        mentor: { select: { user_id: true, status: true } },
+        sections: {
+          include: { materials: true },
+        },
       },
-      "Course published successfully"
-    );
-  } catch (error) {
-    if (error instanceof Error) {
-      return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
+    });
+
+    if (!course) {
+      return NextResponse.json(
+        { error: 'Kursus tidak ditemukan' },
+        { status: 404 }
+      );
     }
-    return errorResponse(
-      "Failed to publish course",
-      HTTP_STATUS.INTERNAL_SERVER_ERROR
+
+    const isMentor = course.mentor.user_id === authUser.userId;
+    const isAdmin = hasRole(authUser, [UserRole.ADMIN]);
+
+    if (!isMentor && !isAdmin) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    // Check mentor status
+    if (course.mentor.status !== 'APPROVED' && !isAdmin) {
+      return NextResponse.json(
+        { error: 'Profil mentor harus disetujui terlebih dahulu' },
+        { status: 403 }
+      );
+    }
+
+    // Validate course has content
+    if (course.sections.length === 0) {
+      return NextResponse.json(
+        { error: 'Kursus harus memiliki minimal 1 section' },
+        { status: 400 }
+      );
+    }
+
+    const hasMaterials = course.sections.some(s => s.materials.length > 0);
+    if (!hasMaterials) {
+      return NextResponse.json(
+        { error: 'Kursus harus memiliki minimal 1 materi' },
+        { status: 400 }
+      );
+    }
+
+    // If mentor, submit for review; if admin, publish directly
+    const newStatus = isAdmin ? CourseStatus.PUBLISHED : CourseStatus.PENDING_REVIEW;
+
+    const updatedCourse = await prisma.course.update({
+      where: { id },
+      data: {
+        status: newStatus,
+        published_at: newStatus === CourseStatus.PUBLISHED ? new Date() : null,
+      },
+    });
+
+
+    return NextResponse.json({
+      message: isAdmin 
+        ? 'Kursus berhasil dipublikasikan' 
+        : 'Kursus berhasil diajukan untuk review',
+      course: updatedCourse,
+    });
+  } catch (error) {
+    console.error('Publish course error:', error);
+    return NextResponse.json(
+      { error: 'Terjadi kesalahan server' },
+      { status: 500 }
     );
   }
 }
-
-// Gunakan requireAuth untuk wrap handler
-const authenticatedHandler = requireAuth(handler);
-
-export const POST = errorHandler(
-  loggingMiddleware(corsMiddleware(authenticatedHandler))
-);

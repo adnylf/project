@@ -1,46 +1,42 @@
-import { NextRequest, NextResponse } from "next/server";
-import transactionService from "@/services/transaction.service";
-import { authMiddleware } from "@/middlewares/auth.middleware";
-import { errorHandler } from "@/middlewares/error.middleware";
-import { corsMiddleware } from "@/middlewares/cors.middleware";
-import { loggingMiddleware } from "@/middlewares/logging.middleware";
-import { HTTP_STATUS } from "@/lib/constants";
+import { NextRequest, NextResponse } from 'next/server';
+import prisma from '@/lib/prisma';
+import { getAuthUser, hasRole, unauthorizedResponse, forbiddenResponse } from '@/lib/auth';
+import { UserRole } from '@prisma/client';
 
-/**
- * GET /api/transactions/stats
- * Get transaction statistics
- */
-async function getHandler(request: NextRequest, user: any) {
+// GET /api/transactions/stats - Get transaction statistics
+export async function GET(request: NextRequest) {
   try {
-    // Jika user adalah admin, maka stats untuk semua transaksi. Jika bukan, hanya untuk user tersebut.
-    const userId = user.role === "ADMIN" ? undefined : user.userId;
+    const authUser = getAuthUser(request);
+    if (!authUser) return unauthorizedResponse();
+    if (!hasRole(authUser, [UserRole.ADMIN])) return forbiddenResponse();
 
-    const stats = await transactionService.getTransactionStats(userId);
+    const [totalRevenue, byStatus, byMethod] = await Promise.all([
+      prisma.transaction.aggregate({
+        where: { status: 'PAID' },
+        _sum: { total_amount: true },
+        _count: { id: true },
+      }),
+      prisma.transaction.groupBy({
+        by: ['status'],
+        _count: { id: true },
+        _sum: { total_amount: true },
+      }),
+      prisma.transaction.groupBy({
+        by: ['payment_method'],
+        where: { status: 'PAID' },
+        _count: { id: true },
+        _sum: { total_amount: true },
+      }),
+    ]);
 
     return NextResponse.json({
-      success: true,
-      data: stats,
+      total_revenue: totalRevenue._sum.total_amount || 0,
+      total_transactions: totalRevenue._count.id,
+      by_status: byStatus,
+      by_method: byMethod,
     });
   } catch (error) {
-    console.error("GET transaction stats error:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch transaction statistics" },
-      { status: HTTP_STATUS.INTERNAL_SERVER_ERROR }
-    );
+    console.error('Get transaction stats error:', error);
+    return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 });
   }
 }
-
-// Apply middlewares
-async function authenticatedHandler(
-  request: NextRequest
-): Promise<NextResponse> {
-  const authResult = await authMiddleware(request);
-  if (authResult instanceof NextResponse) {
-    return authResult;
-  }
-  return getHandler(request, authResult);
-}
-
-export const GET = errorHandler(
-  loggingMiddleware(corsMiddleware(authenticatedHandler))
-);

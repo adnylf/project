@@ -1,69 +1,59 @@
-import { NextRequest } from "next/server";
-import { changePasswordSchema } from "@/lib/validation";
-import authService from "@/services/auth.service";
-import {
-  successResponse,
-  validationErrorResponse,
-  errorResponse,
-} from "@/utils/response.util";
-import { validateData } from "@/utils/validation.util";
-import { errorHandler } from "@/middlewares/error.middleware";
-import { requireAuth } from "@/middlewares/auth.middleware";
-import { corsMiddleware } from "@/middlewares/cors.middleware";
-import { loggingMiddleware } from "@/middlewares/logging.middleware";
-import { HTTP_STATUS } from "@/lib/constants";
+import { NextRequest, NextResponse } from 'next/server';
+import prisma from '@/lib/prisma';
+import { getAuthUser, unauthorizedResponse, comparePassword, hashPassword } from '@/lib/auth';
+import { changePasswordSchema } from '@/lib/validation';
 
-/**
- * PUT /api/users/profile/password
- * Change password for current user
- */
-async function handler(
-  request: NextRequest,
-  context: { user: { userId: string; email: string; role: string } }
-) {
-  const { user } = context;
-
+// PUT /api/users/profile/password - Update password
+export async function PUT(request: NextRequest) {
   try {
-    // Parse request body
-    let body;
-    try {
-      body = await request.json();
-    } catch {
-      return errorResponse(
-        "Invalid JSON in request body",
-        HTTP_STATUS.BAD_REQUEST
+    const authUser = getAuthUser(request);
+    if (!authUser) return unauthorizedResponse();
+
+    const body = await request.json();
+
+    const result = changePasswordSchema.safeParse(body);
+    if (!result.success) {
+      return NextResponse.json(
+        { error: 'Validasi gagal', details: result.error.flatten().fieldErrors },
+        { status: 400 }
       );
     }
 
-    // Validate input
-    const validation = await validateData(changePasswordSchema, body);
+    const { current_password, new_password } = result.data;
 
-    if (!validation.success) {
-      return validationErrorResponse(validation.errors);
+    const user = await prisma.user.findUnique({
+      where: { id: authUser.userId },
+      select: { password: true },
+    });
+
+    if (!user) {
+      return NextResponse.json({ error: 'User tidak ditemukan' }, { status: 404 });
     }
 
-    // Change password
-    await authService.changePassword(
-      user.userId,
-      validation.data.currentPassword,
-      validation.data.newPassword
-    );
+    const isValid = await comparePassword(current_password, user.password);
+    if (!isValid) {
+      return NextResponse.json({ error: 'Password lama tidak sesuai' }, { status: 400 });
+    }
 
-    return successResponse(null, "Password changed successfully");
+    const hashedPassword = await hashPassword(new_password);
+
+    await prisma.user.update({
+      where: { id: authUser.userId },
+      data: { password: hashedPassword },
+    });
+
+    await prisma.activityLog.create({
+      data: {
+        user_id: authUser.userId,
+        action: 'CHANGE_PASSWORD',
+        entity_type: 'user',
+        entity_id: authUser.userId,
+      },
+    });
+
+    return NextResponse.json({ message: 'Password berhasil diperbarui' });
   } catch (error) {
-    if (error instanceof Error) {
-      return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
-    }
-    return errorResponse(
-      "Failed to change password",
-      HTTP_STATUS.INTERNAL_SERVER_ERROR
-    );
+    console.error('Update password error:', error);
+    return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 });
   }
 }
-
-// Apply authentication
-const authenticatedHandler = requireAuth(handler);
-
-export const PUT = errorHandler(
-  loggingMiddleware(corsMiddleware(authenticatedHandler))
-);

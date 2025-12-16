@@ -1,104 +1,68 @@
+// app/api/admin/courses/[id]/approve/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { sql } from '@vercel/postgres';
-import { verifyToken } from '@/lib/auth';
+import prisma from '@/lib/prisma';
+import { getAuthUser, unauthorizedResponse } from '@/lib/auth';
 
-export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
+interface RouteParams {
+  params: { id: string };
+}
+
+// PUT /api/admin/courses/[id]/approve - Approve a course
+export async function PUT(request: NextRequest, { params }: RouteParams) {
   try {
-    // Verify authentication and admin role
-    const token = request.headers.get('authorization')?.replace('Bearer ', '');
-    if (!token) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const authUser = getAuthUser(request);
+    if (!authUser) return unauthorizedResponse();
 
-    const decoded = await verifyToken(token);
-    if (!decoded || decoded.role !== 'admin') {
-      return NextResponse.json({ error: 'Forbidden - Admin access required' }, { status: 403 });
+    // Only admins can approve courses
+    if (authUser.role !== 'ADMIN') {
+      return NextResponse.json(
+        { error: 'Hanya admin yang dapat menyetujui kursus' },
+        { status: 403 }
+      );
     }
 
     const courseId = params.id;
 
-    // Check if course exists
-    const courseResult = await sql`
-      SELECT c.*, u.full_name, u.email
-      FROM courses c
-      JOIN users u ON c.instructor_id = u.id
-      WHERE c.id = ${courseId}
-    `;
+    // Get the course
+    const course = await prisma.course.findUnique({
+      where: { id: courseId },
+      include: {
+        mentor: {
+          include: {
+            user: true,
+          },
+        },
+      },
+    });
 
-    if (courseResult.rows.length === 0) {
-      return NextResponse.json({ error: 'Course not found' }, { status: 404 });
+    if (!course) {
+      return NextResponse.json({ error: 'Kursus tidak ditemukan' }, { status: 404 });
     }
 
-    const course = courseResult.rows[0];
-
-    // Check if course is in review status
-    if (course.status !== 'review') {
+    // Only PENDING_REVIEW courses can be approved
+    if (course.status !== 'PENDING_REVIEW') {
       return NextResponse.json(
-        { error: 'Only courses in review can be approved' },
+        { error: `Kursus dengan status ${course.status} tidak dapat disetujui` },
         { status: 400 }
       );
     }
 
-    // Validate course has required content
-    const moduleCount = await sql`
-      SELECT COUNT(*) as count FROM course_modules WHERE course_id = ${courseId}
-    `;
-
-    if (parseInt(moduleCount.rows[0].count) === 0) {
-      return NextResponse.json({ error: 'Course must have at least one module' }, { status: 400 });
-    }
-
-    // Approve course
-    await sql`
-      UPDATE courses
-      SET 
-        status = 'published',
-        is_active = true,
-        published_at = NOW(),
-        updated_at = NOW()
-      WHERE id = ${courseId}
-    `;
-
-    // Create notification for instructor
-    await sql`
-      INSERT INTO notifications (
-        user_id, title, message, type
-      )
-      VALUES (
-        ${course.instructor_id},
-        'Course Approved',
-        'Congratulations! Your course "${course.title}" has been approved and is now published.',
-        'course_approved'
-      )
-    `;
-
-    // Log admin action
-    await sql`
-      INSERT INTO admin_action_logs (
-        admin_id, action_type, target_type, target_id
-      )
-      VALUES (
-        ${decoded.userId},
-        'approve_course',
-        'course',
-        ${courseId}
-      )
-    `;
-
-    // TODO: Send approval email
-    // await emailService.sendCourseApprovedEmail(course.email, course.full_name, course.title);
-
-    return NextResponse.json({
-      success: true,
-      message: 'Course approved and published successfully',
+    // Update course status to PUBLISHED
+    const updatedCourse = await prisma.course.update({
+      where: { id: courseId },
       data: {
-        course_id: courseId,
-        status: 'published',
+        status: 'PUBLISHED',
         published_at: new Date(),
       },
     });
+
+    return NextResponse.json({
+      success: true,
+      message: 'Kursus berhasil disetujui',
+      course: updatedCourse,
+    });
   } catch (error) {
     console.error('Approve course error:', error);
-    return NextResponse.json({ error: 'Failed to approve course' }, { status: 500 });
+    return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 });
   }
 }

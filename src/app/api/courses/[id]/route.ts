@@ -1,224 +1,306 @@
-// app/api/courses/[id]/route.ts
-import { NextRequest } from "next/server";
-import courseService from "@/services/course.service";
-import { updateCourseSchema } from "@/lib/validation";
-import {
-  successResponse,
-  validationErrorResponse,
-  errorResponse,
-  noContentResponse,
-} from "@/utils/response.util";
-import { validateData } from "@/utils/validation.util";
-import { errorHandler } from "@/middlewares/error.middleware";
-import {
-  requireAuth,
-  requireAuthWithParams,
-} from "@/middlewares/auth.middleware";
-import { corsMiddleware } from "@/middlewares/cors.middleware";
-import { loggingMiddleware } from "@/middlewares/logging.middleware";
-import { HTTP_STATUS } from "@/lib/constants";
+import { NextRequest, NextResponse } from 'next/server';
+import prisma from '@/lib/prisma';
+import { getAuthUser, hasRole } from '@/lib/auth';
+import { updateCourseSchema } from '@/lib/validation';
+import { CourseStatus, UserRole } from '@prisma/client';
 
-/**
- * GET /api/courses/:id
- * Get course details by ID
- */
-async function getHandler(
-  request: NextRequest,
-  context: {
-    params: { id: string };
-    user?: { userId: string; email: string; role: string };
-  }
-) {
+interface RouteParams {
+  params: { id: string };
+}
+
+// GET /api/courses/[id] - Get course by ID or slug
+export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
-    const { params } = context;
-    const id = params.id;
+    const { id } = params;
+    const authUser = getAuthUser(request);
 
-    if (!id) {
-      return errorResponse("Course ID is required", HTTP_STATUS.BAD_REQUEST);
+    // Try to find by ID or slug
+    const course = await prisma.course.findFirst({
+      where: {
+        OR: [{ id }, { slug: id }],
+      },
+      include: {
+        category: {
+          select: { id: true, name: true, slug: true },
+        },
+        mentor: {
+          select: {
+            id: true,
+            headline: true,
+            bio: true,
+            expertise: true,
+            average_rating: true,
+            total_students: true,
+            total_courses: true,
+            user: {
+              select: { id: true, full_name: true, avatar_url: true, bio: true },
+            },
+          },
+        },
+        sections: {
+          orderBy: { order: 'asc' },
+          include: {
+            materials: {
+              orderBy: { order: 'asc' },
+              select: {
+                id: true,
+                title: true,
+                description: true,
+                type: true,
+                content: true,
+                video_id: true,
+                document_url: true,
+                youtube_url: true,
+                duration: true,
+                order: true,
+                is_free: true,
+                video: {
+                  select: {
+                    id: true,
+                    status: true,
+                    path: true,
+                    thumbnail: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+        reviews: {
+          take: 10,
+          orderBy: { created_at: 'desc' },
+          include: {
+            user: {
+              select: { id: true, full_name: true, avatar_url: true },
+            },
+          },
+        },
+        _count: {
+          select: {
+            sections: true,
+            enrollments: true,
+            reviews: true,
+          },
+        },
+      },
+    });
+
+    if (!course) {
+      return NextResponse.json(
+        { error: 'Kursus tidak ditemukan' },
+        { status: 404 }
+      );
     }
 
-    // Check if user is authenticated to see draft courses
-    const includePrivate = !!context.user;
+    // Check access for non-published courses
+    if (course.status !== CourseStatus.PUBLISHED) {
+      if (!authUser) {
+        return NextResponse.json(
+          { error: 'Kursus tidak ditemukan' },
+          { status: 404 }
+        );
+      }
 
-    // Get course
-    const course = await courseService.getCourseById(id, includePrivate);
+      const isMentor = course.mentor.user.id === authUser.userId;
+      const isAdmin = hasRole(authUser, [UserRole.ADMIN]);
 
-    return successResponse(course, "Course retrieved successfully");
+      if (!isMentor && !isAdmin) {
+        return NextResponse.json(
+          { error: 'Kursus tidak ditemukan' },
+          { status: 404 }
+        );
+      }
+    }
+
+    // Increment view count
+    await prisma.course.update({
+      where: { id: course.id },
+      data: { total_views: { increment: 1 } },
+    });
+
+    // Check if user is enrolled
+    let isEnrolled = false;
+    let enrollmentProgress = 0;
+    if (authUser) {
+      const enrollment = await prisma.enrollment.findUnique({
+        where: {
+          user_id_course_id: {
+            user_id: authUser.userId,
+            course_id: course.id,
+          },
+        },
+      });
+      if (enrollment) {
+        isEnrolled = true;
+        enrollmentProgress = enrollment.progress;
+      }
+    }
+
+    return NextResponse.json({
+      course,
+      isEnrolled,
+      enrollmentProgress,
+    });
   } catch (error) {
-    if (error instanceof Error) {
-      return errorResponse(error.message, HTTP_STATUS.NOT_FOUND);
-    }
-    return errorResponse(
-      "Failed to get course",
-      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    console.error('Get course error:', error);
+    return NextResponse.json(
+      { error: 'Terjadi kesalahan server' },
+      { status: 500 }
     );
   }
 }
 
-/**
- * PUT /api/courses/:id
- * Update course
- */
-async function putHandler(
-  request: NextRequest,
-  context: {
-    params: { id: string };
-    user: { userId: string; email: string; role: string };
-  }
-) {
+// PUT /api/courses/[id] - Update course
+export async function PUT(request: NextRequest, { params }: RouteParams) {
   try {
-    const { params, user } = context;
-    const id = params.id;
-
-    if (!id) {
-      return errorResponse("Course ID is required", HTTP_STATUS.BAD_REQUEST);
+    const authUser = getAuthUser(request);
+    if (!authUser) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Parse request body
-    let body;
-    try {
-      body = await request.json();
-    } catch {
-      return errorResponse("Invalid JSON body", HTTP_STATUS.BAD_REQUEST);
+    const { id } = params;
+
+    // Find course with mentor info
+    const course = await prisma.course.findUnique({
+      where: { id },
+      include: {
+        mentor: {
+          select: { user_id: true },
+        },
+      },
+    });
+
+    if (!course) {
+      return NextResponse.json(
+        { error: 'Kursus tidak ditemukan' },
+        { status: 404 }
+      );
     }
 
-    // Handle discount_price conversion from null to undefined
-    const cleanedBody = {
-      ...body,
-      discountPrice:
-        body.discountPrice === null ? undefined : body.discountPrice,
-    };
+    // Check authorization
+    const isMentor = course.mentor.user_id === authUser.userId;
+    const isAdmin = hasRole(authUser, [UserRole.ADMIN]);
 
+    if (!isMentor && !isAdmin) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    const body = await request.json();
+    
     // Validate input
-    const validation = await validateData(updateCourseSchema, cleanedBody);
+    const result = updateCourseSchema.safeParse(body);
+    if (!result.success) {
+      return NextResponse.json(
+        { error: 'Validasi gagal', details: result.error.flatten().fieldErrors },
+        { status: 400 }
+      );
+    }
 
-    if (!validation.success) {
-      return validationErrorResponse(validation.errors);
+    const data = result.data;
+
+    // If title changed, update slug
+    let slug = course.slug;
+    if (data.title && data.title !== course.title) {
+      const baseSlug = data.title
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)/g, '');
+      
+      slug = baseSlug;
+      let counter = 1;
+      while (await prisma.course.findFirst({ where: { slug, NOT: { id } } })) {
+        slug = `${baseSlug}-${counter}`;
+        counter++;
+      }
     }
 
     // Update course
-    const course = await courseService.updateCourse(
-      id,
-      user.userId,
-      user.role,
-      validation.data
-    );
+    const updatedCourse = await prisma.course.update({
+      where: { id },
+      data: {
+        ...data,
+        slug,
+      },
+      include: {
+        category: true,
+        mentor: {
+          include: { user: { select: { full_name: true } } },
+        },
+      },
+    });
 
-    return successResponse(course, "Course updated successfully");
+    return NextResponse.json({
+      message: 'Kursus berhasil diperbarui',
+      course: updatedCourse,
+    });
   } catch (error) {
-    if (error instanceof Error) {
-      return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
-    }
-    return errorResponse(
-      "Failed to update course",
-      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    console.error('Update course error:', error);
+    return NextResponse.json(
+      { error: 'Terjadi kesalahan server' },
+      { status: 500 }
     );
   }
 }
 
-/**
- * DELETE /api/courses/:id
- * Delete course
- */
-async function deleteHandler(
-  request: NextRequest,
-  context: {
-    params: { id: string };
-    user: { userId: string; email: string; role: string };
-  }
-) {
+// DELETE /api/courses/[id] - Delete course
+export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
-    const { params, user } = context;
-    const id = params.id;
-
-    if (!id) {
-      return errorResponse("Course ID is required", HTTP_STATUS.BAD_REQUEST);
+    const authUser = getAuthUser(request);
+    if (!authUser) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Delete course
-    await courseService.deleteCourse(id, user.userId, user.role);
+    const { id } = params;
 
-    return noContentResponse();
+    // Find course with mentor info
+    const course = await prisma.course.findUnique({
+      where: { id },
+      include: {
+        mentor: { select: { id: true, user_id: true } },
+        _count: { select: { enrollments: true } },
+      },
+    });
+
+    if (!course) {
+      return NextResponse.json(
+        { error: 'Kursus tidak ditemukan' },
+        { status: 404 }
+      );
+    }
+
+    // Check authorization
+    const isMentor = course.mentor.user_id === authUser.userId;
+    const isAdmin = hasRole(authUser, [UserRole.ADMIN]);
+
+    if (!isMentor && !isAdmin) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    // Check if course has enrollments
+    if (course._count.enrollments > 0 && !isAdmin) {
+      return NextResponse.json(
+        { error: 'Kursus dengan peserta tidak dapat dihapus' },
+        { status: 400 }
+      );
+    }
+
+    // Delete course (cascade will handle related records)
+    await prisma.course.delete({ where: { id } });
+
+    // Update mentor total courses
+    await prisma.mentorProfile.update({
+      where: { id: course.mentor.id },
+      data: { total_courses: { decrement: 1 } },
+    });
+
+    return NextResponse.json({
+      message: 'Kursus berhasil dihapus',
+    });
   } catch (error) {
-    if (error instanceof Error) {
-      return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
-    }
-    return errorResponse(
-      "Failed to delete course",
-      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    console.error('Delete course error:', error);
+    return NextResponse.json(
+      { error: 'Terjadi kesalahan server' },
+      { status: 500 }
     );
   }
 }
-
-// PERBAIKAN: Buat wrapper function yang sesuai untuk setiap method
-const getHandlerWrapper = async (
-  request: NextRequest,
-  context: { params: { id: string } }
-) => {
-  return getHandler(request, { ...context, user: undefined });
-};
-
-const putHandlerWrapper = async (
-  request: NextRequest,
-  context: { params: { id: string } }
-) => {
-  const authHandler = requireAuthWithParams(putHandler);
-  return authHandler(request, context);
-};
-
-const deleteHandlerWrapper = async (
-  request: NextRequest,
-  context: { params: { id: string } }
-) => {
-  const authHandler = requireAuthWithParams(deleteHandler);
-  return authHandler(request, context);
-};
-
-// PERBAIKAN: Alternatif lebih sederhana - gunakan requireAuth biasa dan extract params dari URL
-async function authenticatedPutHandler(request: NextRequest) {
-  const authHandler = requireAuth(
-    async (request: NextRequest, { user }: { user: any }) => {
-      const url = new URL(request.url);
-      const pathSegments = url.pathname.split("/");
-      const id = pathSegments[pathSegments.length - 1];
-
-      return putHandler(request, { params: { id }, user });
-    }
-  );
-
-  return authHandler(request);
-}
-
-async function authenticatedDeleteHandler(request: NextRequest) {
-  const authHandler = requireAuth(
-    async (request: NextRequest, { user }: { user: any }) => {
-      const url = new URL(request.url);
-      const pathSegments = url.pathname.split("/");
-      const id = pathSegments[pathSegments.length - 1];
-
-      return deleteHandler(request, { params: { id }, user });
-    }
-  );
-
-  return authHandler(request);
-}
-
-async function getHandlerWithAuth(request: NextRequest) {
-  const url = new URL(request.url);
-  const pathSegments = url.pathname.split("/");
-  const id = pathSegments[pathSegments.length - 1];
-
-  return getHandler(request, { params: { id }, user: undefined });
-}
-
-export const GET = errorHandler(
-  loggingMiddleware(corsMiddleware(getHandlerWithAuth))
-);
-
-export const PUT = errorHandler(
-  loggingMiddleware(corsMiddleware(authenticatedPutHandler))
-);
-
-export const DELETE = errorHandler(
-  loggingMiddleware(corsMiddleware(authenticatedDeleteHandler))
-);

@@ -1,96 +1,49 @@
-import { NextRequest } from "next/server";
-import certificateService from "@/services/certificate.service";
-import { successResponse, errorResponse } from "@/utils/response.util";
-import { errorHandler } from "@/middlewares/error.middleware";
-import { corsMiddleware } from "@/middlewares/cors.middleware";
-import { loggingMiddleware } from "@/middlewares/logging.middleware";
-import { HTTP_STATUS } from "@/lib/constants";
+import { NextRequest, NextResponse } from 'next/server';
+import prisma from '@/lib/prisma';
 
-async function verifyHandler(request: NextRequest) {
+// GET /api/certificates/verify - Verify certificate number
+export async function GET(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { certificate_number, verification_code } = body;
+    const { searchParams } = new URL(request.url);
+    const number = searchParams.get('number');
 
-    if (!certificate_number || !verification_code) {
-      return errorResponse(
-        "Certificate number and verification code are required",
-        HTTP_STATUS.BAD_REQUEST
-      );
+    if (!number) {
+      return NextResponse.json({ error: 'Nomor sertifikat wajib diisi' }, { status: 400 });
     }
 
-    const result = await certificateService.verifyCertificate(
-      certificate_number,
-      verification_code
-    );
-
-    if (!result.valid) {
-      return successResponse(
-        {
-          success: false,
-          valid: false,
-          message: result.message,
-        },
-        "Certificate verification failed"
-      );
-    }
-
-    // Type guard to ensure certificate exists
-    if (!result.certificate) {
-      return successResponse(
-        {
-          success: false,
-          valid: false,
-          message: "Certificate not found",
-        },
-        "Certificate verification failed"
-      );
-    }
-
-    // Perbaikan: Akses property yang sesuai dengan model Prisma
-    const certificate = await certificateService.getCertificateById(
-      result.certificate.id
-    );
-
-    if (!certificate) {
-      return successResponse(
-        {
-          success: false,
-          valid: false,
-          message: "Certificate details not found",
-        },
-        "Certificate verification failed"
-      );
-    }
-
-    // Get additional details for response
-    const certificateData = await certificateService.getCertificateData(
-      certificate.id
-    );
-
-    return successResponse(
-      {
-        success: true,
-        valid: true,
-        message: result.message,
-        data: {
-          userName: certificateData?.user_name || "Unknown User",
-          courseTitle: certificateData?.course_title || "Unknown Course",
-          issuedAt: certificate.issued_at,
-          // PERBAIKAN: Hapus completed_at jika tidak ada di model
-          // completedAt: certificate.completed_at,
+    const certificate = await prisma.certificate.findUnique({
+      where: { certificate_number: number },
+      include: {
+        user: { select: { full_name: true } },
+        course: {
+          select: {
+            title: true,
+            mentor: { include: { user: { select: { full_name: true } } } },
+          },
         },
       },
-      "Certificate verified successfully"
-    );
+    });
+
+    if (!certificate) {
+      return NextResponse.json({ valid: false, message: 'Sertifikat tidak ditemukan' });
+    }
+
+    if (certificate.status === 'REVOKED') {
+      return NextResponse.json({ valid: false, message: 'Sertifikat telah dicabut' });
+    }
+
+    return NextResponse.json({
+      valid: true,
+      certificate: {
+        number: certificate.certificate_number,
+        student_name: certificate.user.full_name,
+        course_title: certificate.course.title,
+        mentor_name: certificate.course.mentor.user.full_name,
+        issued_at: certificate.issued_at,
+      },
+    });
   } catch (error) {
-    console.error("Verify certificate error:", error);
-    return errorResponse(
-      "Verification failed",
-      HTTP_STATUS.INTERNAL_SERVER_ERROR
-    );
+    console.error('Verify certificate error:', error);
+    return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 });
   }
 }
-
-export const POST = errorHandler(
-  loggingMiddleware(corsMiddleware(verifyHandler))
-);

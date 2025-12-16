@@ -1,221 +1,120 @@
-import { NextRequest } from "next/server";
-import prisma from "@/lib/prisma";
-import { successResponse, errorResponse } from "@/utils/response.util";
-import { errorHandler } from "@/middlewares/error.middleware";
-import { requireAuth } from "@/middlewares/auth.middleware";
-import { corsMiddleware } from "@/middlewares/cors.middleware";
-import { loggingMiddleware } from "@/middlewares/logging.middleware";
-import { HTTP_STATUS } from "@/lib/constants";
+import { NextRequest, NextResponse } from 'next/server';
+import prisma from '@/lib/prisma';
+import { getAuthUser } from '@/lib/auth';
+import { CourseStatus } from '@prisma/client';
 
-interface SimilarUser {
-  user_id: string;
-  common_courses: bigint;
-  avg_progress: number;
-}
-
-interface EnrollmentData {
-  course_id: string;
-  progress: number;
-  status: string;
-  course: {
-    category_id: string;
-    level: string;
-    tags: string[];
-  };
-}
-
-interface CourseResult {
-  id: string;
-  title: string;
-  slug: string;
-  thumbnail: string | null;
-  short_description: string | null;
-  level: string;
-  price: number;
-  discount_price: number | null;
-  is_free: boolean;
-  average_rating: number;
-  total_students: number;
-  total_reviews: number;
-  tags: string[];
-  category: {
-    name: string;
-    slug: string;
-  } | null;
-  mentor: {
-    user: {
-      full_name: string;
-      avatar_url: string | null;
-    };
-  };
-}
-
-async function handler(
-  request: NextRequest,
-  context: { user: { userId: string; email: string; role: string } }
-) {
-  const { user } = context;
-
+// GET /api/recommendations/courses - Get recommended courses
+export async function GET(request: NextRequest) {
   try {
+    const authUser = getAuthUser(request);
     const { searchParams } = new URL(request.url);
-    const limit = parseInt(searchParams.get("limit") || "10");
+    const limit = parseInt(searchParams.get('limit') || '10');
+    const excludeEnrolled = searchParams.get('exclude_enrolled') === 'true';
 
-    const userProfile = (await prisma.enrollment.findMany({
-      where: { user_id: user.userId },
-      select: {
-        course_id: true,
-        progress: true,
-        status: true,
-        course: {
-          select: {
-            category_id: true,
-            level: true,
-            tags: true,
-          },
+    let enrolledCourseIds: string[] = [];
+    let preferredCategories: string[] = [];
+
+    if (authUser) {
+      // Get user's enrolled courses
+      const enrollments = await prisma.enrollment.findMany({
+        where: { user_id: authUser.userId },
+        select: {
+          course_id: true,
+          course: { select: { category_id: true } },
         },
-      },
-    })) as EnrollmentData[];
+      });
 
-    const similarUsers = await prisma.$queryRaw<SimilarUser[]>`
-      SELECT 
-        e2.user_id,
-        COUNT(DISTINCT e2.course_id)::bigint as common_courses,
-        AVG(e2.progress) as avg_progress
-      FROM enrollments e1
-      JOIN enrollments e2 ON e1.course_id = e2.course_id
-      WHERE e1.user_id = ${user.userId}
-        AND e2.user_id != ${user.userId}
-        AND e2.status = 'ACTIVE'
-      GROUP BY e2.user_id
-      HAVING COUNT(DISTINCT e2.course_id) >= 2
-      ORDER BY common_courses DESC, avg_progress DESC
-      LIMIT 20
-    `;
+      enrolledCourseIds = enrollments.map(e => e.course_id);
+      
+      // Get unique category IDs
+      const categorySet = new Set<string>();
+      enrollments.forEach(e => categorySet.add(e.course.category_id));
+      preferredCategories = Array.from(categorySet);
+    }
 
-    const similarUserIds = similarUsers.map((u: SimilarUser) => u.user_id);
+    // Build where clause
+    const whereClause: { status: CourseStatus; id?: { notIn: string[] }; category_id?: { in: string[] } } = {
+      status: CourseStatus.PUBLISHED,
+    };
 
-    const recommendedCourses = (await prisma.course.findMany({
-      where: {
-        status: "PUBLISHED",
-        enrollments: {
-          some: {
-            user_id: { in: similarUserIds },
-            status: { in: ["ACTIVE", "COMPLETED"] },
-          },
-        },
-        NOT: {
-          enrollments: {
-            some: { user_id: user.userId },
-          },
-        },
-      },
+    if (excludeEnrolled && enrolledCourseIds.length > 0) {
+      whereClause.id = { notIn: enrolledCourseIds };
+    }
+
+    // Prioritize user's preferred categories
+    if (preferredCategories.length > 0) {
+      whereClause.category_id = { in: preferredCategories };
+    }
+
+    const courses = await prisma.course.findMany({
+      where: whereClause,
+      orderBy: [
+        { is_featured: 'desc' },
+        { average_rating: 'desc' },
+        { total_students: 'desc' },
+      ],
       take: limit,
-      orderBy: [{ average_rating: "desc" }, { total_students: "desc" }],
       select: {
         id: true,
         title: true,
         slug: true,
         thumbnail: true,
         short_description: true,
-        level: true,
         price: true,
         discount_price: true,
         is_free: true,
+        level: true,
         average_rating: true,
         total_students: true,
         total_reviews: true,
-        tags: true,
-        category: {
-          select: { name: true, slug: true },
-        },
         mentor: {
-          select: {
-            user: {
-              select: { full_name: true, avatar_url: true },
-            },
-          },
+          select: { user: { select: { full_name: true, avatar_url: true } } },
         },
+        category: { select: { name: true, slug: true } },
       },
-    })) as CourseResult[];
+    });
 
-    if (recommendedCourses.length < limit) {
-      const userCategories = [
-        ...new Set(
-          userProfile.map((e: EnrollmentData) => e.course.category_id)
-        ),
-      ];
-      const userTags = [
-        ...new Set(userProfile.flatMap((e: EnrollmentData) => e.course.tags)),
-      ];
-
-      const contentBasedCourses = (await prisma.course.findMany({
+    // If not enough courses from preferred categories, get more general recommendations
+    if (courses.length < limit && preferredCategories.length > 0) {
+      const additionalCourses = await prisma.course.findMany({
         where: {
-          status: "PUBLISHED",
-          OR: [
-            { category_id: { in: userCategories } },
-            { tags: { hasSome: userTags } },
-          ],
-          NOT: {
-            id: { in: recommendedCourses.map((c: CourseResult) => c.id) },
-            enrollments: {
-              some: { user_id: user.userId },
-            },
-          },
+          status: CourseStatus.PUBLISHED,
+          id: { notIn: [...enrolledCourseIds, ...courses.map(c => c.id)] },
         },
-        take: limit - recommendedCourses.length,
-        orderBy: { average_rating: "desc" },
+        orderBy: [
+          { is_featured: 'desc' },
+          { average_rating: 'desc' },
+        ],
+        take: limit - courses.length,
         select: {
           id: true,
           title: true,
           slug: true,
           thumbnail: true,
           short_description: true,
-          level: true,
           price: true,
           discount_price: true,
           is_free: true,
+          level: true,
           average_rating: true,
           total_students: true,
           total_reviews: true,
-          tags: true,
-          category: {
-            select: { name: true, slug: true },
-          },
           mentor: {
-            select: {
-              user: {
-                select: { full_name: true, avatar_url: true },
-              },
-            },
+            select: { user: { select: { full_name: true, avatar_url: true } } },
           },
+          category: { select: { name: true, slug: true } },
         },
-      })) as CourseResult[];
+      });
 
-      recommendedCourses.push(...contentBasedCourses);
+      courses.push(...additionalCourses);
     }
 
-    return successResponse(
-      {
-        courses: recommendedCourses,
-        algorithm: "collaborative_filtering",
-        similarUsersCount: similarUserIds.length,
-      },
-      "Course recommendations retrieved successfully"
-    );
+    return NextResponse.json({
+      courses,
+      personalized: authUser !== null,
+    });
   } catch (error) {
-    if (error instanceof Error) {
-      return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
-    }
-    return errorResponse(
-      "Failed to get course recommendations",
-      HTTP_STATUS.INTERNAL_SERVER_ERROR
-    );
+    console.error('Get recommended courses error:', error);
+    return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 });
   }
 }
-
-// Apply authentication
-const authenticatedHandler = requireAuth(handler);
-
-export const GET = errorHandler(
-  loggingMiddleware(corsMiddleware(authenticatedHandler))
-);

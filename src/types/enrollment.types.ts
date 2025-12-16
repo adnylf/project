@@ -1,95 +1,128 @@
-import type { BaseEntity } from './common.types';
+// Enrollment Types
+import { EnrollmentStatus } from '@prisma/client';
 
-/**
- * Enrollment Types
- */
-
-/**
- * Enrollment Status
- */
-export type EnrollmentStatus = 'ACTIVE' | 'COMPLETED' | 'EXPIRED' | 'CANCELLED';
-
-/**
- * Enrollment
- */
-export interface Enrollment extends BaseEntity {
-  userId: string;
-  courseId: string;
+// Enrollment data
+export interface EnrollmentData {
+  id: string;
+  user_id: string;
+  course_id: string;
   status: EnrollmentStatus;
   progress: number;
-  completedAt?: Date;
-  expiresAt?: Date;
-  lastAccessedAt?: Date;
-  certificateId?: string;
+  last_accessed_at: Date | null;
+  completed_at: Date | null;
+  expires_at: Date | null;
+  created_at: Date;
+  updated_at: Date;
 }
 
-/**
- * Enrollment Detail
- */
-export interface EnrollmentDetail extends Enrollment {
+// Enrollment with course
+export interface EnrollmentWithCourse extends EnrollmentData {
   course: {
     id: string;
     title: string;
-    thumbnail?: string;
-    totalDuration: number;
-    totalLectures: number;
+    slug: string;
+    thumbnail: string | null;
+    total_duration: number;
+    total_lessons: number;
     mentor: {
-      name: string;
-      profilePicture?: string;
+      user: {
+        full_name: string;
+      };
     };
   };
-  progressRecords?: Progress[];
+}
+
+// Enrollment with full details
+export interface EnrollmentWithDetails extends EnrollmentWithCourse {
+  user: {
+    id: string;
+    full_name: string;
+    email: string;
+    avatar_url: string | null;
+  };
+  progress_items: ProgressData[];
   certificate?: {
     id: string;
-    certificateNumber: string;
-    issuedAt: Date;
+    certificate_number: string;
   };
 }
 
-/**
- * Progress
- */
-export interface Progress extends BaseEntity {
-  enrollmentId: string;
-  materialId: string;
-  userId: string;
-  isCompleted: boolean;
-  watchedDuration: number;
-  lastPosition: number;
-  completedAt?: Date;
+// Progress data
+export interface ProgressData {
+  id: string;
+  enrollment_id: string;
+  material_id: string;
+  user_id: string;
+  is_completed: boolean;
+  watched_duration: number;
+  last_position: number;
+  completed_at: Date | null;
+  created_at: Date;
+  updated_at: Date;
 }
 
-/**
- * Update Progress Data
- */
-export interface UpdateProgressData {
-  materialId: string;
-  watchedDuration?: number;
-  lastPosition?: number;
-  isCompleted?: boolean;
+// Enrollment check result
+export interface EnrollmentCheck {
+  enrolled: boolean;
+  enrollment?: EnrollmentData;
 }
 
-/**
- * Course Progress Summary
- */
-export interface CourseProgressSummary {
-  courseId: string;
-  totalMaterials: number;
-  completedMaterials: number;
+// Enrollment list item
+export interface EnrollmentListItem {
+  id: string;
+  course_title: string;
+  course_thumbnail: string | null;
+  mentor_name: string;
   progress: number;
-  totalDuration: number;
-  watchedDuration: number;
-  lastAccessedAt?: Date;
+  status: EnrollmentStatus;
+  last_accessed_at: Date | null;
+  enrolled_at: Date;
 }
 
-/**
- * Learning Statistics
- */
-export interface LearningStatistics {
-  totalEnrollments: number;
-  activeEnrollments: number;
-  completedCourses: number;
-  totalWatchTime: number;
-  averageProgress: number;
-  certificatesEarned: number;
+// Progress update input
+export interface ProgressUpdateInput {
+  material_id: string;
+  is_completed?: boolean;
+  watched_duration?: number;
+  last_position?: number;
+}
+
+// Enrollment statistics
+export interface EnrollmentStatistics {
+  total_enrollments: number;
+  active_enrollments: number;
+  completed_enrollments: number;
+  completion_rate: number;
+  average_progress: number;
+}
+
+// Continue learning item
+export interface ContinueLearningItem {
+  enrollment_id: string;
+  course_id: string;
+  course_title: string;
+  course_thumbnail: string | null;
+  progress: number;
+  next_material: {
+    id: string;
+    title: string;
+    type: string;
+  } | null;
+  last_accessed_at: Date | null;
+}
+
+// Material completion
+export interface MaterialCompletion {
+  material_id: string;
+  completed: boolean;
+  completed_at: Date | null;
+}
+
+// Course completion
+export interface CourseCompletion {
+  course_id: string;
+  enrollment_id: string;
+  completed: boolean;
+  completed_at: Date | null;
+  certificate_generated: boolean;
 }

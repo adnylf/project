@@ -1,19 +1,18 @@
-// SidebarAdmin.tsx
 'use client';
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { 
   X, 
-  Menu, 
-  Home, 
-  BookOpen, // Untuk Courses
-  BarChart3, // Untuk Reports
+  Menu,
+  Home,
   Users,
-  Users2, // Untuk Mentors
-  CreditCard, // Untuk Transactions
-  Award, // Untuk Certificates
-  Settings
+  UserCog,
+  BookOpen,
+  FolderTree,
+  BarChart3,
+  Award,
+  MessageSquare
 } from 'lucide-react';
 
 const menuItems = [
@@ -23,9 +22,24 @@ const menuItems = [
     link: '/admin/dashboard',
   },
   {
+    label: 'Users',
+    icon: Users,
+    link: '/admin/users',
+  },
+  {
+    label: 'Mentors',
+    icon: UserCog,
+    link: '/admin/mentors',
+  },
+  {
     label: 'Courses',
     icon: BookOpen,
     link: '/admin/courses',
+  },
+  {
+    label: 'Categories',
+    icon: FolderTree,
+    link: '/admin/categories',
   },
   {
     label: 'Reports',
@@ -33,30 +47,15 @@ const menuItems = [
     link: '/admin/reports',
   },
   {
-    label: 'Users',
-    icon: Users,
-    link: '/admin/users',
-  },
-  {
-    label: 'Mentors',
-    icon: Users2,
-    link: '/admin/mentors',
-  },
-  {
-    label: 'Transactions',
-    icon: CreditCard,
-    link: '/admin/transactions',
-  },
-  {
     label: 'Certificates',
     icon: Award,
     link: '/admin/certificates',
   },
   {
-    label: 'Settings',
-    icon: Settings,
-    link: '/admin/settings',
-  },
+    label: 'Comments',
+    icon: MessageSquare,
+    link: '/admin/comments',
+  }
 ];
 
 interface SidebarAdminProps {
@@ -83,37 +82,32 @@ export default function SidebarAdmin({ isOpen, toggleSidebar }: SidebarAdminProp
         ${isOpen ? 'w-64 translate-x-0' : 'w-16 -translate-x-full md:translate-x-0'}
       `}>
         <div className="flex flex-col h-full">
-          {/* Header Sidebar - hanya muncul ketika sidebar terbuka */}
-          {isOpen && (
-            <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700 h-16">
-              <span className="text-xl font-bold text-gray-900 dark:text-white">Admin Menu</span>
+          {/* Header Sidebar */}
+          <div className="flex items-center justify-end p-4 border-b border-gray-200 dark:border-gray-700 h-16">
+            {isOpen ? (
               <button
                 onClick={toggleSidebar}
                 className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
               >
                 <X className="h-5 w-5 text-gray-700 dark:text-gray-300" />
               </button>
-            </div>
-          )}
-
-          {/* Tombol toggle untuk sidebar tertutup - di tengah secara vertikal */}
-          {!isOpen && (
-            <div className="flex justify-center py-4 border-b border-gray-200 dark:border-gray-700 h-16">
+            ) : (
               <button
                 onClick={toggleSidebar}
                 className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
               >
                 <Menu className="h-5 w-5 text-gray-700 dark:text-gray-300" />
               </button>
-            </div>
-          )}
+            )}
+          </div>
 
           {/* Menu Items */}
           <nav className={`flex-1 p-4 ${isOpen ? 'overflow-y-auto' : 'overflow-hidden'}`}>
             <div className="space-y-2">
               {menuItems.map((item) => {
                 const Icon = item.icon;
-                const isActive = pathname === item.link;
+                // Check for active state - also match nested routes
+                const isActive = pathname === item.link || pathname.startsWith(`${item.link}/`);
 
                 return (
                   <Link

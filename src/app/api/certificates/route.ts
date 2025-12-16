@@ -1,44 +1,42 @@
 import { NextRequest, NextResponse } from 'next/server';
-import certificateService from '@/services/certificate.service';
-import { verifyToken } from '@/lib/auth';
+import prisma from '@/lib/prisma';
+import { getAuthUser, hasRole, unauthorizedResponse, forbiddenResponse } from '@/lib/auth';
+import { UserRole } from '@prisma/client';
 
+// GET /api/certificates - List certificates
 export async function GET(request: NextRequest) {
   try {
-    // Verify authentication
-    const token = request.headers.get('authorization')?.replace('Bearer ', '');
-    if (!token) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const authUser = getAuthUser(request);
+    if (!authUser) return unauthorizedResponse();
 
-    const decoded = await verifyToken(token);
-    if (!decoded) {
-      return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
-    }
-
-    // Get query parameters
-    const searchParams = request.nextUrl.searchParams;
-    const limit = parseInt(searchParams.get('limit') || '10');
+    const isAdmin = hasRole(authUser, [UserRole.ADMIN]);
+    const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get('page') || '1');
-    const offset = (page - 1) * limit;
+    const limit = parseInt(searchParams.get('limit') || '10');
 
-    // Get user certificates
-    const { certificates, total } = await certificateService.getUserCertificates(decoded.userId, {
-      limit,
-      offset,
-    });
+    const skip = (page - 1) * limit;
+    const where = isAdmin ? {} : { user_id: authUser.userId };
+
+    const [certificates, total] = await Promise.all([
+      prisma.certificate.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { created_at: 'desc' },
+        include: {
+          user: { select: { id: true, full_name: true, email: true } },
+          course: { select: { id: true, title: true } },
+        },
+      }),
+      prisma.certificate.count({ where }),
+    ]);
 
     return NextResponse.json({
-      success: true,
-      data: certificates,
-      pagination: {
-        total,
-        page,
-        limit,
-        total_pages: Math.ceil(total / limit),
-      },
+      certificates,
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     });
   } catch (error) {
-    console.error('GET certificates error:', error);
-    return NextResponse.json({ error: 'Failed to fetch certificates' }, { status: 500 });
+    console.error('Get certificates error:', error);
+    return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 });
   }
 }

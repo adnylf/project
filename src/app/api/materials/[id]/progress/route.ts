@@ -1,126 +1,53 @@
-import { NextRequest, NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
-import enrollmentService from "@/services/enrollment.service";
-import { successResponse, errorResponse } from "@/utils/response.util";
-import { errorHandler } from "@/middlewares/error.middleware";
-import { authMiddleware } from "@/middlewares/auth.middleware";
-import { corsMiddleware } from "@/middlewares/cors.middleware";
-import { loggingMiddleware } from "@/middlewares/logging.middleware";
-import { HTTP_STATUS } from "@/lib/constants";
+import { NextRequest, NextResponse } from 'next/server';
+import prisma from '@/lib/prisma';
+import { getAuthUser, unauthorizedResponse } from '@/lib/auth';
 
-async function handler(
-  request: NextRequest,
-  user: any,
-  context: { params: Promise<{ id: string }> }
-) {
+interface RouteParams {
+  params: { id: string };
+}
+
+// GET /api/materials/[id]/progress - Get material progress
+export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
-    const { id: materialId } = await context.params;
+    const authUser = getAuthUser(request);
+    if (!authUser) return unauthorizedResponse();
 
-    const body = await request.json();
-    const { watchedDuration, lastPosition, isCompleted } = body;
+    const { id } = params;
 
     const material = await prisma.material.findUnique({
-      where: { id: materialId },
-      include: {
-        section: {
-          select: { courseId: true },
-        },
-      },
+      where: { id },
+      include: { section: true },
     });
 
     if (!material) {
-      return errorResponse("Material not found", HTTP_STATUS.NOT_FOUND);
+      return NextResponse.json({ error: 'Materi tidak ditemukan' }, { status: 404 });
     }
 
     const enrollment = await prisma.enrollment.findUnique({
       where: {
-        userId_courseId: {
-          userId: user.userId,
-          courseId: material.section.courseId,
+        user_id_course_id: {
+          user_id: authUser.userId,
+          course_id: material.section.course_id,
         },
       },
     });
 
     if (!enrollment) {
-      return errorResponse(
-        "You must be enrolled to track progress",
-        HTTP_STATUS.FORBIDDEN
-      );
+      return NextResponse.json({ progress: null, isEnrolled: false });
     }
 
-    const progress = await prisma.progress.upsert({
+    const progress = await prisma.progress.findUnique({
       where: {
-        enrollmentId_materialId: {
-          enrollmentId: enrollment.id,
-          materialId,
+        enrollment_id_material_id: {
+          enrollment_id: enrollment.id,
+          material_id: id,
         },
       },
-      update: {
-        watchedDuration: watchedDuration ?? undefined,
-        lastPosition: lastPosition ?? undefined,
-        isCompleted: isCompleted ?? undefined,
-        completedAt: isCompleted ? new Date() : undefined,
-      },
-      create: {
-        enrollmentId: enrollment.id,
-        materialId,
-        userId: user.userId,
-        watchedDuration: watchedDuration || 0,
-        lastPosition: lastPosition || 0,
-        isCompleted: isCompleted || false,
-        completedAt: isCompleted ? new Date() : null,
-      },
     });
 
-    await enrollmentService.updateEnrollmentProgress(enrollment.id);
-
-    await prisma.enrollment.update({
-      where: { id: enrollment.id },
-      data: { lastAccessedAt: new Date() },
-    });
-
-    return successResponse(
-      {
-        progressId: progress.id,
-        materialId: progress.materialId,
-        watchedDuration: progress.watchedDuration,
-        lastPosition: progress.lastPosition,
-        isCompleted: progress.isCompleted,
-        completedAt: progress.completedAt,
-      },
-      "Progress updated successfully"
-    );
+    return NextResponse.json({ progress, isEnrolled: true });
   } catch (error) {
-    if (error instanceof Error) {
-      return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
-    }
-    return errorResponse(
-      "Failed to update progress",
-      HTTP_STATUS.INTERNAL_SERVER_ERROR
-    );
+    console.error('Get material progress error:', error);
+    return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 });
   }
-}
-
-const authenticatedHandler = async (
-  request: NextRequest,
-  context: { params: Promise<{ id: string }> }
-): Promise<NextResponse> => {
-  const authResult = await authMiddleware(request);
-  if (authResult instanceof NextResponse) {
-    return authResult;
-  }
-  return handler(request, authResult, context);
-};
-
-export async function POST(
-  req: NextRequest,
-  context: { params: Promise<{ id: string }> }
-): Promise<NextResponse> {
-  return errorHandler(async (request: NextRequest) => {
-    return loggingMiddleware(async (r: NextRequest) => {
-      return corsMiddleware(async (rq: NextRequest) => {
-        return authenticatedHandler(rq, context);
-      })(r);
-    })(request);
-  })(req);
 }

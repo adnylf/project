@@ -1,619 +1,484 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import {
-  Banknote,
-  ArrowDown,
-  ArrowUp,
-  BarChart3,
-  CheckCircle,
-  Clock,
-  XCircle,
-  DollarSign,
-  Search,
-  AlertTriangle,
-  Key
-} from 'lucide-react';
-import MentorLayout from '@/components/mentor/mentor-layout';
-import ProtectedRoute from "@/components/ui/protected-route";
+import { useState, useEffect, useCallback } from "react";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
+} from "@/components/ui/select";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import { Input } from '@/components/ui/input';
+  DollarSign,
+  Loader2,
+  TrendingUp,
+  TrendingDown,
+  Calendar,
+  CreditCard,
+  BarChart3,
+  ArrowUpRight,
+  ArrowDownRight,
+  Wallet,
+  PiggyBank,
+  Receipt,
+  Sparkles,
+  Users,
+  Award,
+} from "lucide-react";
+import MentorLayout from "@/components/mentor/mentor-layout";
+import ProtectedRoute from "@/components/auth/protected-route";
 
-const revenueTransactions = [
-  {
-    id: 'TXN-001',
-    courseTitle: 'Web Development Basics',
-    studentName: 'John Doe',
-    amount: 499000,
-    date: '2024-10-15',
-    status: 'completed',
-    paymentMethod: 'Credit Card',
-  },
-  {
-    id: 'TXN-002',
-    courseTitle: 'JavaScript Advanced',
-    studentName: 'Jane Smith',
-    amount: 599000,
-    date: '2024-10-14',
-    status: 'completed',
-    paymentMethod: 'Bank Transfer',
-  },
-  {
-    id: 'TXN-003',
-    courseTitle: 'React for Beginners',
-    studentName: 'Bob Johnson',
-    amount: 549000,
-    date: '2024-10-13',
-    status: 'pending',
-    paymentMethod: 'E-Wallet',
-  },
-  {
-    id: 'TXN-004',
-    courseTitle: 'Web Development Basics',
-    studentName: 'Alice Brown',
-    amount: 499000,
-    date: '2024-10-12',
-    status: 'completed',
-    paymentMethod: 'Credit Card',
-  },
-  {
-    id: 'TXN-005',
-    courseTitle: 'Python Data Science',
-    studentName: 'Charlie Wilson',
-    amount: 699000,
-    date: '2024-10-11',
-    status: 'failed',
-    paymentMethod: 'Bank Transfer',
-  },
-  {
-    id: 'TXN-006',
-    courseTitle: 'UI/UX Design',
-    studentName: 'Diana Martinez',
-    amount: 399000,
-    date: '2024-10-10',
-    status: 'completed',
-    paymentMethod: 'Credit Card',
-  },
-  {
-    id: 'TXN-007',
-    courseTitle: 'Mobile App Development',
-    studentName: 'Eva Garcia',
-    amount: 749000,
-    date: '2024-10-09',
-    status: 'completed',
-    paymentMethod: 'E-Wallet',
-  },
-  {
-    id: 'TXN-008',
-    courseTitle: 'Cloud Computing',
-    studentName: 'Frank Miller',
-    amount: 899000,
-    date: '2024-10-08',
-    status: 'pending',
-    paymentMethod: 'Credit Card',
-  },
-];
+const API_BASE_URL = "http://localhost:3000/api";
 
-const payoutHistory = [
-  {
-    id: 'PAYOUT-001',
-    amount: 2950000,
-    date: '2024-10-01',
-    status: 'completed',
-    bankAccount: 'BCA ****8765',
-  },
-  {
-    id: 'PAYOUT-002',
-    amount: 3450000,
-    date: '2024-09-01',
-    status: 'completed',
-    bankAccount: 'BCA ****8765',
-  },
-  {
-    id: 'PAYOUT-003',
-    amount: 2800000,
-    date: '2024-08-01',
-    status: 'completed',
-    bankAccount: 'BCA ****8765',
-  },
-  {
-    id: 'PAYOUT-004',
-    amount: 5200000,
-    date: '2024-07-01',
-    status: 'completed',
-    bankAccount: 'BCA ****8765',
-  },
-  {
-    id: 'PAYOUT-005',
-    amount: 4100000,
-    date: '2024-06-01',
-    status: 'completed',
-    bankAccount: 'BCA ****8765',
-  },
-  {
-    id: 'PAYOUT-006',
-    amount: 3800000,
-    date: '2024-05-01',
-    status: 'completed',
-    bankAccount: 'BCA ****8765',
-  },
-  {
-    id: 'PAYOUT-007',
-    amount: 3200000,
-    date: '2024-04-01',
-    status: 'completed',
-    bankAccount: 'BCA ****8765',
-  },
-  {
-    id: 'PAYOUT-008',
-    amount: 2950000,
-    date: '2024-03-01',
-    status: 'completed',
-    bankAccount: 'BCA ****8765',
-  },
-];
+interface RevenueData {
+  total_revenue: number;
+  transactions_count: number;
+  monthly_revenue: Record<string, number>;
+}
 
-export default function MentorRevenue() {
-  const [filterStatus, setFilterStatus] = useState('all');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [isClient, setIsClient] = useState(false);
+const formatCurrency = (amount: number) => {
+  return new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: "IDR",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(amount);
+};
+
+const formatShortCurrency = (amount: number) => {
+  if (amount >= 1000000000) return `Rp ${(amount / 1000000000).toFixed(1)}M`;
+  if (amount >= 1000000) return `Rp ${(amount / 1000000).toFixed(1)}Jt`;
+  if (amount >= 1000) return `Rp ${(amount / 1000).toFixed(0)}Rb`;
+  return `Rp ${amount}`;
+};
+
+const getMonthName = (monthKey: string) => {
+  const [year, month] = monthKey.split("-");
+  const date = new Date(parseInt(year), parseInt(month) - 1);
+  return date.toLocaleDateString("id-ID", { month: "long", year: "numeric" });
+};
+
+const getShortMonthName = (monthKey: string) => {
+  const [year, month] = monthKey.split("-");
+  const date = new Date(parseInt(year), parseInt(month) - 1);
+  return date.toLocaleDateString("id-ID", { month: "short" });
+};
+
+export default function RevenuePage() {
+  const [revenueData, setRevenueData] = useState<RevenueData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear().toString());
+
+  const getAuthToken = useCallback(() => typeof window !== "undefined" ? localStorage.getItem("token") || localStorage.getItem("accessToken") : null, []);
+
+  const fetchRevenue = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const token = getAuthToken();
+      if (!token) {
+        setError("Silakan login terlebih dahulu");
+        return;
+      }
+
+      const response = await fetch(`${API_BASE_URL}/mentors/revenue`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!response.ok) throw new Error("Gagal memuat data pendapatan");
+
+      const data = await response.json();
+      setRevenueData(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Terjadi kesalahan");
+    } finally {
+      setLoading(false);
+    }
+  }, [getAuthToken]);
 
   useEffect(() => {
-    setIsClient(true);
-  }, []);
+    fetchRevenue();
+  }, [fetchRevenue]);
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('id-ID', {
-      style: 'currency',
-      currency: 'IDR',
-      minimumFractionDigits: 0,
-    }).format(amount);
-  };
+  // Get available years from data
+  const availableYears = revenueData
+    ? [...new Set(Object.keys(revenueData.monthly_revenue).map((k) => k.split("-")[0]))].sort((a, b) => b.localeCompare(a))
+    : [new Date().getFullYear().toString()];
 
-  const formatNumber = (num: number) => {
-    if (num >= 1000000) {
-      return (num / 1000000).toFixed(1) + 'jt';
-    } else if (num >= 1000) {
-      return (num / 1000).toFixed(1) + 'k';
-    }
-    return num.toString();
-  };
+  // Filter monthly data by selected year
+  const filteredMonthlyRevenue = revenueData
+    ? Object.entries(revenueData.monthly_revenue)
+        .filter(([key]) => key.startsWith(selectedYear))
+        .sort(([a], [b]) => a.localeCompare(b))
+    : [];
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'completed':
-        return <Badge className="bg-[#008A00]">Selesai</Badge>;
-      case 'pending':
-        return <Badge className="bg-[#F4B400]">Pending</Badge>;
-      case 'failed':
-        return <Badge className="bg-[#D93025]">Gagal</Badge>;
-      default:
-        return <Badge>Unknown</Badge>;
-    }
-  };
+  // Calculate stats for selected year
+  const yearlyTotal = filteredMonthlyRevenue.reduce((sum, [, amount]) => sum + amount, 0);
+  const avgMonthly = filteredMonthlyRevenue.length > 0 ? yearlyTotal / filteredMonthlyRevenue.length : 0;
 
-  const filteredTransactions = revenueTransactions.filter(txn => {
-    const matchesSearch =
-      txn.courseTitle.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      txn.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      txn.studentName.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = filterStatus === 'all' || txn.status === filterStatus;
-    return matchesSearch && matchesStatus;
-  });
+  // Get current and previous month for comparison
+  const currentMonth = new Date().toISOString().slice(0, 7);
+  const prevMonth = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 7);
+  const currentMonthRevenue = revenueData?.monthly_revenue[currentMonth] || 0;
+  const prevMonthRevenue = revenueData?.monthly_revenue[prevMonth] || 0;
+  const monthlyGrowth = prevMonthRevenue > 0 ? ((currentMonthRevenue - prevMonthRevenue) / prevMonthRevenue) * 100 : 0;
 
-  const totalRevenue = revenueTransactions
-    .filter(txn => txn.status === 'completed')
-    .reduce((sum, txn) => sum + txn.amount, 0);
+  // Find max for chart scaling
+  const maxRevenue = Math.max(...filteredMonthlyRevenue.map(([, amount]) => amount), 1);
 
-  const pendingRevenue = revenueTransactions
-    .filter(txn => txn.status === 'pending')
-    .reduce((sum, txn) => sum + txn.amount, 0);
-
-  const totalPayout = payoutHistory
-    .filter(p => p.status === 'completed')
-    .reduce((sum, p) => sum + p.amount, 0);
-
-  const availableBalance = totalRevenue - totalPayout;
-  const adminFee = availableBalance * 0.02;
-  const netAmount = availableBalance - adminFee;
+  if (loading) {
+    return (
+      <ProtectedRoute allowedRoles={["MENTOR"]}>
+        <MentorLayout>
+          <div className="flex items-center justify-center min-h-[400px]">
+            <Loader2 className="h-12 w-12 animate-spin text-[#005EB8]" />
+          </div>
+        </MentorLayout>
+      </ProtectedRoute>
+    );
+  }
 
   return (
     <ProtectedRoute allowedRoles={["MENTOR"]}>
-    <MentorLayout>
-      <div className="space-y-8">
-        {/* Header Section */}
-        <div className="animate-fadeIn">
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-            Revenue & Payout
-          </h1>
-          <p className="text-gray-600 dark:text-gray-400">
-            Kelola pendapatan dan riwayat pencairan dana Anda
-          </p>
-        </div>
-
-        {/* Stats Cards */}
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 animate-scaleIn">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="h-12 w-12 rounded-full bg-[#008A00]/10 flex items-center justify-center">
-                  <Banknote className="h-6 w-6 text-[#008A00]" />
-                </div>
-                <ArrowUp className="h-5 w-5 text-[#008A00]" />
-              </div>
-              <div className="space-y-1">
-                <p className="text-sm text-gray-600 dark:text-gray-400">Total Pendapatan</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {isClient ? formatNumber(totalRevenue) : formatCurrency(totalRevenue)}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 animate-scaleIn delay-100">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="h-12 w-12 rounded-full bg-[#F4B400]/10 flex items-center justify-center">
-                  <Clock className="h-6 w-6 text-[#F4B400]" />
-                </div>
-                <Clock className="h-5 w-5 text-[#F4B400]" />
-              </div>
-              <div className="space-y-1">
-                <p className="text-sm text-gray-600 dark:text-gray-400">Pending</p>
-                <p className="text-2xl font-bold text-[#F4B400]">
-                  {isClient ? formatNumber(pendingRevenue) : formatCurrency(pendingRevenue)}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 animate-scaleIn delay-200">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="h-12 w-12 rounded-full bg-[#005EB8]/10 flex items-center justify-center">
-                  <ArrowDown className="h-6 w-6 text-[#005EB8]" />
-                </div>
-                <ArrowDown className="h-5 w-5 text-[#005EB8]" />
-              </div>
-              <div className="space-y-1">
-                <p className="text-sm text-gray-600 dark:text-gray-400">Total Payout</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {isClient ? formatNumber(totalPayout) : formatCurrency(totalPayout)}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 animate-scaleIn delay-300">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="h-12 w-12 rounded-full bg-[#5FB336]/10 flex items-center justify-center">
-                  <DollarSign className="h-6 w-6 text-[#5FB336]" />
-                </div>
-                <DollarSign className="h-5 w-5 text-[#5FB336]" />
-              </div>
-              <div className="space-y-1">
-                <p className="text-sm text-gray-600 dark:text-gray-400">Saldo Tersedia</p>
-                <p className="text-2xl font-bold text-[#5FB336]">
-                  {isClient ? formatNumber(availableBalance) : formatCurrency(availableBalance)}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Search and Filter Section */}
-        <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 animate-fadeSlide">
-          <CardContent className="p-6">
-            <div className="flex flex-col md:flex-row gap-4">
-              <div className="flex-1 relative">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                <Input
-                  type="search"
-                  placeholder="Cari transaksi, kursus, atau siswa..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
-              <Select value={filterStatus} onValueChange={setFilterStatus}>
-                <SelectTrigger className="w-full md:w-[200px]">
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Semua Status</SelectItem>
-                  <SelectItem value="completed">Selesai</SelectItem>
-                  <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="failed">Gagal</SelectItem>
-                </SelectContent>
-              </Select>
+      <MentorLayout>
+        <div className="space-y-8">
+          {/* Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-3">
+                <DollarSign className="h-8 w-8 text-[#005EB8]" />
+                Pendapatan
+              </h1>
+              <p className="text-gray-600 dark:text-gray-400">
+                Pantau dan kelola pendapatan dari kursus Anda
+              </p>
             </div>
-          </CardContent>
-        </Card>
+            <Select value={selectedYear} onValueChange={setSelectedYear}>
+              <SelectTrigger className="w-40 border-gray-300 dark:border-gray-700 focus:border-[#005EB8] focus:ring-[#005EB8]">
+                <Calendar className="h-4 w-4 mr-2 text-gray-400" />
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {availableYears.map((year) => (
+                  <SelectItem key={year} value={year}>
+                    Tahun {year}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
-        {/* Sales Transactions Table */}
-        <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 animate-fadeSlide delay-100">
-          <CardHeader>
-            <CardTitle className="text-xl font-bold">
-              Transaksi Penjualan
-            </CardTitle>
-            <CardDescription>
-              Riwayat lengkap penjualan kursus Anda
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>ID Transaksi</TableHead>
-                    <TableHead>Kursus</TableHead>
-                    <TableHead>Siswa</TableHead>
-                    <TableHead>Tanggal</TableHead>
-                    <TableHead>Metode</TableHead>
-                    <TableHead>Jumlah</TableHead>
-                    <TableHead>Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredTransactions.map((txn) => (
-                    <TableRow key={txn.id} className="table-row">
-                      <TableCell className="font-mono text-sm">
-                        {txn.id}
-                      </TableCell>
-                      <TableCell>
-                        <div>
-                          <p className="font-medium text-gray-900 dark:text-white">
-                            {txn.courseTitle}
-                          </p>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        {txn.studentName}
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        {new Date(txn.date).toLocaleDateString('id-ID', {
-                          day: '2-digit',
-                          month: 'short',
-                          year: 'numeric',
-                        })}
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        {txn.paymentMethod}
-                      </TableCell>
-                      <TableCell className="font-semibold">
-                        {formatCurrency(txn.amount)}
-                      </TableCell>
-                      <TableCell>{getStatusBadge(txn.status)}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+          {/* Error */}
+          {error && (
+            <div className="rounded-lg border bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-700 p-4">
+              <p className="text-red-600 dark:text-red-400">{error}</p>
             </div>
+          )}
 
-            {filteredTransactions.length === 0 && (
-              <div className="text-center py-12">
-                <div className="flex flex-col items-center gap-4">
-                  <div className="h-20 w-20 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
-                    <BarChart3 className="h-10 w-10 text-gray-400" />
+          {/* Stats Cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {/* Total Revenue */}
+            <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
+              <CardContent className="p-5">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 rounded-xl bg-[#005EB8]/10">
+                    <Wallet className="h-6 w-6 text-[#005EB8]" />
                   </div>
                   <div>
-                    <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-                      Tidak ada transaksi
-                    </h3>
-                    <p className="text-gray-600 dark:text-gray-400">
-                      Belum ada transaksi yang sesuai dengan pencarian
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Total Pendapatan</p>
+                    <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                      {formatShortCurrency(revenueData?.total_revenue || 0)}
                     </p>
                   </div>
                 </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                <Badge className="mt-3 bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-300 border-gray-200 dark:border-gray-700">
+                  All Time
+                </Badge>
+              </CardContent>
+            </Card>
 
-        {/* Payout History and Request Section */}
-        <div className="grid md:grid-cols-2 gap-8">
-          {/* Payout History - Now with 8 items */}
-          <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 animate-fadeSlide delay-200">
+            {/* This Year */}
+            <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
+              <CardContent className="p-5">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 rounded-xl bg-[#008A00]/10">
+                    <PiggyBank className="h-6 w-6 text-[#008A00]" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Tahun Ini</p>
+                    <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                      {formatShortCurrency(yearlyTotal)}
+                    </p>
+                  </div>
+                </div>
+                <Badge className="mt-3 bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-300 border-gray-200 dark:border-gray-700">
+                  {selectedYear}
+                </Badge>
+              </CardContent>
+            </Card>
+
+            {/* This Month */}
+            <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
+              <CardContent className="p-5">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 rounded-xl bg-[#F4B400]/10">
+                    <CreditCard className="h-6 w-6 text-[#F4B400]" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Bulan Ini</p>
+                    <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                      {formatShortCurrency(currentMonthRevenue)}
+                    </p>
+                    {monthlyGrowth !== 0 && (
+                      <div className={`flex items-center gap-1 text-xs mt-1 ${monthlyGrowth > 0 ? "text-green-600" : "text-red-600"}`}>
+                        {monthlyGrowth > 0 ? (
+                          <ArrowUpRight className="h-3 w-3" />
+                        ) : (
+                          <ArrowDownRight className="h-3 w-3" />
+                        )}
+                        {Math.abs(monthlyGrowth).toFixed(1)}%
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Transactions */}
+            <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
+              <CardContent className="p-5">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 rounded-xl bg-[#D93025]/10">
+                    <Receipt className="h-6 w-6 text-[#D93025]" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Total Transaksi</p>
+                    <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                      {revenueData?.transactions_count || 0}
+                    </p>
+                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Transaksi berhasil</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Chart */}
+          <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
             <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-xl font-bold">
-                  Riwayat Payout
-                </CardTitle>
-                <CheckCircle className="h-5 w-5 text-[#008A00]" />
-              </div>
+              <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-white text-xl font-bold">
+                <BarChart3 className="h-5 w-5 text-[#005EB8]" />
+                Grafik Pendapatan Bulanan
+              </CardTitle>
               <CardDescription>
-                8 payout terakhir Anda
+                Pendapatan per bulan untuk tahun {selectedYear}
               </CardDescription>
             </CardHeader>
-            <CardContent className="p-0">
-              <div className="max-h-[525px] overflow-y-auto p-6 space-y-4">
-                {payoutHistory.map((payout) => (
-                  <div
-                    key={payout.id}
-                    className="p-4 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-750 transition-colors duration-200"
-                  >
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex items-center gap-3">
-                        <div className="h-10 w-10 rounded-full bg-[#008A00]/10 flex items-center justify-center">
-                          <CheckCircle className="h-5 w-5 text-[#008A00]" />
-                        </div>
-                        <div>
-                          <p className="font-mono text-sm font-medium text-gray-900 dark:text-white">
-                            {payout.id}
-                          </p>
-                          <p className="text-xs text-gray-600 dark:text-gray-400">
-                            {new Date(payout.date).toLocaleDateString('id-ID', {
-                              day: '2-digit',
-                              month: 'short',
-                              year: 'numeric'
-                            })}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
+            <CardContent>
+              {filteredMonthlyRevenue.length === 0 ? (
+                <div className="text-center py-12">
+                  <BarChart3 className="h-16 w-16 text-gray-300 dark:text-gray-700 mx-auto mb-4" />
+                  <p className="text-gray-500 dark:text-gray-400">Belum ada data pendapatan untuk tahun ini</p>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {/* Bar Chart */}
+                  <div className="flex items-end gap-2 h-64">
+                    {/* Generate all 12 months */}
+                    {Array.from({ length: 12 }, (_, i) => {
+                      const monthKey = `${selectedYear}-${String(i + 1).padStart(2, "0")}`;
+                      const amount = revenueData?.monthly_revenue[monthKey] || 0;
+                      const height = maxRevenue > 0 ? (amount / maxRevenue) * 100 : 0;
+                      const isCurrentMonth = monthKey === currentMonth;
 
-                    <div className="space-y-2 border-t border-gray-200 dark:border-gray-700 pt-3">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-600 dark:text-gray-400">Jumlah</span>
-                        <span className="font-bold text-gray-900 dark:text-white">
-                          {isClient ? formatNumber(payout.amount) : formatCurrency(payout.amount)}
-                        </span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-600 dark:text-gray-400">Rekening</span>
-                        <span className="font-medium text-gray-900 dark:text-white">
-                          {payout.bankAccount}
-                        </span>
-                      </div>
-                    </div>
+                      return (
+                        <div key={monthKey} className="flex-1 flex flex-col items-center">
+                          <div className="relative w-full flex justify-center mb-2 h-48">
+                            <div
+                              className={`w-full max-w-12 rounded-t-lg transition-all ${
+                                isCurrentMonth
+                                  ? "bg-[#005EB8]"
+                                  : amount > 0
+                                  ? "bg-[#005EB8]/70 hover:bg-[#005EB8]/90"
+                                  : "bg-gray-200 dark:bg-gray-700"
+                              }`}
+                              style={{ height: `${Math.max(height, amount > 0 ? 5 : 2)}%` }}
+                              title={`${getMonthName(monthKey)}: ${formatCurrency(amount)}`}
+                            />
+                            {amount > 0 && (
+                              <span className="absolute -top-6 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                                {formatShortCurrency(amount)}
+                              </span>
+                            )}
+                          </div>
+                          <span className={`text-xs ${isCurrentMonth ? "font-bold text-[#005EB8]" : "text-gray-500 dark:text-gray-400"}`}>
+                            {getShortMonthName(monthKey)}
+                          </span>
+                        </div>
+                      );
+                    })}
                   </div>
-                ))}
-              </div>
+
+                  {/* Summary */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-6 border-t border-gray-200 dark:border-gray-700">
+                    <Card className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+                      <CardContent className="p-3 text-center">
+                        <p className="text-sm text-gray-500 dark:text-gray-400">Total Tahun {selectedYear}</p>
+                        <p className="text-lg font-bold text-gray-900 dark:text-white">
+                          {formatCurrency(yearlyTotal)}
+                        </p>
+                      </CardContent>
+                    </Card>
+                    <Card className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+                      <CardContent className="p-3 text-center">
+                        <p className="text-sm text-gray-500 dark:text-gray-400">Rata-rata per Bulan</p>
+                        <p className="text-lg font-bold text-gray-900 dark:text-white">
+                          {formatCurrency(avgMonthly)}
+                        </p>
+                      </CardContent>
+                    </Card>
+                    <Card className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+                      <CardContent className="p-3 text-center">
+                        <p className="text-sm text-gray-500 dark:text-gray-400">Bulan Tertinggi</p>
+                        <p className="text-lg font-bold text-[#008A00]">
+                          {formatCurrency(maxRevenue)}
+                        </p>
+                      </CardContent>
+                    </Card>
+                    <Card className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+                      <CardContent className="p-3 text-center">
+                        <p className="text-sm text-gray-500 dark:text-gray-400">Bulan Aktif</p>
+                        <p className="text-lg font-bold text-gray-900 dark:text-white">
+                          {filteredMonthlyRevenue.filter(([, a]) => a > 0).length} bulan
+                        </p>
+                      </CardContent>
+                    </Card>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
 
-          {/* Enhanced Payout Request */}
-          <Card className="rounded-lg border bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-[#005EB8]/20 animate-fadeSlide delay-300">
-            <CardContent className="p-6 h-full">
-              <div className="space-y-6 h-full flex flex-col">
-                {/* Header */}
-                <div className="text-center">
-                  <div className="h-16 w-16 rounded-full bg-[#005EB8]/10 flex items-center justify-center mx-auto mb-4">
-                    <DollarSign className="h-8 w-8 text-[#005EB8]" />
-                  </div>
-                  <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-                    Minta Payout
-                  </h3>
-                  <p className="text-gray-600 dark:text-gray-400">
-                    Cairkan saldo Anda ke rekening bank terdaftar
-                  </p>
+          {/* Monthly Breakdown Table */}
+          <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
+            <CardHeader>
+              <CardTitle className="text-gray-900 dark:text-white text-xl font-bold">Rincian Pendapatan Bulanan</CardTitle>
+              <CardDescription>Detail pendapatan per bulan</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {filteredMonthlyRevenue.length === 0 ? (
+                <p className="text-center text-gray-500 dark:text-gray-400 py-8">Tidak ada data pendapatan</p>
+              ) : (
+                <div className="space-y-3">
+                  {filteredMonthlyRevenue
+                    .sort(([a], [b]) => b.localeCompare(a))
+                    .map(([monthKey, amount], index) => {
+                      const prevMonthKey = filteredMonthlyRevenue[index + 1]?.[0];
+                      const prevAmount = prevMonthKey ? revenueData?.monthly_revenue[prevMonthKey] || 0 : 0;
+                      const growth = prevAmount > 0 ? ((amount - prevAmount) / prevAmount) * 100 : 0;
+
+                      return (
+                        <div
+                          key={monthKey}
+                          className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-750 transition-colors border border-gray-200 dark:border-gray-700"
+                        >
+                          <div className="flex items-center gap-4">
+                            <div className="p-2 bg-[#005EB8]/10 rounded-lg">
+                              <Calendar className="h-5 w-5 text-[#005EB8]" />
+                            </div>
+                            <div>
+                              <p className="font-semibold text-gray-900 dark:text-white">
+                                {getMonthName(monthKey)}
+                              </p>
+                              <p className="text-sm text-gray-500 dark:text-gray-400">
+                                {monthKey === currentMonth ? "Bulan ini" : ""}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-4">
+                            {growth !== 0 && index < filteredMonthlyRevenue.length - 1 && (
+                              <div
+                                className={`flex items-center gap-1 text-sm ${
+                                  growth > 0 ? "text-green-600" : "text-red-600"
+                                }`}
+                              >
+                                {growth > 0 ? (
+                                  <TrendingUp className="h-4 w-4" />
+                                ) : (
+                                  <TrendingDown className="h-4 w-4" />
+                                )}
+                                {Math.abs(growth).toFixed(1)}%
+                              </div>
+                            )}
+                            <p className="text-lg font-bold text-gray-900 dark:text-white min-w-32 text-right">
+                              {formatCurrency(amount)}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })}
                 </div>
+              )}
+            </CardContent>
+          </Card>
 
-                {/* Balance Information */}
-                <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 space-y-4">
-                  <div className="text-center">
-                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-                      Saldo Tersedia
-                    </p>
-                    <p className="text-3xl font-bold text-[#005EB8]">
-                      {isClient ? formatNumber(availableBalance) : formatCurrency(availableBalance)}
-                    </p>
-                  </div>
-
-                  {/* Progress Bar */}
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600 dark:text-gray-400">Progress menuju minimum payout</span>
-                      <span className="font-medium text-gray-900 dark:text-white">
-                        {Math.min(100, Math.round((availableBalance / 100000) * 100))}%
+          {/* Tips Card */}
+          <Card className="rounded-lg border bg-gradient-to-br from-[#008A00]/10 to-[#006600]/5 border-[#008A00] shadow-sm transition-all duration-300 hover:shadow-md">
+            <CardContent className="p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-2 bg-[#008A00]/20 rounded-lg">
+                  <Sparkles className="h-5 w-5 text-[#008A00]" />
+                </div>
+                <h3 className="font-semibold text-gray-900 dark:text-white">
+                  Tips Meningkatkan Pendapatan
+                </h3>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                <Card className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+                  <CardContent className="p-3">
+                    <div className="flex items-start gap-2">
+                      <div className="p-1 bg-[#005EB8]/10 rounded">
+                        <Users className="h-4 w-4 text-[#005EB8]" />
+                      </div>
+                      <span className="text-gray-700 dark:text-gray-300">
+                        Buat kursus berkualitas tinggi dengan materi yang up-to-date
                       </span>
                     </div>
-                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                      <div 
-                        className="bg-[#005EB8] h-2 rounded-full transition-all duration-500"
-                        style={{ width: `${Math.min(100, Math.round((availableBalance / 100000) * 100))}%` }}
-                      ></div>
-                    </div>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
-                      Minimum: {formatCurrency(100000)}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Payout Details */}
-                {availableBalance >= 100000 && (
-                  <div className="bg-[#008A00]/5 border border-[#008A00]/20 rounded-lg p-4 space-y-3">
-                    <h4 className="font-semibold text-[#008A00] text-center">
-                      Detail Pencairan
-                    </h4>
-                    <div className="space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-gray-600 dark:text-gray-400">Saldo yang dicairkan</span>
-                        <span className="font-medium">{formatCurrency(availableBalance)}</span>
+                  </CardContent>
+                </Card>
+                <Card className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+                  <CardContent className="p-3">
+                    <div className="flex items-start gap-2">
+                      <div className="p-1 bg-[#008A00]/10 rounded">
+                        <TrendingUp className="h-4 w-4 text-[#008A00]" />
                       </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600 dark:text-gray-400">Biaya admin (2%)</span>
-                        <span className="text-[#D93025]">-{formatCurrency(adminFee)}</span>
+                      <span className="text-gray-700 dark:text-gray-300">
+                        Promosikan kursus Anda di media sosial dan komunitas
+                      </span>
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+                  <CardContent className="p-3">
+                    <div className="flex items-start gap-2">
+                      <div className="p-1 bg-[#F4B400]/10 rounded">
+                        <Award className="h-4 w-4 text-[#F4B400]" />
                       </div>
-                      <div className="border-t border-gray-200 dark:border-gray-600 pt-2 flex justify-between font-semibold">
-                        <span className="text-gray-900 dark:text-white">Diterima</span>
-                        <span className="text-[#008A00]">{formatCurrency(netAmount)}</span>
-                      </div>
+                      <span className="text-gray-700 dark:text-gray-300">
+                        Berikan respon cepat terhadap pertanyaan siswa
+                      </span>
                     </div>
-                  </div>
-                )}
-
-                {/* Information */}
-                <div className="space-y-3 text-sm">
-                  <div className="flex items-center gap-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                    <AlertTriangle className="h-5 w-5 text-[#005EB8] flex-shrink-0" />
-                    <span className="text-gray-700 dark:text-gray-300">
-                      Payout akan diproses dalam 5-7 hari kerja
-                    </span>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-3 text-xs">
-                    <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
-                      <CheckCircle className="h-4 w-4 text-[#008A00]" />
-                      <span>Min. Rp 100.000</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
-                      <Clock className="h-4 w-4 text-[#F4B400]" />
-                      <span>5-7 hari kerja</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
-                      <Banknote className="h-4 w-4 text-[#005EB8]" />
-                      <span>Admin fee 2%</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
-                      <CheckCircle className="h-4 w-4 text-[#008A00]" />
-                      <span>Ke BCA ****8765</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Action Button */}
-                <div className="mt-auto space-y-3">
-                  <Button
-                    className="w-full bg-[#005EB8] hover:bg-[#004A93] py-3 text-lg font-semibold transition-all duration-300 transform hover:scale-105"
-                    disabled={availableBalance < 100000}
-                  >
-                    <ArrowDown className="h-6 w-6 mr-2" />
-                    {availableBalance >= 100000 ? 'Minta Payout Sekarang' : 'Saldo Belum Mencukupi'}
-                  </Button>
-
-                  {availableBalance < 100000 && (
-                    <div className="text-center p-3 bg-[#F4B400]/10 border border-[#F4B400]/20 rounded-lg">
-                      <p className="text-sm text-[#F4B400]">
-                        Butuh {formatCurrency(100000 - availableBalance)} lagi untuk bisa melakukan payout
-                      </p>
-                    </div>
-                  )}
-                </div>
+                  </CardContent>
+                </Card>
               </div>
             </CardContent>
           </Card>
         </div>
-      </div>
-    </MentorLayout>
+      </MentorLayout>
     </ProtectedRoute>
   );
 }

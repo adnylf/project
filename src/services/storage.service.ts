@@ -1,196 +1,156 @@
-import { storage } from "@/lib/storage";
-import { storageConfig } from "@/config/storage.config";
-import path from "path";
-import fs from "fs/promises";
+// Storage Service
+import { mkdir, writeFile, unlink, stat, readdir, rm } from 'fs/promises';
+import path from 'path';
+import { storageConfig } from '@/config/storage.config';
 
-interface DirectoryStats {
-  size: number;
-  count: number;
+// Ensure directory exists
+export async function ensureDirectory(dirPath: string): Promise<void> {
+  try {
+    await mkdir(dirPath, { recursive: true });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'EEXIST') {
+      throw error;
+    }
+  }
 }
 
-interface StorageStats {
-  totalSize: number;
-  totalFiles: number;
-  byType: {
-    videos: DirectoryStats;
-    images: DirectoryStats;
-    documents: DirectoryStats;
-  };
+// Save file to storage
+export async function saveFile(
+  file: Buffer | Uint8Array,
+  category: 'profiles' | 'thumbnails' | 'videos' | 'documents' | 'certificates',
+  filename: string
+): Promise<string> {
+  let basePath = '';
+  switch (category) {
+    case 'profiles':
+      basePath = storageConfig.paths.images.profiles;
+      break;
+    case 'thumbnails':
+      basePath = storageConfig.paths.images.thumbnails;
+      break;
+    case 'videos':
+      basePath = storageConfig.paths.videos;
+      break;
+    case 'documents':
+      basePath = storageConfig.paths.documents;
+      break;
+    case 'certificates':
+      basePath = storageConfig.paths.certificates;
+      break;
+  }
+
+  const fullPath = path.join(process.cwd(), 'uploads', basePath);
+  await ensureDirectory(fullPath);
+
+  const filePath = path.join(fullPath, filename);
+  await writeFile(filePath, new Uint8Array(file));
+
+  return `/uploads/${basePath}/${filename}`;
 }
 
-interface CleanupResult {
-  deletedCount: number;
-  freedSpace: number;
+// Delete file from storage
+export async function deleteFile(filePath: string): Promise<boolean> {
+  try {
+    const absolutePath = path.join(process.cwd(), filePath.replace(/^\//, ''));
+    await unlink(absolutePath);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
-/**
- * Storage Service
- * Handles storage management operations
- */
-export class StorageService {
-  /**
-   * Get storage statistics
-   */
-  async getStorageStats(): Promise<StorageStats> {
-    const stats: StorageStats = {
-      totalSize: 0,
-      totalFiles: 0,
-      byType: {
-        videos: { size: 0, count: 0 },
-        images: { size: 0, count: 0 },
-        documents: { size: 0, count: 0 },
-      },
+// Get file info
+export async function getFileInfo(filePath: string): Promise<{
+  exists: boolean;
+  size?: number;
+  createdAt?: Date;
+  modifiedAt?: Date;
+}> {
+  try {
+    const absolutePath = path.join(process.cwd(), filePath.replace(/^\//, ''));
+    const stats = await stat(absolutePath);
+    return {
+      exists: true,
+      size: stats.size,
+      createdAt: stats.birthtime,
+      modifiedAt: stats.mtime,
     };
-
-    // Calculate stats for each directory
-    for (const type of ["videos", "images", "documents"] as const) {
-      const dirPath = path.join(storageConfig.local.basePath, type);
-      const dirStats = await this.getDirectoryStats(dirPath);
-
-      stats.byType[type] = dirStats;
-      stats.totalSize += dirStats.size;
-      stats.totalFiles += dirStats.count;
-    }
-
-    return stats;
-  }
-
-  /**
-   * Get directory statistics
-   */
-  private async getDirectoryStats(dirPath: string): Promise<DirectoryStats> {
-    let size = 0;
-    let count = 0;
-
-    try {
-      const files = await fs.readdir(dirPath, { withFileTypes: true });
-
-      for (const file of files) {
-        const filePath = path.join(dirPath, file.name);
-
-        if (file.isDirectory()) {
-          const subStats = await this.getDirectoryStats(filePath);
-          size += subStats.size;
-          count += subStats.count;
-        } else {
-          const stats = await fs.stat(filePath);
-          size += stats.size;
-          count++;
-        }
-      }
-    } catch (error) {
-      // Directory doesn't exist or can't be read
-    }
-
-    return { size, count };
-  }
-
-  /**
-   * Clean up temp files
-   */
-  async cleanupTempFiles(): Promise<CleanupResult> {
-    const tempDir = path.join(storageConfig.local.basePath, "videos", "temp");
-    const maxAge = storageConfig.cleanup.tempFileMaxAge;
-    const now = Date.now();
-
-    let deletedCount = 0;
-    let freedSpace = 0;
-
-    try {
-      const files = await fs.readdir(tempDir);
-
-      for (const file of files) {
-        const filePath = path.join(tempDir, file);
-        const stats = await fs.stat(filePath);
-
-        // Check if file is older than maxAge
-        const fileAge = now - stats.mtimeMs;
-        if (fileAge > maxAge) {
-          freedSpace += stats.size;
-          await storage.delete(path.join("videos", "temp", file));
-          deletedCount++;
-        }
-      }
-    } catch (error) {
-      console.error("Error cleaning temp files:", error);
-    }
-
-    return { deletedCount, freedSpace };
-  }
-
-  /**
-   * Move file between directories
-   */
-  async moveFile(sourcePath: string, destinationPath: string): Promise<void> {
-    await storage.move(sourcePath, destinationPath);
-  }
-
-  /**
-   * Copy file
-   */
-  async copyFile(sourcePath: string, destinationPath: string): Promise<void> {
-    await storage.copy(sourcePath, destinationPath);
-  }
-
-  /**
-   * Ensure all required directories exist
-   */
-  async initializeStorage(): Promise<void> {
-    const basePath = storageConfig.local.basePath;
-    const directories = [
-      "videos/originals",
-      "videos/processed/360p",
-      "videos/processed/480p",
-      "videos/processed/720p",
-      "videos/processed/1080p",
-      "videos/thumbnails",
-      "videos/temp",
-      "images/profiles",
-      "images/courses",
-      "images/certificates",
-      "documents/pdfs",
-      "documents/presentations",
-      "documents/others",
-    ];
-
-    for (const dir of directories) {
-      const dirPath = path.join(basePath, dir);
-      await fs.mkdir(dirPath, { recursive: true });
-    }
-
-    console.log("✅ Storage directories initialized");
-  }
-
-  /**
-   * Get public URL for file
-   */
-  getPublicUrl(filePath: string): string {
-    return storage.getUrl(filePath);
-  }
-
-  /**
-   * Check if file exists
-   */
-  async fileExists(filePath: string): Promise<boolean> {
-    return storage.exists(filePath);
-  }
-
-  /**
-   * Delete file
-   */
-  async deleteFile(filePath: string): Promise<void> {
-    await storage.delete(filePath);
-  }
-
-  /**
-   * Backup file
-   */
-  async backupFile(filePath: string): Promise<string> {
-    const backupPath = `${filePath}.backup`;
-    await storage.copy(filePath, backupPath);
-    return backupPath;
+  } catch {
+    return { exists: false };
   }
 }
 
-const storageService = new StorageService();
-export default storageService;
+// Generate unique filename
+export function generateFilename(originalName: string): string {
+  const ext = path.extname(originalName);
+  const timestamp = Date.now();
+  const random = Math.random().toString(36).substring(2, 8);
+  return `${timestamp}-${random}${ext}`;
+}
+
+// Validate file type
+export function validateFileType(
+  mimeType: string,
+  allowedTypes: string[]
+): boolean {
+  return allowedTypes.includes(mimeType);
+}
+
+// Validate file size
+export function validateFileSize(size: number, maxSize: number): boolean {
+  return size <= maxSize;
+}
+
+// Get files in directory
+export async function getDirectoryFiles(dirPath: string): Promise<string[]> {
+  try {
+    const absolutePath = path.join(process.cwd(), 'uploads', dirPath.replace(/^\//, ''));
+    const files = await readdir(absolutePath);
+    return files;
+  } catch {
+    return [];
+  }
+}
+
+// Clean up temporary files
+export async function cleanupTempFiles(): Promise<void> {
+  const tempPath = path.join(process.cwd(), 'uploads', storageConfig.paths.temp);
+  try {
+    await rm(tempPath, { recursive: true, force: true });
+    await ensureDirectory(tempPath);
+  } catch {
+    // Ignore errors
+  }
+}
+
+// Get storage stats
+export async function getStorageStats() {
+  const pathsToCheck = [
+    { category: 'videos', path: storageConfig.paths.videos },
+    { category: 'profiles', path: storageConfig.paths.images.profiles },
+    { category: 'thumbnails', path: storageConfig.paths.images.thumbnails },
+    { category: 'documents', path: storageConfig.paths.documents },
+    { category: 'certificates', path: storageConfig.paths.certificates },
+  ];
+
+  const stats = [];
+  for (const p of pathsToCheck) {
+    const files = await getDirectoryFiles(p.path);
+    let totalSize = 0;
+
+    for (const file of files) {
+      const info = await getFileInfo(`uploads/${p.path}/${file}`);
+      if (info.exists && info.size !== undefined) {
+        totalSize += info.size;
+      }
+    }
+
+    stats.push({
+      category: p.category,
+      fileCount: files.length,
+      totalSize,
+    });
+  }
+
+  return stats;
+}

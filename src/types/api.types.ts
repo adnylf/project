@@ -1,100 +1,95 @@
-import type { NextRequest } from 'next/server';
-import type { PaginationParams, FilterOptions } from './common.types';
+// API Types
+import { NextRequest, NextResponse } from 'next/server';
 
-/**
- * API Types
- * Request and response interfaces for API routes
- */
+// API Response types
+export interface ApiResponse<T = unknown> {
+  success: boolean;
+  data?: T;
+  error?: string;
+  message?: string;
+}
 
-/**
- * Authenticated Request
- */
-export interface AuthenticatedRequest extends NextRequest {
-  user?: {
-    userId: string;
-    email: string;
-    role: string;
+export interface PaginatedResponse<T> {
+  data: T[];
+  meta: {
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+    hasMore: boolean;
   };
 }
 
-/**
- * API Context
- */
-export interface ApiContext {
-  params: Record<string, string>;
+export interface ListResponse<T> {
+  items: T[];
+  total: number;
+  page: number;
+  limit: number;
 }
 
-/**
- * List Query Params
- * Combines pagination and filtering
- */
-export interface ListQueryParams {
-  // Pagination
+// API Request types
+export interface PaginationParams {
   page?: number;
   limit?: number;
   sortBy?: string;
   sortOrder?: 'asc' | 'desc';
-  // Filtering
+}
+
+export interface SearchParams extends PaginationParams {
+  q?: string;
   search?: string;
-  status?: string;
-  category?: string;
-  dateFrom?: Date;
-  dateTo?: Date;
-  [key: string]: string | number | Date | undefined;
 }
 
-/**
- * API Error
- */
-export interface ApiError {
-  code: string;
-  message: string;
-  statusCode: number;
-  details?: Record<string, unknown>;
+export interface FilterParams {
+  [key: string]: string | number | boolean | undefined;
 }
 
-/**
- * Validation Error
- */
+// Route handler types
+export type RouteHandler<T = Record<string, string>> = (
+  request: NextRequest,
+  context: { params: T }
+) => Promise<NextResponse>;
+
+export type ApiHandler = (request: NextRequest) => Promise<NextResponse>;
+
+// Error types
 export interface ValidationError {
   field: string;
   message: string;
-  value?: unknown;
 }
 
-/**
- * Batch Operation Result
- */
-export interface BatchOperationResult {
-  success: number;
-  failed: number;
-  total: number;
-  errors?: Array<{ id: string; error: string }>;
+export interface ApiError {
+  code: string;
+  message: string;
+  details?: ValidationError[];
 }
 
-/**
- * Upload Response
- */
-export interface UploadResponse {
+// Query params
+export interface QueryParams {
+  [key: string]: string | string[] | undefined;
+}
+
+// File upload types
+export interface UploadedFile {
   filename: string;
-  url: string;
+  originalName: string;
+  mimeType: string;
   size: number;
-  mimetype: string;
+  path: string;
+  url: string;
 }
 
-/**
- * Delete Response
- */
-export interface DeleteResponse {
-  id: string;
-  deleted: boolean;
+// Webhook types
+export interface WebhookPayload {
+  event: string;
+  data: Record<string, unknown>;
+  timestamp: string;
+  signature?: string;
 }
 
-/**
- * Update Response
- */
-export interface UpdateResponse<T> {
-  id: string;
-  data: T;
-  updated: boolean;
+// Rate limit info
+export interface RateLimitInfo {
+  limit: number;
+  remaining: number;
+  resetTime: Date;
 }

@@ -21,7 +21,6 @@ model User {
   date_of_birth         DateTime?
   address               String?
   city                  String?
-  country               String?
   email_verified        Boolean               @default(false)
   email_verified_at     DateTime?
   last_login            DateTime?             // Diperbaiki dari lastLoginAt
@@ -32,13 +31,12 @@ model User {
   comments              Comment[]
   enrollments           Enrollment[]
   mentor_profile        MentorProfile?
-  notification_settings NotificationSettings?
-  notifications         Notification[]
   progress_records      Progress[]
   reviews               Review[]
   transactions          Transaction[]
   verification_tokens   VerificationToken[]
   wishlist              Wishlist[]
+  quiz_attempts         QuizAttempt[]
 
   @@index([email])
   @@index([role])
@@ -131,7 +129,6 @@ model Category {
   name        String     @unique
   slug        String     @unique
   description String?
-  icon        String?
   parent_id   String?
   order       Int        @default(0)
   is_active   Boolean    @default(true)
@@ -172,6 +169,7 @@ model Material {
   content      String?
   video_id     String?      @unique
   document_url String?
+  youtube_url  String?
   duration     Int          @default(0)
   order        Int          @default(0)
   is_free      Boolean      @default(false)
@@ -182,6 +180,7 @@ model Material {
   video        Video?       @relation(fields: [video_id], references: [id])
   progress     Progress[]
   resources    Resource[]
+  quiz         Quiz?
 
   @@index([section_id])
   @@index([video_id])
@@ -301,8 +300,6 @@ model Transaction {
   payment_url    String?
   paid_at        DateTime?
   expired_at     DateTime?
-  refunded_at    DateTime?
-  refund_reason  String?
   metadata       Json?
   created_at     DateTime          @default(now())
   updated_at     DateTime          @updatedAt
@@ -391,43 +388,6 @@ model Wishlist {
   @@index([user_id])
   @@index([course_id])
   @@map("wishlist")
-}
-
-model Notification {
-  id         String             @id @default(uuid())
-  user_id    String
-  type       NotificationType
-  title      String
-  message    String
-  status     NotificationStatus @default(UNREAD)
-  data       Json?
-  read_at    DateTime?
-  created_at DateTime           @default(now())
-  updated_at DateTime           @updatedAt
-  user       User               @relation(fields: [user_id], references: [id], onDelete: Cascade)
-
-  @@index([user_id])
-  @@index([status])
-  @@index([type])
-  @@map("notifications")
-}
-
-model NotificationSettings {
-  id                        String   @id @default(uuid())
-  user_id                   String   @unique
-  email_notifications       Boolean  @default(true)
-  push_notifications        Boolean  @default(true)
-  course_updates            Boolean  @default(true)
-  payment_notifications     Boolean  @default(true)
-  certificate_notifications Boolean  @default(true)
-  comment_notifications     Boolean  @default(true)
-  review_notifications      Boolean  @default(true)
-  created_at                DateTime @default(now())
-  updated_at                DateTime @updatedAt
-  user                      User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
-
-  @@index([user_id])
-  @@map("notification_settings")
 }
 
 model ActivityLog {
@@ -546,16 +506,18 @@ enum VideoQuality {
 enum TransactionStatus {
   PENDING
   PAID
+  SUCCESS
   FAILED
-  REFUNDED
   CANCELLED
+  REFUNDED
 }
 
 enum PaymentMethod {
-  CREDIT_CARD
-  BANK_TRANSFER
   E_WALLET
   VIRTUAL_ACCOUNT
+  QRIS
+  MIDTRANS
+  BANK_TRANSFER
 }
 
 enum EnrollmentStatus {
@@ -571,21 +533,81 @@ enum CertificateStatus {
   REVOKED
 }
 
-enum NotificationType {
-  COURSE_ENROLLMENT
-  COURSE_UPDATE
-  PAYMENT_SUCCESS
-  PAYMENT_FAILED
-  CERTIFICATE_ISSUED
-  COMMENT_REPLY
-  REVIEW_RECEIVED
-  MENTOR_APPROVED
-  MENTOR_REJECTED
-  SYSTEM_ANNOUNCEMENT
+// Quiz System Models
+model Quiz {
+  id            String         @id @default(uuid())
+  material_id   String         @unique
+  title         String
+  description   String?
+  passing_score Int            @default(70)
+  time_limit    Int?           // dalam menit, null = tanpa batas
+  max_attempts  Int            @default(3)
+  created_at    DateTime       @default(now())
+  updated_at    DateTime       @updatedAt
+  material      Material       @relation(fields: [material_id], references: [id], onDelete: Cascade)
+  questions     QuizQuestion[]
+  attempts      QuizAttempt[]
+
+  @@index([material_id])
+  @@map("quizzes")
 }
 
-enum NotificationStatus {
-  UNREAD
-  READ
-  ARCHIVED
+model QuizQuestion {
+  id         String       @id @default(uuid())
+  quiz_id    String
+  question   String
+  order      Int          @default(0)
+  points     Int          @default(1)
+  created_at DateTime     @default(now())
+  updated_at DateTime     @updatedAt
+  quiz       Quiz         @relation(fields: [quiz_id], references: [id], onDelete: Cascade)
+  options    QuizOption[]
+  answers    QuizAnswer[]
+
+  @@index([quiz_id])
+  @@map("quiz_questions")
+}
+
+model QuizOption {
+  id          String       @id @default(uuid())
+  question_id String
+  label       String       // A, B, C, D
+  text        String       // Isi jawaban
+  is_correct  Boolean      @default(false)
+  order       Int          @default(0)
+  question    QuizQuestion @relation(fields: [question_id], references: [id], onDelete: Cascade)
+
+  @@index([question_id])
+  @@map("quiz_options")
+}
+
+model QuizAttempt {
+  id           String       @id @default(uuid())
+  quiz_id      String
+  user_id      String
+  score        Float        @default(0)
+  is_passed    Boolean      @default(false)
+  started_at   DateTime     @default(now())
+  completed_at DateTime?
+  quiz         Quiz         @relation(fields: [quiz_id], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  answers      QuizAnswer[]
+
+  @@index([quiz_id])
+  @@index([user_id])
+  @@map("quiz_attempts")
+}
+
+model QuizAnswer {
+  id          String       @id @default(uuid())
+  attempt_id  String
+  question_id String
+  selected    String       // A, B, C, D
+  is_correct  Boolean
+  attempt     QuizAttempt  @relation(fields: [attempt_id], references: [id], onDelete: Cascade)
+  question    QuizQuestion @relation(fields: [question_id], references: [id], onDelete: Cascade)
+
+  @@index([attempt_id])
+  @@index([question_id])
+  @@map("quiz_answers")
 }

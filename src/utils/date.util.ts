@@ -1,192 +1,142 @@
-import dayjs from 'dayjs';
-import utc from 'dayjs/plugin/utc';
-import timezone from 'dayjs/plugin/timezone';
-import relativeTime from 'dayjs/plugin/relativeTime';
-import { DATE_FORMATS } from '@/lib/constants';
+// Date utilities
 
-// Extend dayjs with plugins
-dayjs.extend(utc);
-dayjs.extend(timezone);
-dayjs.extend(relativeTime);
-
-/**
- * Format date to display format
- */
-export function formatDate(date: Date | string, format: string = DATE_FORMATS.DISPLAY): string {
-  return dayjs(date).format(format);
+// Format date to Indonesian locale
+export function formatDate(date: Date | string, options?: Intl.DateTimeFormatOptions): string {
+  const d = typeof date === 'string' ? new Date(date) : date;
+  
+  const defaultOptions: Intl.DateTimeFormatOptions = {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  };
+  
+  return d.toLocaleDateString('id-ID', options || defaultOptions);
 }
 
-/**
- * Format date with time
- */
+// Format date with time
 export function formatDateTime(date: Date | string): string {
-  return dayjs(date).format(DATE_FORMATS.DISPLAY_WITH_TIME);
+  const d = typeof date === 'string' ? new Date(date) : date;
+  
+  return d.toLocaleDateString('id-ID', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
 
-/**
- * Get relative time (e.g., "2 hours ago")
- */
-export function getRelativeTime(date: Date | string): string {
-  return dayjs(date).fromNow();
+// Format relative time (e.g., "2 jam yang lalu")
+export function formatRelativeTime(date: Date | string): string {
+  const d = typeof date === 'string' ? new Date(date) : date;
+  const now = new Date();
+  const diffMs = now.getTime() - d.getTime();
+  const diffSeconds = Math.floor(diffMs / 1000);
+  const diffMinutes = Math.floor(diffSeconds / 60);
+  const diffHours = Math.floor(diffMinutes / 60);
+  const diffDays = Math.floor(diffHours / 24);
+  const diffWeeks = Math.floor(diffDays / 7);
+  const diffMonths = Math.floor(diffDays / 30);
+  const diffYears = Math.floor(diffDays / 365);
+  
+  if (diffSeconds < 60) return 'Baru saja';
+  if (diffMinutes < 60) return `${diffMinutes} menit yang lalu`;
+  if (diffHours < 24) return `${diffHours} jam yang lalu`;
+  if (diffDays < 7) return `${diffDays} hari yang lalu`;
+  if (diffWeeks < 4) return `${diffWeeks} minggu yang lalu`;
+  if (diffMonths < 12) return `${diffMonths} bulan yang lalu`;
+  return `${diffYears} tahun yang lalu`;
 }
 
-/**
- * Check if date is in the past
- */
-export function isPast(date: Date | string): boolean {
-  return dayjs(date).isBefore(dayjs());
+// Format short date (e.g., "12 Jan 2024")
+export function formatShortDate(date: Date | string): string {
+  const d = typeof date === 'string' ? new Date(date) : date;
+  
+  return d.toLocaleDateString('id-ID', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
 }
 
-/**
- * Check if date is in the future
- */
-export function isFuture(date: Date | string): boolean {
-  return dayjs(date).isAfter(dayjs());
-}
-
-/**
- * Check if date is today
- */
-export function isToday(date: Date | string): boolean {
-  return dayjs(date).isSame(dayjs(), 'day');
-}
-
-/**
- * Add days to date
- */
-export function addDays(date: Date | string, days: number): Date {
-  return dayjs(date).add(days, 'day').toDate();
-}
-
-/**
- * Subtract days from date
- */
-export function subtractDays(date: Date | string, days: number): Date {
-  return dayjs(date).subtract(days, 'day').toDate();
-}
-
-/**
- * Get start of day
- */
-export function startOfDay(date: Date | string): Date {
-  return dayjs(date).startOf('day').toDate();
-}
-
-/**
- * Get end of day
- */
-export function endOfDay(date: Date | string): Date {
-  return dayjs(date).endOf('day').toDate();
-}
-
-/**
- * Get difference in days
- */
-export function diffInDays(date1: Date | string, date2: Date | string): number {
-  return dayjs(date1).diff(dayjs(date2), 'day');
-}
-
-/**
- * Get difference in hours
- */
-export function diffInHours(date1: Date | string, date2: Date | string): number {
-  return dayjs(date1).diff(dayjs(date2), 'hour');
-}
-
-/**
- * Get difference in minutes
- */
-export function diffInMinutes(date1: Date | string, date2: Date | string): number {
-  return dayjs(date1).diff(dayjs(date2), 'minute');
-}
-
-/**
- * Parse ISO string to Date
- */
-export function parseISO(dateString: string): Date {
-  return dayjs(dateString).toDate();
-}
-
-/**
- * Format to ISO string
- */
+// Format ISO date string
 export function toISOString(date: Date | string): string {
-  return dayjs(date).toISOString();
+  const d = typeof date === 'string' ? new Date(date) : date;
+  return d.toISOString();
 }
 
-/**
- * Get current timestamp
- */
-export function getCurrentTimestamp(): Date {
-  return new Date();
+// Get start of day
+export function startOfDay(date: Date = new Date()): Date {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  return d;
 }
 
-/**
- * Convert minutes to hours and minutes
- */
-export function minutesToHoursMinutes(minutes: number): { hours: number; minutes: number } {
-  const hours = Math.floor(minutes / 60);
-  const mins = minutes % 60;
-  return { hours, minutes: mins };
+// Get end of day
+export function endOfDay(date: Date = new Date()): Date {
+  const d = new Date(date);
+  d.setHours(23, 59, 59, 999);
+  return d;
 }
 
-/**
- * Format duration (e.g., "2h 30m")
- */
-export function formatDuration(minutes: number): string {
-  const { hours, minutes: mins } = minutesToHoursMinutes(minutes);
-
-  if (hours === 0) {
-    return `${mins}m`;
-  }
-
-  if (mins === 0) {
-    return `${hours}h`;
-  }
-
-  return `${hours}h ${mins}m`;
+// Get start of month
+export function startOfMonth(date: Date = new Date()): Date {
+  const d = new Date(date);
+  d.setDate(1);
+  d.setHours(0, 0, 0, 0);
+  return d;
 }
 
-/**
- * Format seconds to time string (e.g., "1:30:45")
- */
-export function formatSeconds(seconds: number): string {
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  const secs = seconds % 60;
-
-  if (hours > 0) {
-    return `${hours}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-  }
-
-  return `${minutes}:${String(secs).padStart(2, '0')}`;
+// Get end of month
+export function endOfMonth(date: Date = new Date()): Date {
+  const d = new Date(date);
+  d.setMonth(d.getMonth() + 1);
+  d.setDate(0);
+  d.setHours(23, 59, 59, 999);
+  return d;
 }
 
-/**
- * Get age from date of birth
- */
-export function getAge(dateOfBirth: Date | string): number {
-  return dayjs().diff(dayjs(dateOfBirth), 'year');
+// Add days to date
+export function addDays(date: Date, days: number): Date {
+  const d = new Date(date);
+  d.setDate(d.getDate() + days);
+  return d;
 }
 
-/**
- * Check if date is valid
- */
-export function isValidDate(date: string | number | Date | null | undefined): boolean {
-  if (date === null || date === undefined) return false;
-  return dayjs(date).isValid();
+// Add months to date
+export function addMonths(date: Date, months: number): Date {
+  const d = new Date(date);
+  d.setMonth(d.getMonth() + months);
+  return d;
 }
 
-/**
- * Add hours to date
- */
-export function addHours(date: Date | string, hours: number): Date {
-  return dayjs(date).add(hours, 'hour').toDate();
+// Check if date is in the past
+export function isPast(date: Date | string): boolean {
+  const d = typeof date === 'string' ? new Date(date) : date;
+  return d.getTime() < Date.now();
 }
 
-/**
- * Check if date is expired
- */
-export function isExpired(date: Date | string): boolean {
-  return dayjs(date).isBefore(dayjs());
+// Check if date is in the future
+export function isFuture(date: Date | string): boolean {
+  const d = typeof date === 'string' ? new Date(date) : date;
+  return d.getTime() > Date.now();
+}
+
+// Check if date is today
+export function isToday(date: Date | string): boolean {
+  const d = typeof date === 'string' ? new Date(date) : date;
+  const today = new Date();
+  return d.toDateString() === today.toDateString();
+}
+
+// Get days between two dates
+export function daysBetween(date1: Date, date2: Date): number {
+  const oneDay = 24 * 60 * 60 * 1000;
+  return Math.round(Math.abs((date1.getTime() - date2.getTime()) / oneDay));
+}
+
+// Parse date string safely
+export function parseDate(dateString: string): Date | null {
+  const d = new Date(dateString);
+  return isNaN(d.getTime()) ? null : d;
 }

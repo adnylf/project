@@ -1,325 +1,316 @@
-// app/user/certificates/page.tsx
 "use client";
 
-import { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useState, useEffect, useCallback } from "react";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Download, Search, BadgeCheck, Share, Eye } from "lucide-react";
-import Link from "next/link";
+import {
+  Award,
+  Search,
+  Loader2,
+  Download,
+  Eye,
+  CheckCircle,
+  Clock,
+  XCircle,
+  AlertCircle,
+  BookOpen,
+  Calendar,
+  Share2,
+  ExternalLink,
+  GraduationCap,
+  Trophy,
+} from "lucide-react";
 import UserLayout from "@/components/user/user-layout";
-import ProtectedRoute from "@/components/ui/protected-route";
+import ProtectedRoute from "@/components/auth/protected-route";
+import Link from "next/link";
 
-const certificates = [
-  {
-    id: 1,
-    courseName: "Dasar-Dasar Pemrograman Web",
-    instructor: "Dr. Ahmad Fauzi",
-    completionDate: "15 September 2024",
-    certificateCode: "CERT-WEB-2024-001",
-    status: "verified",
-    downloadCount: 3,
-    thumbnail:
-      "https://images.pexels.com/photos/11035380/pexels-photo-11035380.jpeg?auto=compress&cs=tinysrgb&w=800",
-    issueDate: "2024-09-15",
-    skills: ["HTML", "CSS", "JavaScript"],
-  },
-  {
-    id: 2,
-    courseName: "Bahasa Inggris Percakapan",
-    instructor: "John Smith",
-    completionDate: "10 Agustus 2024",
-    certificateCode: "CERT-ENG-2024-002",
-    status: "verified",
-    downloadCount: 5,
-    thumbnail:
-      "https://images.pexels.com/photos/256417/pexels-photo-256417.jpeg?auto=compress&cs=tinysrgb&w=800",
-    issueDate: "2024-08-10",
-    skills: ["Speaking", "Listening", "Grammar"],
-  },
-  {
-    id: 3,
-    courseName: "UI/UX Design Mastery",
-    instructor: "Budi Santoso",
-    completionDate: "20 Juli 2024",
-    certificateCode: "CERT-UX-2024-003",
-    status: "verified",
-    downloadCount: 2,
-    thumbnail:
-      "https://images.pexels.com/photos/196644/pexels-photo-196644.jpeg?auto=compress&cs=tinysrgb&w=800",
-    issueDate: "2024-07-20",
-    skills: ["Figma", "User Research", "Prototyping"],
-  },
-  {
-    id: 4,
-    courseName: "Data Science dengan Python",
-    instructor: "Dr. Maria Chen",
-    completionDate: "5 Juni 2024",
-    certificateCode: "CERT-DS-2024-004",
-    status: "verified",
-    downloadCount: 4,
-    thumbnail:
-      "https://images.pexels.com/photos/1181671/pexels-photo-1181671.jpeg?auto=compress&cs=tinysrgb&w=800",
-    issueDate: "2024-06-05",
-    skills: ["Python", "Pandas", "Data Analysis"],
-  },
-  {
-    id: 5,
-    courseName: "Digital Marketing Fundamentals",
-    instructor: "Rina Wijaya",
-    completionDate: "18 Mei 2024",
-    certificateCode: "CERT-DM-2024-005",
-    status: "verified",
-    downloadCount: 1,
-    thumbnail:
-      "https://images.pexels.com/photos/265087/pexels-photo-265087.jpeg?auto=compress&cs=tinysrgb&w=800",
-    issueDate: "2024-05-18",
-    skills: ["SEO", "Social Media", "Content Marketing"],
-  },
-  {
-    id: 6,
-    courseName: "Mobile App Development",
-    instructor: "Alex Johnson",
-    completionDate: "30 April 2024",
-    certificateCode: "CERT-MOB-2024-006",
-    status: "verified",
-    downloadCount: 2,
-    thumbnail:
-      "https://images.pexels.com/photos/1092644/pexels-photo-1092644.jpeg?auto=compress&cs=tinysrgb&w=800",
-    issueDate: "2024-04-30",
-    skills: ["React Native", "Firebase", "API Integration"],
-  },
-];
+const API_BASE_URL = "http://localhost:3000/api";
 
-export default function UserCertificates() {
+interface Certificate {
+  id: string;
+  certificate_number: string;
+  status: "PENDING" | "ISSUED" | "REVOKED";
+  issued_at: string | null;
+  pdf_url: string | null;
+  created_at: string;
+  course: {
+    id: string;
+    title: string;
+    slug: string;
+    thumbnail: string | null;
+    mentor: {
+      user: { full_name: string };
+    };
+  };
+}
+
+const formatDate = (dateString: string) => {
+  return new Date(dateString).toLocaleDateString("id-ID", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+};
+
+const getStatusBadge = (status: string) => {
+  switch (status) {
+    case "ISSUED":
+      return <Badge className="bg-[#008A00] text-white border border-[#008A00] pointer-events-none"><CheckCircle className="h-3 w-3 mr-1" />Tersedia</Badge>;
+    case "PENDING":
+      return <Badge className="bg-[#F4B400] text-[#1A1A1A] border border-[#F4B400] pointer-events-none"><Clock className="h-3 w-3 mr-1" />Menunggu</Badge>;
+    case "REVOKED":
+      return <Badge className="bg-[#D93025] text-white border border-[#D93025] pointer-events-none"><XCircle className="h-3 w-3 mr-1" />Dicabut</Badge>;
+    default:
+      return <Badge className="bg-gray-100 text-gray-800 border border-gray-300 pointer-events-none">{status}</Badge>;
+  }
+};
+
+export default function UserCertificatesPage() {
+  const [certificates, setCertificates] = useState<Certificate[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
 
-  const filteredCertificates = certificates.filter((cert) =>
-    cert.courseName.toLowerCase().includes(searchTerm.toLowerCase())
+  const getAuthToken = useCallback(() => typeof window !== "undefined" ? localStorage.getItem("token") || localStorage.getItem("accessToken") : null, []);
+
+  // Fetch certificates
+  const fetchCertificates = useCallback(async () => {
+    try {
+      setLoading(true);
+      const token = getAuthToken();
+
+      const response = await fetch(`${API_BASE_URL}/users/certificates`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!response.ok) throw new Error("Gagal memuat sertifikat");
+
+      const data = await response.json();
+      setCertificates(data.certificates || []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Terjadi kesalahan");
+    } finally {
+      setLoading(false);
+    }
+  }, [getAuthToken]);
+
+  useEffect(() => {
+    fetchCertificates();
+  }, [fetchCertificates]);
+
+  // Filter certificates
+  const filteredCertificates = certificates.filter(cert =>
+    cert.course.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    cert.certificate_number.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const handleDownload = (certificateId: number) => {
-    console.log(`Downloading certificate ${certificateId}`);
-    // Logic untuk download sertifikat
+  // Stats
+  const stats = {
+    total: certificates.length,
+    issued: certificates.filter(c => c.status === "ISSUED").length,
+    pending: certificates.filter(c => c.status === "PENDING").length,
   };
 
-  const handleShare = (certificateId: number) => {
-    console.log(`Sharing certificate ${certificateId}`);
-    // Logic untuk share sertifikat
-  };
+  if (loading) {
+    return (
+      <ProtectedRoute allowedRoles={["STUDENT"]}>
+        <UserLayout>
+          <div className="flex items-center justify-center min-h-[400px]">
+            <Loader2 className="h-12 w-12 animate-spin text-[#005EB8]" />
+          </div>
+        </UserLayout>
+      </ProtectedRoute>
+    );
+  }
 
   return (
     <ProtectedRoute allowedRoles={["STUDENT"]}>
       <UserLayout>
         <div className="space-y-8">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 animate-fadeIn">
+          {/* Header */}
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
+              <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-3">
+                <Award className="h-8 w-8 text-[#005EB8]" />
                 Sertifikat Saya
               </h1>
               <p className="text-gray-600 dark:text-gray-400">
-                Kelola dan unduh sertifikat kursus yang telah Anda selesaikan
+                Lihat dan unduh sertifikat kursus yang telah Anda selesaikan
               </p>
             </div>
-            <Card className="rounded-lg border bg-card text-card-foreground shadow-sm border-gray-200 dark:border-gray-700">
+          </div>
+
+          {/* Error */}
+          {error && (
+            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 text-red-600 dark:text-red-400 flex items-center gap-2">
+              <AlertCircle className="h-5 w-5" />{error}
+            </div>
+          )}
+
+          {/* Stats */}
+          <div className="grid grid-cols-3 gap-4">
+            <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 border-gray-200 dark:border-gray-700">
               <CardContent className="p-4">
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Total:{" "}
-                  <span className="font-bold text-[#008A00]">
-                    {certificates.length}
-                  </span>{" "}
-                  Sertifikat
-                </p>
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-[#005EB8]/10">
+                    <Trophy className="h-5 w-5 text-[#005EB8]" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Total</p>
+                    <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.total}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 border-gray-200 dark:border-gray-700">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-[#008A00]/10">
+                    <CheckCircle className="h-5 w-5 text-[#008A00]" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Tersedia</p>
+                    <p className="text-2xl font-bold text-[#008A00] dark:text-[#008A00]">{stats.issued}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 border-gray-200 dark:border-gray-700">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-[#F4B400]/10">
+                    <Clock className="h-5 w-5 text-[#F4B400]" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Menunggu</p>
+                    <p className="text-2xl font-bold text-[#F4B400] dark:text-[#F4B400]">{stats.pending}</p>
+                  </div>
+                </div>
               </CardContent>
             </Card>
           </div>
 
-          <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 animate-scaleIn">
-            <CardContent className="p-6">
+          {/* Search */}
+          <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
+            <CardContent className="p-4">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                <Input
-                  type="search"
-                  placeholder="Cari sertifikat..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
+                <Input 
+                  placeholder="Cari sertifikat berdasarkan judul kursus atau nomor..." 
+                  value={searchTerm} 
+                  onChange={(e) => setSearchTerm(e.target.value)} 
+                  className="pl-10" 
                 />
               </div>
             </CardContent>
           </Card>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredCertificates.map((cert, index) => (
-              <Card
-                key={cert.id}
-                className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 overflow-hidden animate-fadeSlide h-full flex flex-col"
-                style={{ animationDelay: `${index * 50}ms` }}
-              >
-                <div className="relative flex-shrink-0">
-                  <div className="absolute inset-0 bg-gradient-to-br from-[#005EB8]/90 to-[#008A00]/90 flex items-center justify-center">
-                    <div className="text-center text-white p-6">
-                      <BadgeCheck className="h-16 w-16 mx-auto mb-4" />
-                      <h3 className="font-bold text-xl mb-2 line-clamp-2">
-                        Sertifikat Kelulusan
-                      </h3>
-                      <p className="text-sm opacity-90 line-clamp-2">
-                        {cert.courseName}
-                      </p>
-                    </div>
-                  </div>
-                  <img
-                    src={cert.thumbnail}
-                    alt={cert.courseName}
-                    className="w-full h-48 object-cover opacity-20"
-                  />
-                  <div className="absolute top-3 right-3">
-                    <Badge className="bg-[#008A00] text-white">Verified</Badge>
-                  </div>
+          {/* Certificates Grid */}
+          {filteredCertificates.length === 0 ? (
+            <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
+              <CardContent className="p-12">
+                <div className="text-center">
+                  <GraduationCap className="h-20 w-20 text-gray-300 dark:text-gray-700 mx-auto mb-4" />
+                  <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">Belum Ada Sertifikat</h3>
+                  <p className="text-gray-500 dark:text-gray-400 mb-6">
+                    Selesaikan kursus untuk mendapatkan sertifikat
+                  </p>
+                  <Link href="/user/courses">
+                    <Button className="bg-[#005EB8] hover:bg-[#004A93] text-white">
+                      <BookOpen className="h-4 w-4 mr-2" />
+                      Lihat Kursus Saya
+                    </Button>
+                  </Link>
                 </div>
-
-                <CardContent className="p-6 space-y-4 flex-1 flex flex-col">
-                  <div className="flex-1">
-                    <h3 className="font-bold text-lg text-gray-900 dark:text-white mb-2 line-clamp-2">
-                      {cert.courseName}
-                    </h3>
-                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                      Instruktur: {cert.instructor}
-                    </p>
-
-                    <div className="space-y-2 mb-4">
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-gray-600 dark:text-gray-400">
-                          Tanggal Selesai:
-                        </span>
-                        <span className="font-medium text-gray-900 dark:text-white">
-                          {cert.completionDate}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-gray-600 dark:text-gray-400">
-                          Kode:
-                        </span>
-                        <span className="font-mono text-xs font-medium text-[#005EB8]">
-                          {cert.certificateCode}
-                        </span>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {filteredCertificates.map((cert) => (
+                <Card 
+                  key={cert.id} 
+                  className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 overflow-hidden"
+                >
+                  {/* Thumbnail */}
+                  <div className="relative h-40 bg-gradient-to-br from-[#005EB8] to-[#004A93]">
+                    {cert.course.thumbnail ? (
+                      <img 
+                        src={cert.course.thumbnail} 
+                        alt={cert.course.title} 
+                        className="w-full h-full object-cover opacity-30" 
+                      />
+                    ) : null}
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <div className="text-center text-white">
+                        <Award className="h-16 w-16 mx-auto mb-2" />
+                        <p className="text-sm opacity-75">SERTIFIKAT</p>
                       </div>
                     </div>
-
-                    <div className="flex flex-wrap gap-2">
-                      {cert.skills.map((skill, idx) => (
-                        <Badge key={idx} variant="outline" className="text-xs">
-                          {skill}
-                        </Badge>
-                      ))}
+                    <div className="absolute top-3 right-3">
+                      {getStatusBadge(cert.status)}
                     </div>
                   </div>
 
-                  <div className="space-y-3 pt-4 border-t border-gray-200 dark:border-gray-700">
-                    <div className="grid grid-cols-3 gap-2">
-                      <Button
-                        size="sm"
-                        onClick={() => handleDownload(cert.id)}
-                        className="bg-[#005EB8] hover:bg-[#004A93] w-full"
-                      >
-                        <Download className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleShare(cert.id)}
-                        className="w-full"
-                      >
-                        <Share className="h-4 w-4" />
-                      </Button>
-                      <Link
-                        href={`/user/certificates/${cert.id}`}
-                        className="w-full"
-                      >
-                        <Button size="sm" variant="outline" className="w-full">
-                          <Eye className="h-4 w-4" />
+                  {/* Content */}
+                  <CardContent className="p-4">
+                    <h3 className="font-semibold text-lg text-gray-900 dark:text-white mb-1 line-clamp-2">{cert.course.title}</h3>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">
+                      Mentor: {cert.course.mentor.user.full_name}
+                    </p>
+                    <div className="text-xs text-gray-400 mb-4 space-y-1">
+                      <p className="flex items-center gap-1">
+                        <Calendar className="h-3 w-3" />
+                        {cert.issued_at ? `Terbit: ${formatDate(cert.issued_at)}` : `Dibuat: ${formatDate(cert.created_at)}`}
+                      </p>
+                      <p className="font-mono text-gray-600 dark:text-gray-300">No: {cert.certificate_number}</p>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex gap-2">
+                      <Link href={`/user/certificates/${cert.id}`} className="flex-1">
+                        {/* Button Lihat - Style diubah seperti button Lihat Semua di dashboard */}
+                        <Button 
+                          variant="outline" 
+                          className="w-full border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10 dark:border-[#005EB8] dark:text-[#005EB8]" 
+                          size="sm"
+                        >
+                          <Eye className="h-4 w-4 mr-1" />
+                          Lihat
                         </Button>
                       </Link>
+                      {cert.status === "ISSUED" && cert.pdf_url && (
+                        <Button className="bg-[#005EB8] hover:bg-[#004A93] text-white" size="sm" asChild>
+                          <a href={cert.pdf_url} target="_blank" download>
+                            <Download className="h-4 w-4" />
+                          </a>
+                        </Button>
+                      )}
                     </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
 
-                    <div className="pt-2">
-                      <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
-                        Diunduh {cert.downloadCount} kali
-                      </p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-
-          {filteredCertificates.length === 0 && (
-            <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 animate-fadeIn">
-              <CardContent className="p-12 text-center">
-                <div className="flex flex-col items-center gap-4">
-                  <div className="h-20 w-20 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
-                    <BadgeCheck className="h-10 w-10 text-gray-400" />
-                  </div>
+          {/* Info Banner */}
+          {stats.issued > 0 && (
+            <Card className="rounded-lg border bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800">
+              <CardContent className="p-4">
+                <div className="flex items-start gap-3">
+                  <Trophy className="h-5 w-5 text-[#008A00]" />
                   <div>
-                    <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-                      Tidak ada sertifikat ditemukan
-                    </h3>
-                    <p className="text-gray-600 dark:text-gray-400">
-                      Selesaikan kursus untuk mendapatkan sertifikat
+                    <h4 className="font-semibold text-[#008A00] dark:text-[#008A00]">Selamat!</h4>
+                    <p className="text-sm text-[#008A00]/80 dark:text-[#008A00]">
+                      Anda memiliki {stats.issued} sertifikat yang sudah tersedia untuk diunduh. 
+                      Sertifikat dapat digunakan sebagai bukti kompetensi dan dibagikan ke LinkedIn atau media sosial lainnya.
                     </p>
                   </div>
                 </div>
               </CardContent>
             </Card>
           )}
-
-          <div className="grid lg:grid-cols-2 gap-6">
-            <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 animate-fadeIn">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-lg">
-                  <BadgeCheck className="h-5 w-5 text-[#005EB8]" />
-                  Verifikasi Sertifikat
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <p className="text-gray-600 dark:text-gray-400 text-sm">
-                  Semua sertifikat dilengkapi dengan kode verifikasi unik yang
-                  dapat digunakan untuk memvalidasi keaslian sertifikat.
-                </p>
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <Input
-                    placeholder="Masukkan kode verifikasi..."
-                    className="flex-1"
-                  />
-                  <Button className="bg-[#005EB8] hover:bg-[#004A93]">
-                    Verifikasi
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="rounded-lg border bg-gradient-to-r from-[#008A00] to-[#006600] text-white shadow-sm transition-all duration-300 hover:shadow-md border-[#008A00] animate-fadeIn">
-              <CardContent className="p-6 h-full flex flex-col justify-center">
-                <div className="text-center">
-                  <h3 className="text-xl font-bold mb-2">
-                    Bagikan Pencapaian Anda
-                  </h3>
-                  <p className="text-white/90 text-sm mb-4">
-                    Tunjukkan sertifikat Anda di LinkedIn dan jaringan
-                    profesional lainnya
-                  </p>
-                  <Button
-                    size="lg"
-                    className="bg-white text-[#008A00] hover:bg-gray-100 font-semibold"
-                  >
-                    <Share className="h-5 w-5 mr-2" />
-                    Bagikan Semua
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
         </div>
       </UserLayout>
     </ProtectedRoute>

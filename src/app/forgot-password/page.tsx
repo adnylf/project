@@ -5,8 +5,8 @@ import { useRouter } from "next/navigation";
 import {
   ForgotPasswordPage,
   Testimonial,
-} from "@/components/ui/forgot-password";
-import { SuccessModal } from "@/components/ui/modal-forgot-password";
+} from "@/components/auth/forgot-password";
+import { SuccessModal } from "@/components/modal/forgot-password-modal";
 
 export default function ForgotPasswordPageComponent() {
   const [isLoading, setIsLoading] = useState(false);

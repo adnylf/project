@@ -1,36 +1,36 @@
-import { NextRequest, NextResponse } from "next/server";
-import authService from "@/services/auth.service";
-import { successResponse, errorResponse } from "@/utils/response.util";
-import { errorHandler } from "@/middlewares/error.middleware";
-import { requireAuth } from "@/middlewares/auth.middleware";
-import { corsMiddleware } from "@/middlewares/cors.middleware";
-import { loggingMiddleware } from "@/middlewares/logging.middleware";
-import { HTTP_STATUS } from "@/lib/constants";
+import { NextRequest, NextResponse } from 'next/server';
+import prisma from '@/lib/prisma';
+import { getAuthUser } from '@/lib/auth';
 
-async function handler(
-  request: NextRequest,
-  context: { user: { userId: string; email: string; role: string } }
-) {
+export async function POST(request: NextRequest) {
   try {
-    const { user } = context;
+    const user = getAuthUser(request);
 
-    // Perform logout
-    await authService.logout(user.userId);
-
-    return successResponse(
-      { message: "Please remove tokens from client storage" },
-      "Logout successful"
-    );
-  } catch (error) {
-    if (error instanceof Error) {
-      return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
+    if (user) {
+      // Log activity
+      await prisma.activityLog.create({
+        data: {
+          user_id: user.userId,
+          action: 'LOGOUT',
+          entity_type: 'user',
+          entity_id: user.userId,
+          ip_address: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || null,
+          user_agent: request.headers.get('user-agent') || null,
+        },
+      });
     }
-    return errorResponse("Logout failed", HTTP_STATUS.INTERNAL_SERVER_ERROR);
+
+    // Note: Since we're using JWT, we can't really invalidate tokens server-side
+    // without implementing a token blacklist. The client should remove the token.
+    
+    return NextResponse.json({
+      message: 'Logout berhasil',
+    });
+  } catch (error) {
+    console.error('Logout error:', error);
+    return NextResponse.json(
+      { error: 'Terjadi kesalahan server' },
+      { status: 500 }
+    );
   }
 }
-
-const authenticatedHandler = requireAuth(handler);
-
-export const POST = errorHandler(
-  loggingMiddleware(corsMiddleware(authenticatedHandler))
-);

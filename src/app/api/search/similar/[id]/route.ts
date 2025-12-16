@@ -1,58 +1,46 @@
-import { NextRequest, NextResponse } from "next/server";
-import searchService from "@/services/search.service";
-import { successResponse, errorResponse } from "@/utils/response.util";
-import { errorHandler } from "@/middlewares/error.middleware";
-import { corsMiddleware } from "@/middlewares/cors.middleware";
-import { loggingMiddleware } from "@/middlewares/logging.middleware";
-import { HTTP_STATUS } from "@/lib/constants";
+import { NextRequest, NextResponse } from 'next/server';
+import prisma from '@/lib/prisma';
 
-/**
- * GET /api/search/similar/:id
- * Get similar courses based on a course ID
- */
-async function handler(
-  request: NextRequest,
-  context: { params: Promise<{ id: string }> }
-): Promise<NextResponse> {
-  try {
-    const { id: courseId } = await context.params;
-    const { searchParams } = new URL(request.url);
-    const limit = parseInt(searchParams.get("limit") || "6");
-
-    const similarCourses = await searchService.getSimilarCourses(
-      courseId,
-      limit
-    );
-
-    return successResponse(
-      {
-        courseId,
-        similar: similarCourses,
-        total: similarCourses.length,
-      },
-      "Similar courses retrieved successfully"
-    );
-  } catch (error) {
-    if (error instanceof Error) {
-      return errorResponse(error.message, HTTP_STATUS.NOT_FOUND);
-    }
-    return errorResponse(
-      "Failed to get similar courses",
-      HTTP_STATUS.INTERNAL_SERVER_ERROR
-    );
-  }
+interface RouteParams {
+  params: { id: string };
 }
 
-// Properly typed export
-export async function GET(
-  request: NextRequest,
-  context: { params: Promise<{ id: string }> }
-): Promise<NextResponse> {
-  return errorHandler(async (req: NextRequest) => {
-    return loggingMiddleware(async (r: NextRequest) => {
-      return corsMiddleware(async (rq: NextRequest) => {
-        return handler(rq, context);
-      })(r);
-    })(req);
-  })(request);
+// GET /api/search/similar/[id] - Get similar courses
+export async function GET(request: NextRequest, { params }: RouteParams) {
+  try {
+    const { id } = params;
+
+    const course = await prisma.course.findUnique({
+      where: { id },
+      select: { category_id: true, tags: true, level: true },
+    });
+
+    if (!course) {
+      return NextResponse.json({ error: 'Kursus tidak ditemukan' }, { status: 404 });
+    }
+
+    const similarCourses = await prisma.course.findMany({
+      where: {
+        id: { not: id },
+        status: 'PUBLISHED',
+        OR: [
+          { category_id: course.category_id },
+          { tags: { hasSome: course.tags } },
+          { level: course.level },
+        ],
+      },
+      take: 6,
+      orderBy: [{ average_rating: 'desc' }, { total_students: 'desc' }],
+      select: {
+        id: true, title: true, slug: true, thumbnail: true, price: true, discount_price: true,
+        average_rating: true, total_students: true,
+        mentor: { select: { user: { select: { full_name: true } } } },
+      },
+    });
+
+    return NextResponse.json({ similar_courses: similarCourses });
+  } catch (error) {
+    console.error('Get similar courses error:', error);
+    return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 });
+  }
 }

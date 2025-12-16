@@ -1,64 +1,53 @@
-// app/api/courses/[id]/students/route.ts
-import { NextRequest } from "next/server";
-import prisma from "@/lib/prisma";
-import { successResponse, errorResponse } from "@/utils/response.util"; // PERBAIKAN: Gunakan successResponse bukan paginatedResponse
-import { validatePagination } from "@/utils/validation.util";
-import { errorHandler } from "@/middlewares/error.middleware";
-import { requireAuth } from "@/middlewares/auth.middleware";
-import { corsMiddleware } from "@/middlewares/cors.middleware";
-import { loggingMiddleware } from "@/middlewares/logging.middleware";
-import { HTTP_STATUS, USER_ROLES } from "@/lib/constants";
+import { NextRequest, NextResponse } from 'next/server';
+import prisma from '@/lib/prisma';
+import { getAuthUser, hasRole } from '@/lib/auth';
+import { UserRole } from '@prisma/client';
 
-async function handler(
-  request: NextRequest,
-  context: { user: { userId: string; email: string; role: string } }
-) {
-  const { user } = context;
+interface RouteParams {
+  params: { id: string };
+}
 
+// GET /api/courses/[id]/students - Get enrolled students
+export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
-    // Extract course ID from URL
-    const url = new URL(request.url);
-    const pathSegments = url.pathname.split("/");
-    const courseId = pathSegments[pathSegments.length - 2]; // Get ID from /api/courses/[id]/students
-
-    if (!courseId) {
-      return errorResponse("Course ID is required", HTTP_STATUS.BAD_REQUEST);
+    const authUser = getAuthUser(request);
+    if (!authUser) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const { id } = params;
+    const { searchParams } = new URL(request.url);
+    const page = parseInt(searchParams.get('page') || '1');
+    const limit = parseInt(searchParams.get('limit') || '10');
+    const status = searchParams.get('status');
+    const search = searchParams.get('search');
+
+    const skip = (page - 1) * limit;
+
+    // Find course and check ownership
     const course = await prisma.course.findUnique({
-      where: { id: courseId },
-      include: {
-        mentor: {
-          select: {
-            user_id: true, // PERBAIKAN: Gunakan snake_case
-          },
-        },
-      },
+      where: { id },
+      include: { mentor: { select: { user_id: true } } },
     });
 
     if (!course) {
-      return errorResponse("Course not found", HTTP_STATUS.NOT_FOUND);
-    }
-
-    if (
-      user.role !== USER_ROLES.ADMIN &&
-      course.mentor.user_id !== user.userId // PERBAIKAN: Gunakan snake_case
-    ) {
-      return errorResponse(
-        "Only course mentor or admin can view students",
-        HTTP_STATUS.FORBIDDEN
+      return NextResponse.json(
+        { error: 'Kursus tidak ditemukan' },
+        { status: 404 }
       );
     }
 
-    const { searchParams } = new URL(request.url);
-    const page = parseInt(searchParams.get("page") || "1");
-    const limit = parseInt(searchParams.get("limit") || "20");
-    const status = searchParams.get("status") || undefined;
-    const search = searchParams.get("search") || undefined;
+    const isMentor = course.mentor.user_id === authUser.userId;
+    const isAdmin = hasRole(authUser, [UserRole.ADMIN]);
 
-    const validatedPagination = validatePagination(page, limit);
+    if (!isMentor && !isAdmin) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
 
-    const where: any = { course_id: courseId }; // PERBAIKAN: Gunakan snake_case
+    // Build where clause
+    const where: Record<string, unknown> = {
+      course_id: id,
+    };
 
     if (status) {
       where.status = status;
@@ -67,116 +56,63 @@ async function handler(
     if (search) {
       where.user = {
         OR: [
-          { full_name: { contains: search, mode: "insensitive" } }, // PERBAIKAN: Gunakan snake_case
-          { email: { contains: search, mode: "insensitive" } },
+          { full_name: { contains: search, mode: 'insensitive' } },
+          { email: { contains: search, mode: 'insensitive' } },
         ],
       };
     }
 
-    const skip = (validatedPagination.page - 1) * validatedPagination.limit;
-
-    const [enrollments, total, stats] = await Promise.all([
+    const [enrollments, total] = await Promise.all([
       prisma.enrollment.findMany({
         where,
         skip,
-        take: validatedPagination.limit,
-        orderBy: { created_at: "desc" }, // PERBAIKAN: Gunakan snake_case
+        take: limit,
+        orderBy: { created_at: 'desc' },
         include: {
           user: {
             select: {
               id: true,
-              full_name: true, // PERBAIKAN: Gunakan snake_case
+              full_name: true,
               email: true,
-              avatar_url: true, // PERBAIKAN: Gunakan snake_case
+              avatar_url: true,
             },
           },
           certificate: {
             select: {
               id: true,
-              certificate_number: true, // PERBAIKAN: Gunakan snake_case
-              issued_at: true, // PERBAIKAN: Gunakan snake_case
+              certificate_number: true,
+              status: true,
+              issued_at: true,
             },
           },
         },
       }),
       prisma.enrollment.count({ where }),
-      prisma.enrollment.groupBy({
-        by: ["status"],
-        where: { course_id: courseId }, // PERBAIKAN: Gunakan snake_case
-        _count: true,
-        _avg: { progress: true },
-      }),
     ]);
 
-    // Enrich enrollments with progress data
-    const enrichedEnrollments = await Promise.all(
-      enrollments.map(async (enrollment: any) => {
-        const completedMaterials = await prisma.progress.count({
-          where: {
-            enrollment_id: enrollment.id, // PERBAIKAN: Gunakan snake_case
-            is_completed: true, // PERBAIKAN: Gunakan snake_case
-          },
-        });
-
-        const lastProgress = await prisma.progress.findFirst({
-          where: { enrollment_id: enrollment.id }, // PERBAIKAN: Gunakan snake_case
-          orderBy: { updated_at: "desc" }, // PERBAIKAN: Gunakan snake_case
-          include: {
-            material: {
-              select: {
-                title: true,
-                type: true,
-              },
-            },
-          },
-        });
-
-        return {
-          ...enrollment,
-          completedMaterials,
-          lastAccessedMaterial: lastProgress?.material || null,
-        };
-      })
-    );
-
-    const enrollmentStats = {
-      total,
-      byStatus: Object.fromEntries(
-        stats.map((stat: any) => [
-          stat.status,
-          { count: stat._count, avgProgress: stat._avg.progress || 0 },
-        ])
-      ),
-    };
-
-    // PERBAIKAN: Kembalikan data menggunakan successResponse bukan paginatedResponse
-    return successResponse(
-      {
-        enrollments: enrichedEnrollments,
-        stats: enrollmentStats,
-        pagination: {
-          page: validatedPagination.page,
-          limit: validatedPagination.limit,
-          total,
-          totalPages: Math.ceil(total / validatedPagination.limit),
-        },
+    return NextResponse.json({
+      students: enrollments.map(e => ({
+        id: e.id,
+        user: e.user,
+        progress: e.progress,
+        status: e.status,
+        enrolled_at: e.created_at,
+        last_accessed_at: e.last_accessed_at,
+        completed_at: e.completed_at,
+        certificate: e.certificate,
+      })),
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
       },
-      "Students retrieved successfully"
-    );
+    });
   } catch (error) {
-    if (error instanceof Error) {
-      return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
-    }
-    return errorResponse(
-      "Failed to get students",
-      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    console.error('Get students error:', error);
+    return NextResponse.json(
+      { error: 'Terjadi kesalahan server' },
+      { status: 500 }
     );
   }
 }
-
-// Gunakan requireAuth untuk wrap handler
-const authenticatedHandler = requireAuth(handler);
-
-export const GET = errorHandler(
-  loggingMiddleware(corsMiddleware(authenticatedHandler))
-);

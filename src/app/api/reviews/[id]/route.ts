@@ -1,170 +1,119 @@
-import { NextRequest, NextResponse } from "next/server";
-import reviewService from "@/services/review.service";
-import { updateReviewSchema } from "@/lib/validation";
-import {
-  successResponse,
-  validationErrorResponse,
-  errorResponse,
-  noContentResponse,
-} from "@/utils/response.util";
-import { validateData } from "@/utils/validation.util";
-import { errorHandler } from "@/middlewares/error.middleware";
-import { authMiddleware } from "@/middlewares/auth.middleware";
-import { corsMiddleware } from "@/middlewares/cors.middleware";
-import { loggingMiddleware } from "@/middlewares/logging.middleware";
-import { HTTP_STATUS } from "@/lib/constants";
+import { NextRequest, NextResponse } from 'next/server';
+import prisma from '@/lib/prisma';
+import { getAuthUser, unauthorizedResponse } from '@/lib/auth';
+import { updateReviewSchema } from '@/lib/validation';
 
-/**
- * GET /api/reviews/:id
- * Get review by ID
- */
-async function getHandler(
-  request: NextRequest,
-  context: { params: Promise<{ id: string }> }
-) {
+interface RouteParams {
+  params: { id: string };
+}
+
+// GET /api/reviews/[id] - Get review by ID
+export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
-    const { id } = await context.params;
+    const { id } = params;
 
-    const review = await reviewService.getReviewById(id);
+    const review = await prisma.review.findUnique({
+      where: { id },
+      include: {
+        user: { select: { id: true, full_name: true, avatar_url: true } },
+        course: { select: { id: true, title: true } },
+      },
+    });
 
-    return successResponse(review, "Review retrieved successfully");
-  } catch (error) {
-    if (error instanceof Error) {
-      return errorResponse(error.message, HTTP_STATUS.NOT_FOUND);
+    if (!review) {
+      return NextResponse.json({ error: 'Review tidak ditemukan' }, { status: 404 });
     }
-    return errorResponse(
-      "Failed to get review",
-      HTTP_STATUS.INTERNAL_SERVER_ERROR
-    );
+
+    return NextResponse.json({ review });
+  } catch (error) {
+    console.error('Get review error:', error);
+    return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 });
   }
 }
 
-/**
- * PUT /api/reviews/:id
- * Update review
- */
-async function putHandler(
-  request: NextRequest,
-  user: any,
-  context: { params: Promise<{ id: string }> }
-) {
+// PUT /api/reviews/[id] - Update review
+export async function PUT(request: NextRequest, { params }: RouteParams) {
   try {
-    const { id } = await context.params;
+    const authUser = getAuthUser(request);
+    if (!authUser) return unauthorizedResponse();
 
-    // Parse request body
+    const { id } = params;
+
+    const review = await prisma.review.findUnique({ where: { id } });
+    if (!review) {
+      return NextResponse.json({ error: 'Review tidak ditemukan' }, { status: 404 });
+    }
+
+    if (review.user_id !== authUser.userId) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     const body = await request.json();
-
-    // Validate input
-    const validation = await validateData(updateReviewSchema, body);
-
-    if (!validation.success) {
-      return validationErrorResponse(validation.errors);
+    const result = updateReviewSchema.safeParse(body);
+    if (!result.success) {
+      return NextResponse.json({ error: 'Validasi gagal', details: result.error.flatten().fieldErrors }, { status: 400 });
     }
 
-    // Update review
-    const review = await reviewService.updateReview(
-      id,
-      user.userId,
-      validation.data
-    );
+    const updatedReview = await prisma.review.update({
+      where: { id },
+      data: result.data,
+    });
 
-    return successResponse(review, "Review updated successfully");
+    // Update course average rating
+    const avgResult = await prisma.review.aggregate({
+      where: { course_id: review.course_id },
+      _avg: { rating: true },
+    });
+
+    await prisma.course.update({
+      where: { id: review.course_id },
+      data: { average_rating: avgResult._avg.rating || 0 },
+    });
+
+    return NextResponse.json({ message: 'Review berhasil diperbarui', review: updatedReview });
   } catch (error) {
-    if (error instanceof Error) {
-      return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
-    }
-    return errorResponse(
-      "Failed to update review",
-      HTTP_STATUS.INTERNAL_SERVER_ERROR
-    );
+    console.error('Update review error:', error);
+    return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 });
   }
 }
 
-/**
- * DELETE /api/reviews/:id
- * Delete review
- */
-async function deleteHandler(
-  request: NextRequest,
-  user: any,
-  context: { params: Promise<{ id: string }> }
-) {
+// DELETE /api/reviews/[id] - Delete review
+export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
-    const { id } = await context.params;
+    const authUser = getAuthUser(request);
+    if (!authUser) return unauthorizedResponse();
 
-    await reviewService.deleteReview(id, user.userId, user.role);
+    const { id } = params;
 
-    return noContentResponse();
-  } catch (error) {
-    if (error instanceof Error) {
-      return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
+    const review = await prisma.review.findUnique({ where: { id } });
+    if (!review) {
+      return NextResponse.json({ error: 'Review tidak ditemukan' }, { status: 404 });
     }
-    return errorResponse(
-      "Failed to delete review",
-      HTTP_STATUS.INTERNAL_SERVER_ERROR
-    );
+
+    if (review.user_id !== authUser.userId) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    await prisma.review.delete({ where: { id } });
+
+    // Update course average rating
+    const avgResult = await prisma.review.aggregate({
+      where: { course_id: review.course_id },
+      _avg: { rating: true },
+      _count: { rating: true },
+    });
+
+    await prisma.course.update({
+      where: { id: review.course_id },
+      data: {
+        average_rating: avgResult._avg.rating || 0,
+        total_reviews: avgResult._count.rating,
+      },
+    });
+
+    return NextResponse.json({ message: 'Review berhasil dihapus' });
+  } catch (error) {
+    console.error('Delete review error:', error);
+    return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 });
   }
-}
-
-// Apply middlewares and export
-async function authenticatedPutHandler(
-  request: NextRequest,
-  context: { params: Promise<{ id: string }> }
-): Promise<NextResponse> {
-  const authResult = await authMiddleware(request);
-  if (authResult instanceof NextResponse) {
-    return authResult;
-  }
-  return putHandler(request, authResult, context);
-}
-
-async function authenticatedDeleteHandler(
-  request: NextRequest,
-  context: { params: Promise<{ id: string }> }
-): Promise<NextResponse> {
-  const authResult = await authMiddleware(request);
-  if (authResult instanceof NextResponse) {
-    return authResult;
-  }
-  return deleteHandler(request, authResult, context);
-}
-
-// Properly typed exports dengan handler yang sudah diperbaiki
-export async function GET(
-  request: NextRequest,
-  context: { params: Promise<{ id: string }> }
-): Promise<NextResponse> {
-  return errorHandler(async (req: NextRequest) => {
-    return loggingMiddleware(async (r: NextRequest) => {
-      return corsMiddleware(async (rq: NextRequest) => {
-        return getHandler(rq, context);
-      })(r);
-    })(req);
-  })(request);
-}
-
-export async function PUT(
-  request: NextRequest,
-  context: { params: Promise<{ id: string }> }
-): Promise<NextResponse> {
-  return errorHandler(async (req: NextRequest) => {
-    return loggingMiddleware(async (r: NextRequest) => {
-      return corsMiddleware(async (rq: NextRequest) => {
-        return authenticatedPutHandler(rq, context);
-      })(r);
-    })(req);
-  })(request);
-}
-
-export async function DELETE(
-  request: NextRequest,
-  context: { params: Promise<{ id: string }> }
-): Promise<NextResponse> {
-  return errorHandler(async (req: NextRequest) => {
-    return loggingMiddleware(async (r: NextRequest) => {
-      return corsMiddleware(async (rq: NextRequest) => {
-        return authenticatedDeleteHandler(rq, context);
-      })(r);
-    })(req);
-  })(request);
 }

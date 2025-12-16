@@ -1,173 +1,136 @@
-import fs from "fs/promises";
-import path from "path";
-import { storageConfig } from "@/config/storage.config";
-import {
-  ensureDirectoryExists,
-  deleteFile,
-  moveFile,
-  copyFile,
-  fileExists,
-} from "@/utils/file.util";
+// Storage utilities
+import { storageConfig } from '@/config/storage.config';
+import { mkdir, unlink, stat, readdir } from 'fs/promises';
+import path from 'path';
 
-/**
- * Storage Interface
- */
-export interface IStorage {
-  save(filePath: string, buffer: Buffer): Promise<string>;
-  get(filePath: string): Promise<Buffer>;
-  delete(filePath: string): Promise<void>;
-  exists(filePath: string): Promise<boolean>;
-  move(sourcePath: string, destinationPath: string): Promise<void>;
-  copy(sourcePath: string, destinationPath: string): Promise<void>;
-  getUrl(filePath: string): string;
+type FileCategory = 'image' | 'video' | 'document' | 'certificate';
+
+// Get upload path for file type
+export function getUploadPath(category: FileCategory, subPath?: string): string {
+  let basePath = '';
+  
+  switch (category) {
+    case 'image':
+      basePath = subPath ? storageConfig.paths.images[subPath as keyof typeof storageConfig.paths.images] || 'images' : 'images';
+      break;
+    case 'video':
+      basePath = storageConfig.paths.videos;
+      break;
+    case 'document':
+      basePath = storageConfig.paths.documents;
+      break;
+    case 'certificate':
+      basePath = storageConfig.paths.certificates;
+      break;
+    default:
+      basePath = storageConfig.paths.temp;
+  }
+  
+  return path.join(storageConfig.uploadDir, basePath);
 }
 
-/**
- * Local Storage Implementation
- */
-export class LocalStorage implements IStorage {
-  private basePath: string;
-
-  constructor(basePath?: string) {
-    this.basePath = basePath || storageConfig.local.basePath;
+// Get public URL for file
+export function getPublicUrl(relativePath: string): string {
+  if (storageConfig.cdn.enabled && storageConfig.cdn.baseUrl) {
+    return `${storageConfig.cdn.baseUrl}/${relativePath}`;
   }
+  return `/uploads/${relativePath}`;
+}
 
-  /**
-   * Save file to local storage
-   */
-  async save(filePath: string, buffer: Buffer): Promise<string> {
-    const fullPath = path.join(this.basePath, filePath);
-    await ensureDirectoryExists(path.dirname(fullPath));
-    await fs.writeFile(fullPath, buffer);
-    return filePath;
-  }
+// Validate file type
+export function validateFileType(mimeType: string, category: FileCategory): boolean {
+  if (category === 'certificate') return mimeType === 'application/pdf';
+  const allowedTypes = storageConfig.allowedTypes[category as keyof typeof storageConfig.allowedTypes];
+  return allowedTypes?.includes(mimeType) ?? false;
+}
 
-  /**
-   * Get file from local storage
-   */
-  async get(filePath: string): Promise<Buffer> {
-    const fullPath = path.join(this.basePath, filePath);
-    return fs.readFile(fullPath);
-  }
+// Validate file size
+export function validateFileSize(size: number, category: FileCategory): boolean {
+  const limit = storageConfig.limits[category as keyof typeof storageConfig.limits];
+  return limit ? size <= limit : true;
+}
 
-  /**
-   * Delete file from local storage
-   */
-  async delete(filePath: string): Promise<void> {
-    const fullPath = path.join(this.basePath, filePath);
-    await deleteFile(fullPath);
-  }
+// Generate unique filename
+export function generateFilename(originalName: string, prefix?: string): string {
+  const ext = path.extname(originalName);
+  const timestamp = Date.now();
+  const random = Math.random().toString(36).substring(2, 8);
+  const prefixStr = prefix ? `${prefix}_` : '';
+  return `${prefixStr}${timestamp}_${random}${ext}`;
+}
 
-  /**
-   * Check if file exists
-   */
-  async exists(filePath: string): Promise<boolean> {
-    const fullPath = path.join(this.basePath, filePath);
-    return fileExists(fullPath);
-  }
+// Ensure directory exists
+export async function ensureDir(dirPath: string): Promise<void> {
+  await mkdir(dirPath, { recursive: true });
+}
 
-  /**
-   * Move file
-   */
-  async move(sourcePath: string, destinationPath: string): Promise<void> {
-    const fullSourcePath = path.join(this.basePath, sourcePath);
-    const fullDestPath = path.join(this.basePath, destinationPath);
-    await ensureDirectoryExists(path.dirname(fullDestPath));
-    await moveFile(fullSourcePath, fullDestPath);
-  }
-
-  /**
-   * Copy file
-   */
-  async copy(sourcePath: string, destinationPath: string): Promise<void> {
-    const fullSourcePath = path.join(this.basePath, sourcePath);
-    const fullDestPath = path.join(this.basePath, destinationPath);
-    await ensureDirectoryExists(path.dirname(fullDestPath));
-    await copyFile(fullSourcePath, fullDestPath);
-  }
-
-  /**
-   * Get public URL for file
-   */
-  getUrl(filePath: string): string {
-    return `${storageConfig.local.publicPath}/${filePath}`;
-  }
-
-  /**
-   * Get full path
-   */
-  getFullPath(filePath: string): string {
-    return path.join(this.basePath, filePath);
+// Delete file
+export async function deleteFile(filePath: string): Promise<boolean> {
+  try {
+    await unlink(filePath);
+    return true;
+  } catch (error) {
+    console.error('Delete file error:', error);
+    return false;
   }
 }
 
-/**
- * S3 Storage Implementation (Placeholder)
- */
-export class S3Storage implements IStorage {
-  // TODO: Implement S3 storage when needed
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async save(filePath: string, buffer: Buffer): Promise<string> {
-    throw new Error("S3 Storage not implemented yet");
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async get(filePath: string): Promise<Buffer> {
-    throw new Error("S3 Storage not implemented yet");
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async delete(filePath: string): Promise<void> {
-    throw new Error("S3 Storage not implemented yet");
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async exists(filePath: string): Promise<boolean> {
-    throw new Error("S3 Storage not implemented yet");
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async move(sourcePath: string, destinationPath: string): Promise<void> {
-    throw new Error("S3 Storage not implemented yet");
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async copy(sourcePath: string, destinationPath: string): Promise<void> {
-    throw new Error("S3 Storage not implemented yet");
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  getUrl(filePath: string): string {
-    throw new Error("S3 Storage not implemented yet");
+// Get file stats
+export async function getFileStats(filePath: string): Promise<{ size: number; mtime: Date } | null> {
+  try {
+    const stats = await stat(filePath);
+    return { size: stats.size, mtime: stats.mtime };
+  } catch {
+    return null;
   }
 }
 
-/**
- * Storage Factory
- */
-export class StorageFactory {
-  private static instance: IStorage;
+// List files in directory
+export async function listFiles(dirPath: string): Promise<string[]> {
+  try {
+    return await readdir(dirPath);
+  } catch {
+    return [];
+  }
+}
 
-  static getInstance(): IStorage {
-    if (!this.instance) {
-      switch (storageConfig.type) {
-        case "s3":
-          this.instance = new S3Storage();
-          break;
-        case "local":
-        default:
-          this.instance = new LocalStorage();
-          break;
+// Get file size in human readable format
+export function formatFileSize(bytes: number): string {
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let size = bytes;
+  let unitIndex = 0;
+  
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex++;
+  }
+  
+  return `${size.toFixed(1)} ${units[unitIndex]}`;
+}
+
+// Clean old temp files (older than 24 hours)
+export async function cleanTempFiles(): Promise<number> {
+  const tempDir = path.join(storageConfig.uploadDir, storageConfig.paths.temp);
+  const maxAge = 24 * 60 * 60 * 1000; // 24 hours
+  let deletedCount = 0;
+  
+  try {
+    const files = await readdir(tempDir);
+    const now = Date.now();
+    
+    for (const file of files) {
+      const filePath = path.join(tempDir, file);
+      const stats = await getFileStats(filePath);
+      
+      if (stats && (now - stats.mtime.getTime()) > maxAge) {
+        if (await deleteFile(filePath)) {
+          deletedCount++;
+        }
       }
     }
-    return this.instance;
+  } catch (error) {
+    console.error('Clean temp files error:', error);
   }
+  
+  return deletedCount;
 }
-
-/**
- * Default storage instance
- */
-export const storage = StorageFactory.getInstance();
-
-export default storage;

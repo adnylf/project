@@ -1,4 +1,3 @@
-// app/register/page.tsx
 "use client";
 
 import { useState } from "react";
@@ -8,8 +7,7 @@ import {
   Testimonial,
   RegisterFormData,
   DisabilityType,
-  UserRole,
-} from "@/components/ui/register";
+} from "@/components/auth/register";
 import SweetAlert, { AlertType } from "@/components/ui/sweet-alert";
 
 export default function RegisterPageComponent() {
@@ -61,13 +59,11 @@ export default function RegisterPageComponent() {
       const payload = {
         email: formData.email,
         password: formData.password,
-        name: formData.name,
+        full_name: formData.full_name,
         disability_type: formData.disability_type,
-        // Note: The backend will determine the role based on disability_type
-        // We don't need to send the role explicitly if backend handles it
       };
 
-      const response = await fetch("http://localhost:3000/api/auth/register", {
+      const response = await fetch("/api/auth/register", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -78,35 +74,33 @@ export default function RegisterPageComponent() {
       const data = await response.json();
 
       if (!response.ok) {
-        // Check if email already exists
-        if (
-          data.message?.toLowerCase().includes("email") ||
-          data.message?.toLowerCase().includes("already exists") ||
-          data.message?.toLowerCase().includes("terdaftar")
-        ) {
+        // Handle specific error messages
+        if (data.error === "Email sudah terdaftar") {
           showSweetAlert("error", "Registrasi Gagal", "Email sudah terdaftar.");
           return;
         }
+        
+        if (data.details) {
+          const errorMessages = Object.values(data.details).flat().join("\n");
+          throw new Error(errorMessages);
+        }
 
-        throw new Error(
-          data.message || "Terjadi kesalahan pada server, coba lagi nanti."
-        );
+        throw new Error(data.error || "Terjadi kesalahan pada server");
       }
 
       // Registration successful
       console.log("Registrasi berhasil:", data);
 
-      // Show success alert with role-specific message
-      const roleMessage =
-        formData.disability_type === DisabilityType.MENTOR
-          ? "Anda telah terdaftar sebagai Mentor. Silakan login untuk mulai membuat kursus."
-          : "Anda telah terdaftar sebagai Siswa. Silakan login untuk mulai belajar.";
+      // Show success alert
+      showSweetAlert(
+        "success", 
+        "Registrasi Berhasil!", 
+        "Silakan periksa email Anda untuk verifikasi akun. Anda harus verifikasi email terlebih dahulu sebelum dapat menggunakan akun."
+      );
 
-      showSweetAlert("success", "Registrasi Berhasil!", roleMessage);
-
-      // Redirect to login page after delay
+      // Redirect to verify email page after delay
       setTimeout(() => {
-        router.push("/login");
+        router.push(`/verify-email?email=${encodeURIComponent(formData.email)}`);
       }, 3000);
     } catch (error) {
       console.error("Registrasi gagal:", error);

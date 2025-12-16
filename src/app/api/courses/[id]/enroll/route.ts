@@ -1,75 +1,141 @@
-// app/api/courses/[id]/enroll/route.ts
-import { NextRequest } from "next/server";
-import enrollmentService from "@/services/enrollment.service";
-import { successResponse, errorResponse } from "@/utils/response.util";
-import { errorHandler } from "@/middlewares/error.middleware";
-import { requireAuth } from "@/middlewares/auth.middleware";
-import { corsMiddleware } from "@/middlewares/cors.middleware";
-import { loggingMiddleware } from "@/middlewares/logging.middleware";
-import { HTTP_STATUS } from "@/lib/constants";
+import { NextRequest, NextResponse } from 'next/server';
+import prisma from '@/lib/prisma';
+import { getAuthUser, unauthorizedResponse } from '@/lib/auth';
+import { EnrollmentStatus, TransactionStatus } from '@prisma/client';
 
-async function handler(
-  request: NextRequest,
-  context: { user: { userId: string; email: string; role: string } }
-) {
-  const { user } = context;
+interface RouteParams {
+  params: { id: string };
+}
 
+// POST /api/courses/[id]/enroll - Enroll in a course
+export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
-    // Extract course ID from URL
-    const url = new URL(request.url);
-    const pathSegments = url.pathname.split("/");
-    const courseId = pathSegments[pathSegments.length - 2]; // Get ID from /api/courses/[id]/enroll
-
-    if (!courseId) {
-      return errorResponse("Course ID is required", HTTP_STATUS.BAD_REQUEST);
+    const authUser = getAuthUser(request);
+    if (!authUser) {
+      return unauthorizedResponse();
     }
 
-    // Parse request body (optional transactionId for paid courses)
-    let body;
-    try {
-      body = await request.json();
-    } catch {
-      body = {};
-    }
-    const { transactionId } = body;
+    const { id } = params;
 
-    // Enroll user
-    const result = await enrollmentService.enrollCourse(
-      user.userId,
-      courseId,
-      transactionId
-    );
-
-    // PERBAIKAN: Gunakan field yang sesuai dengan return value service
-    return successResponse(
-      {
-        enrollmentId: result.enrollment.id,
-        courseId: result.enrollment.courseId, // PERBAIKAN: Gunakan course_id bukan courseId
-        status: result.enrollment.status,
-        progress: result.enrollment.progress,
-        course: result.enrollment.course,
+    // Find course
+    const course = await prisma.course.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        is_free: true,
+        price: true,
+        discount_price: true,
       },
-      "Successfully enrolled in course",
-      HTTP_STATUS.CREATED
-    );
-  } catch (error) {
-    if (error instanceof Error) {
-      // Handle specific errors
-      if (error.message.includes("payment")) {
-        return errorResponse(error.message, HTTP_STATUS.PAYMENT_REQUIRED);
-      }
-      return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
+    });
+
+    if (!course) {
+      return NextResponse.json(
+        { error: 'Kursus tidak ditemukan' },
+        { status: 404 }
+      );
     }
-    return errorResponse(
-      "Failed to enroll in course",
-      HTTP_STATUS.INTERNAL_SERVER_ERROR
+
+    if (course.status !== 'PUBLISHED') {
+      return NextResponse.json(
+        { error: 'Kursus tidak tersedia untuk pendaftaran' },
+        { status: 400 }
+      );
+    }
+
+    // Check if already enrolled
+    const existingEnrollment = await prisma.enrollment.findUnique({
+      where: {
+        user_id_course_id: {
+          user_id: authUser.userId,
+          course_id: id,
+        },
+      },
+    });
+
+    if (existingEnrollment) {
+      return NextResponse.json(
+        { error: 'Anda sudah terdaftar di kursus ini', enrollment: existingEnrollment },
+        { status: 400 }
+      );
+    }
+
+    // For free courses or price 0, enroll directly
+    if (course.is_free || course.price === 0) {
+      const enrollment = await prisma.enrollment.create({
+        data: {
+          user_id: authUser.userId,
+          course_id: id,
+          status: EnrollmentStatus.ACTIVE,
+        },
+      });
+
+      // Update course total students
+      await prisma.course.update({
+        where: { id },
+        data: { total_students: { increment: 1 } },
+      });
+
+      // Update mentor total students
+      const courseWithMentor = await prisma.course.findUnique({
+        where: { id },
+        select: { mentor_id: true },
+      });
+      
+      if (courseWithMentor) {
+        await prisma.mentorProfile.update({
+          where: { id: courseWithMentor.mentor_id },
+          data: { total_students: { increment: 1 } },
+        });
+      }
+
+      return NextResponse.json({
+        message: 'Berhasil mendaftar kursus',
+        enrollment,
+      });
+    }
+
+    // For paid courses, check for completed transaction
+    const paidTransaction = await prisma.transaction.findFirst({
+      where: {
+        user_id: authUser.userId,
+        course_id: id,
+        status: 'SUCCESS' as TransactionStatus,
+      },
+    });
+
+    if (!paidTransaction) {
+      return NextResponse.json(
+        { error: 'Silakan selesaikan pembayaran terlebih dahulu' },
+        { status: 402 }
+      );
+    }
+
+    // Create enrollment for paid course
+    const enrollment = await prisma.enrollment.create({
+      data: {
+        user_id: authUser.userId,
+        course_id: id,
+        status: EnrollmentStatus.ACTIVE,
+      },
+    });
+
+    // Update totals
+    await prisma.course.update({
+      where: { id },
+      data: { total_students: { increment: 1 } },
+    });
+
+    return NextResponse.json({
+      message: 'Berhasil mendaftar kursus',
+      enrollment,
+    });
+  } catch (error) {
+    console.error('Enroll error:', error);
+    return NextResponse.json(
+      { error: 'Terjadi kesalahan server' },
+      { status: 500 }
     );
   }
 }
-
-// Gunakan requireAuth untuk wrap handler
-const authenticatedHandler = requireAuth(handler);
-
-export const POST = errorHandler(
-  loggingMiddleware(corsMiddleware(authenticatedHandler))
-);

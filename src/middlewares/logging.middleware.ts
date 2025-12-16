@@ -1,113 +1,127 @@
+// Logging Middleware
 import { NextRequest, NextResponse } from 'next/server';
-import { logHttp, logError } from '@/utils/logger.util';
 
-/**
- * Logging Middleware
- * Logs all API requests and responses
- */
-export function loggingMiddleware(
-  handler: (request: NextRequest) => Promise<NextResponse>
-): (request: NextRequest) => Promise<NextResponse> {
-  return async (request: NextRequest) => {
-    const startTime = Date.now();
-    const { method, url } = request;
+interface LogEntry {
+  timestamp: string;
+  method: string;
+  path: string;
+  status?: number;
+  duration?: number;
+  ip?: string;
+  userAgent?: string;
+  userId?: string;
+  error?: string;
+}
 
-    try {
-      // Execute handler
-      const response = await handler(request);
+type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
-      // Calculate duration
-      const duration = Date.now() - startTime;
+// Log levels
+const LOG_LEVELS: Record<LogLevel, number> = {
+  debug: 0,
+  info: 1,
+  warn: 2,
+  error: 3,
+};
 
-      // Log request
-      logHttp(`${method} ${url} ${response.status} - ${duration}ms`);
+const CURRENT_LOG_LEVEL = (process.env.LOG_LEVEL as LogLevel) || 'info';
 
-      // Add timing header
-      response.headers.set('X-Response-Time', `${duration}ms`);
+// Format log entry
+function formatLogEntry(entry: LogEntry): string {
+  const parts = [
+    `[${entry.timestamp}]`,
+    entry.method,
+    entry.path,
+    entry.status ? `${entry.status}` : '',
+    entry.duration ? `${entry.duration}ms` : '',
+    entry.userId ? `user:${entry.userId}` : '',
+  ].filter(Boolean);
+  
+  return parts.join(' ');
+}
 
-      return response;
-    } catch (error) {
-      // Log error
-      const duration = Date.now() - startTime;
-      logError(`${method} ${url} - ${duration}ms`, error);
+// Check if should log at level
+function shouldLog(level: LogLevel): boolean {
+  return LOG_LEVELS[level] >= LOG_LEVELS[CURRENT_LOG_LEVEL];
+}
 
-      throw error;
-    }
+// Log functions
+export function logDebug(message: string, data?: unknown): void {
+  if (shouldLog('debug')) {
+    console.debug(`[DEBUG] ${message}`, data ?? '');
+  }
+}
+
+export function logInfo(message: string, data?: unknown): void {
+  if (shouldLog('info')) {
+    console.info(`[INFO] ${message}`, data ?? '');
+  }
+}
+
+export function logWarn(message: string, data?: unknown): void {
+  if (shouldLog('warn')) {
+    console.warn(`[WARN] ${message}`, data ?? '');
+  }
+}
+
+export function logError(message: string, error?: unknown): void {
+  if (shouldLog('error')) {
+    console.error(`[ERROR] ${message}`, error ?? '');
+  }
+}
+
+// Create request logger
+export function createRequestLogger(request: NextRequest) {
+  const startTime = Date.now();
+  const entry: LogEntry = {
+    timestamp: new Date().toISOString(),
+    method: request.method,
+    path: new URL(request.url).pathname,
+    ip: request.ip || request.headers.get('x-forwarded-for') || 'unknown',
+    userAgent: request.headers.get('user-agent') || 'unknown',
+  };
+  
+  return {
+    setUserId(userId: string) {
+      entry.userId = userId;
+    },
+    
+    logRequest() {
+      logInfo(`→ ${entry.method} ${entry.path}`);
+    },
+    
+    logResponse(response: NextResponse) {
+      entry.status = response.status;
+      entry.duration = Date.now() - startTime;
+      
+      const logFn = entry.status >= 500 ? logError : 
+                    entry.status >= 400 ? logWarn : logInfo;
+      
+      logFn(`← ${formatLogEntry(entry)}`);
+    },
+    
+    logError(error: Error) {
+      entry.error = error.message;
+      entry.duration = Date.now() - startTime;
+      logError(`✖ ${entry.method} ${entry.path}: ${error.message}`);
+    },
   };
 }
 
-/**
- * Detailed logging with request/response bodies
- */
-export function detailedLogging(
-  handler: (request: NextRequest) => Promise<NextResponse>
-): (request: NextRequest) => Promise<NextResponse> {
-  return async (request: NextRequest) => {
-    const startTime = Date.now();
-    const { method, url } = request;
-
-    // Log request details
-    console.log('📥 Request:', {
-      method,
-      url,
-      headers: Object.fromEntries(request.headers.entries()),
-      timestamp: new Date().toISOString(),
-    });
-
-    // Clone request to read body without consuming it
-    const requestClone = request.clone();
+// Request logging middleware wrapper
+export function withLogging(
+  handler: (request: NextRequest, ...args: unknown[]) => Promise<NextResponse>
+) {
+  return async (request: NextRequest, ...args: unknown[]): Promise<NextResponse> => {
+    const logger = createRequestLogger(request);
+    logger.logRequest();
+    
     try {
-      const body = await requestClone.json();
-      console.log('📦 Request Body:', body);
-    } catch {
-      // Body is not JSON or already consumed
-    }
-
-    try {
-      // Execute handler
-      const response = await handler(request);
-      const duration = Date.now() - startTime;
-
-      // Log response
-      console.log('📤 Response:', {
-        status: response.status,
-        duration: `${duration}ms`,
-        timestamp: new Date().toISOString(),
-      });
-
+      const response = await handler(request, ...args);
+      logger.logResponse(response);
       return response;
     } catch (error) {
-      const duration = Date.now() - startTime;
-      console.error('❌ Error:', {
-        method,
-        url,
-        duration: `${duration}ms`,
-        error,
-      });
-
+      logger.logError(error as Error);
       throw error;
     }
-  };
-}
-
-/**
- * Performance monitoring
- */
-export function performanceMonitoring(
-  handler: (request: NextRequest) => Promise<NextResponse>
-): (request: NextRequest) => Promise<NextResponse> {
-  return async (request: NextRequest) => {
-    const startTime = Date.now();
-
-    const response = await handler(request);
-
-    const duration = Date.now() - startTime;
-
-    // Warn if request takes too long
-    if (duration > 1000) {
-      console.warn(`⚠️ Slow request: ${request.method} ${request.url} - ${duration}ms`);
-    }
-
-    return response;
   };
 }

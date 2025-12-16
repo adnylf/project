@@ -1,63 +1,52 @@
-import { NextRequest, NextResponse } from "next/server";
-import mentorService from "@/services/mentor.service";
-import { paginatedResponse, errorResponse } from "@/utils/response.util";
-import { validatePagination } from "@/utils/validation.util";
-import { errorHandler } from "@/middlewares/error.middleware";
-import { authMiddleware } from "@/middlewares/auth.middleware";
-import { corsMiddleware } from "@/middlewares/cors.middleware";
-import { loggingMiddleware } from "@/middlewares/logging.middleware";
-import { HTTP_STATUS } from "@/lib/constants";
+import { NextRequest, NextResponse } from 'next/server';
+import prisma from '@/lib/prisma';
+import { getAuthUser, unauthorizedResponse, hasRole } from '@/lib/auth';
+import { UserRole } from '@prisma/client';
 
-/**
- * GET /api/mentors/reviews
- * Get mentor reviews for authenticated mentor
- */
-async function handler(request: NextRequest, user: any) {
+// GET /api/mentors/reviews - Get mentor's course reviews
+export async function GET(request: NextRequest) {
   try {
-    // Parse query parameters
+    const authUser = getAuthUser(request);
+    if (!authUser) return unauthorizedResponse();
+    if (!hasRole(authUser, [UserRole.MENTOR, UserRole.ADMIN])) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     const { searchParams } = new URL(request.url);
-    const page = parseInt(searchParams.get("page") || "1");
-    const limit = parseInt(searchParams.get("limit") || "10");
+    const page = parseInt(searchParams.get('page') || '1');
+    const limit = parseInt(searchParams.get('limit') || '10');
 
-    // Validate pagination
-    const validatedPagination = validatePagination(page, limit);
+    const skip = (page - 1) * limit;
 
-    // Get mentor profile first
-    const mentor = await mentorService.getMentorByUserId(user.userId);
-
-    // Get reviews
-    const result = await mentorService.getMentorReviews(mentor.id, {
-      page: validatedPagination.page,
-      limit: validatedPagination.limit,
+    const mentorProfile = await prisma.mentorProfile.findUnique({
+      where: { user_id: authUser.userId },
+      select: { id: true },
     });
 
-    return paginatedResponse(
-      result.data,
-      result.meta,
-      "Reviews retrieved successfully"
-    );
-  } catch (error) {
-    if (error instanceof Error) {
-      return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
+    if (!mentorProfile) {
+      return NextResponse.json({ error: 'Profil mentor tidak ditemukan' }, { status: 404 });
     }
-    return errorResponse(
-      "Failed to get reviews",
-      HTTP_STATUS.INTERNAL_SERVER_ERROR
-    );
+
+    const [reviews, total] = await Promise.all([
+      prisma.review.findMany({
+        where: { course: { mentor_id: mentorProfile.id } },
+        skip,
+        take: limit,
+        orderBy: { created_at: 'desc' },
+        include: {
+          user: { select: { full_name: true, avatar_url: true } },
+          course: { select: { id: true, title: true } },
+        },
+      }),
+      prisma.review.count({ where: { course: { mentor_id: mentorProfile.id } } }),
+    ]);
+
+    return NextResponse.json({
+      reviews,
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    });
+  } catch (error) {
+    console.error('Get mentor reviews error:', error);
+    return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 });
   }
 }
-
-// Apply middlewares and export
-async function authenticatedHandler(
-  request: NextRequest
-): Promise<NextResponse> {
-  const authResult = await authMiddleware(request);
-  if (authResult instanceof NextResponse) {
-    return authResult;
-  }
-  return handler(request, authResult);
-}
-
-export const GET = errorHandler(
-  loggingMiddleware(corsMiddleware(authenticatedHandler))
-);

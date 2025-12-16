@@ -1,78 +1,122 @@
-import { NextRequest } from "next/server";
-import courseService from "@/services/course.service";
-import { successResponse, errorResponse } from "@/utils/response.util";
-import { errorHandler } from "@/middlewares/error.middleware";
-import { requireAuth } from "@/middlewares/auth.middleware";
-import { corsMiddleware } from "@/middlewares/cors.middleware";
-import { loggingMiddleware } from "@/middlewares/logging.middleware";
-import { HTTP_STATUS, USER_ROLES } from "@/lib/constants";
-import prisma from "@/lib/prisma";
+import { NextRequest, NextResponse } from 'next/server';
+import prisma from '@/lib/prisma';
+import { getAuthUser, hasRole } from '@/lib/auth';
+import { UserRole } from '@prisma/client';
 
-/**
- * GET /api/courses/:id/statistics
- * Get course statistics (mentor/admin only)
- */
-async function handler(
-  request: NextRequest,
-  context: { user: { userId: string; email: string; role: string } }
-) {
-  const { user } = context;
+interface RouteParams {
+  params: { id: string };
+}
 
+// GET /api/courses/[id]/statistics - Get course statistics
+export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
-    // Extract course ID from URL
-    const url = new URL(request.url);
-    const pathSegments = url.pathname.split("/");
-    const courseId = pathSegments[pathSegments.length - 2]; // Get ID from /api/courses/[id]/statistics
-
-    if (!courseId) {
-      return errorResponse("Course ID is required", HTTP_STATUS.BAD_REQUEST);
+    const authUser = getAuthUser(request);
+    if (!authUser) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Check course ownership
+    const { id } = params;
+
+    // Find course and check ownership
     const course = await prisma.course.findUnique({
-      where: { id: courseId },
-      include: {
-        mentor: {
-          select: {
-            user_id: true,
-          },
-        },
-      },
+      where: { id },
+      include: { mentor: { select: { user_id: true } } },
     });
 
     if (!course) {
-      return errorResponse("Course not found", HTTP_STATUS.NOT_FOUND);
+      return NextResponse.json(
+        { error: 'Kursus tidak ditemukan' },
+        { status: 404 }
+      );
     }
 
-    // Only mentor owner or admin can view statistics
-    if (
-      user.role !== USER_ROLES.ADMIN &&
-      course.mentor.user_id !== user.userId
-    ) {
-      return errorResponse("Insufficient permissions", HTTP_STATUS.FORBIDDEN);
+    const isMentor = course.mentor.user_id === authUser.userId;
+    const isAdmin = hasRole(authUser, [UserRole.ADMIN]);
+
+    if (!isMentor && !isAdmin) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    // Get statistics
-    const statistics = await courseService.getCourseStatistics(courseId);
+    // Get enrollment statistics
+    const enrollmentStats = await prisma.enrollment.groupBy({
+      by: ['status'],
+      where: { course_id: id },
+      _count: { id: true },
+    });
 
-    return successResponse(
-      statistics,
-      "Course statistics retrieved successfully"
-    );
+    // Get recent enrollments (last 30 days)
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const recentEnrollments = await prisma.enrollment.count({
+      where: {
+        course_id: id,
+        created_at: { gte: thirtyDaysAgo },
+      },
+    });
+
+    // Get review statistics
+    const reviewStats = await prisma.review.aggregate({
+      where: { course_id: id },
+      _avg: { rating: true },
+      _count: { id: true },
+    });
+
+    // Get rating distribution
+    const ratingDistribution = await prisma.review.groupBy({
+      by: ['rating'],
+      where: { course_id: id },
+      _count: { rating: true },
+    });
+
+    // Get revenue (from transactions)
+    const revenueStats = await prisma.transaction.aggregate({
+      where: {
+        course_id: id,
+        status: 'PAID',
+      },
+      _sum: { total_amount: true },
+      _count: { id: true },
+    });
+
+    // Get completion rate
+    const totalEnrollments = await prisma.enrollment.count({
+      where: { course_id: id },
+    });
+
+    const completedEnrollments = await prisma.enrollment.count({
+      where: { course_id: id, status: 'COMPLETED' },
+    });
+
+    const completionRate = totalEnrollments > 0
+      ? (completedEnrollments / totalEnrollments) * 100
+      : 0;
+
+    return NextResponse.json({
+      overview: {
+        total_students: course.total_students,
+        total_reviews: course.total_reviews,
+        average_rating: course.average_rating,
+        total_views: course.total_views,
+        completion_rate: completionRate.toFixed(1),
+      },
+      enrollments: {
+        by_status: enrollmentStats,
+        recent_30_days: recentEnrollments,
+      },
+      reviews: {
+        average: reviewStats._avg.rating || 0,
+        total: reviewStats._count.id,
+        distribution: ratingDistribution,
+      },
+      revenue: {
+        total: revenueStats._sum.total_amount || 0,
+        transactions: revenueStats._count.id,
+      },
+    });
   } catch (error) {
-    if (error instanceof Error) {
-      return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
-    }
-    return errorResponse(
-      "Failed to get statistics",
-      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    console.error('Get course statistics error:', error);
+    return NextResponse.json(
+      { error: 'Terjadi kesalahan server' },
+      { status: 500 }
     );
   }
 }
-
-// Gunakan requireAuth untuk wrap handler
-const authenticatedHandler = requireAuth(handler);
-
-export const GET = errorHandler(
-  loggingMiddleware(corsMiddleware(authenticatedHandler))
-);

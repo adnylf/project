@@ -1,63 +1,44 @@
-import { NextRequest, NextResponse } from "next/server";
-import enrollmentService from "@/services/enrollment.service";
-import { paginatedResponse, errorResponse } from "@/utils/response.util";
-import { validatePagination } from "@/utils/validation.util";
-import { errorHandler } from "@/middlewares/error.middleware";
-import { authMiddleware } from "@/middlewares/auth.middleware";
-import { corsMiddleware } from "@/middlewares/cors.middleware";
-import { loggingMiddleware } from "@/middlewares/logging.middleware";
-import { HTTP_STATUS } from "@/lib/constants";
-import type { EnrollmentStatus } from "@prisma/client";
+import { NextRequest, NextResponse } from 'next/server';
+import prisma from '@/lib/prisma';
+import { getAuthUser, hasRole, unauthorizedResponse, forbiddenResponse } from '@/lib/auth';
+import { UserRole } from '@prisma/client';
 
-/**
- * GET /api/enrollments
- * Get user's enrollments
- */
-async function handler(request: NextRequest, user: any) {
+// GET /api/enrollments - List enrollments (admin only)
+export async function GET(request: NextRequest) {
   try {
-    // Parse query parameters
+    const authUser = getAuthUser(request);
+    if (!authUser) return unauthorizedResponse();
+    if (!hasRole(authUser, [UserRole.ADMIN])) return forbiddenResponse();
+
     const { searchParams } = new URL(request.url);
-    const page = parseInt(searchParams.get("page") || "1");
-    const limit = parseInt(searchParams.get("limit") || "10");
-    const status = searchParams.get("status") as EnrollmentStatus | undefined;
+    const page = parseInt(searchParams.get('page') || '1');
+    const limit = parseInt(searchParams.get('limit') || '10');
+    const status = searchParams.get('status');
 
-    // Validate pagination
-    const validatedPagination = validatePagination(page, limit);
+    const skip = (page - 1) * limit;
+    const where: Record<string, unknown> = {};
+    if (status) where.status = status;
 
-    // Get enrollments
-    const result = await enrollmentService.getUserEnrollments(user.userId, {
-      page: validatedPagination.page,
-      limit: validatedPagination.limit,
-      status,
+    const [enrollments, total] = await Promise.all([
+      prisma.enrollment.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { created_at: 'desc' },
+        include: {
+          user: { select: { id: true, full_name: true, email: true } },
+          course: { select: { id: true, title: true } },
+        },
+      }),
+      prisma.enrollment.count({ where }),
+    ]);
+
+    return NextResponse.json({
+      enrollments,
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     });
-
-    return paginatedResponse(
-      result.data,
-      result.meta,
-      "Enrollments retrieved successfully"
-    );
   } catch (error) {
-    if (error instanceof Error) {
-      return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
-    }
-    return errorResponse(
-      "Failed to get enrollments",
-      HTTP_STATUS.INTERNAL_SERVER_ERROR
-    );
+    console.error('Get enrollments error:', error);
+    return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 });
   }
 }
-
-// Apply middlewares and export
-async function authenticatedHandler(
-  request: NextRequest
-): Promise<NextResponse> {
-  const authResult = await authMiddleware(request);
-  if (authResult instanceof NextResponse) {
-    return authResult;
-  }
-  return handler(request, authResult);
-}
-
-export const GET = errorHandler(
-  loggingMiddleware(corsMiddleware(authenticatedHandler))
-);

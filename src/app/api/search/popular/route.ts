@@ -1,41 +1,21 @@
-import { NextRequest, NextResponse } from "next/server";
-import searchService from "@/services/search.service";
-import { successResponse, errorResponse } from "@/utils/response.util";
-import { errorHandler } from "@/middlewares/error.middleware";
-import { corsMiddleware } from "@/middlewares/cors.middleware";
-import { loggingMiddleware } from "@/middlewares/logging.middleware";
-import { HTTP_STATUS } from "@/lib/constants";
+import { NextRequest, NextResponse } from 'next/server';
+import prisma from '@/lib/prisma';
 
-/**
- * GET /api/search/popular
- * Get popular search terms and trending courses
- */
-async function handler(request: NextRequest): Promise<NextResponse> {
+// GET /api/search/popular - Get popular searches
+export async function GET() {
   try {
-    const { searchParams } = new URL(request.url);
-    const limit = parseInt(searchParams.get("limit") || "10");
+    const popularCourses = await prisma.course.findMany({
+      where: { status: 'PUBLISHED' },
+      take: 8,
+      orderBy: [{ total_views: 'desc' }, { total_students: 'desc' }],
+      select: { id: true, title: true, slug: true, tags: true },
+    });
 
-    const [popularSearches, trendingCourses] = await Promise.all([
-      searchService.getPopularSearches(limit),
-      searchService.getTrendingCourses(limit),
-    ]);
+    const popularTags = popularCourses.flatMap(c => c.tags).filter((tag, i, arr) => arr.indexOf(tag) === i).slice(0, 10);
 
-    return successResponse(
-      {
-        popularSearches,
-        trendingCourses,
-      },
-      "Popular searches retrieved successfully"
-    );
+    return NextResponse.json({ popular_courses: popularCourses, popular_tags: popularTags });
   } catch (error) {
-    if (error instanceof Error) {
-      return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
-    }
-    return errorResponse(
-      "Failed to get popular searches",
-      HTTP_STATUS.INTERNAL_SERVER_ERROR
-    );
+    console.error('Get popular searches error:', error);
+    return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 });
   }
 }
-
-export const GET = errorHandler(loggingMiddleware(corsMiddleware(handler)));

@@ -1,57 +1,60 @@
-import { NextRequest } from "next/server";
-import courseService from "@/services/course.service";
-import { successResponse, errorResponse } from "@/utils/response.util";
-import { errorHandler } from "@/middlewares/error.middleware";
-import { requireAuth } from "@/middlewares/auth.middleware";
-import { corsMiddleware } from "@/middlewares/cors.middleware";
-import { loggingMiddleware } from "@/middlewares/logging.middleware";
-import { HTTP_STATUS } from "@/lib/constants";
+import { NextRequest, NextResponse } from 'next/server';
+import prisma from '@/lib/prisma';
+import { getAuthUser, hasRole } from '@/lib/auth';
+import { CourseStatus, UserRole } from '@prisma/client';
 
-async function handler(
-  request: NextRequest,
-  context: { user: { userId: string; email: string; role: string } }
-) {
+interface RouteParams {
+  params: { id: string };
+}
+
+// POST /api/courses/[id]/archive - Archive a course
+export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
-    const { user } = context;
-
-    // Extract course ID from URL
-    const url = new URL(request.url);
-    const pathSegments = url.pathname.split("/");
-    const id = pathSegments[pathSegments.length - 2]; // Get ID from /api/courses/[id]/archive
-
-    if (!id) {
-      return errorResponse("Course ID is required", HTTP_STATUS.BAD_REQUEST);
+    const authUser = getAuthUser(request);
+    if (!authUser) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Archive course menggunakan service
-    const result = await courseService.archiveCourse(
-      id,
-      user.userId,
-      user.role
-    );
+    const { id } = params;
 
-    return successResponse(
-      {
-        id: result.id,
-        title: result.title,
-        status: result.status,
+    // Find course and check ownership
+    const course = await prisma.course.findUnique({
+      where: { id },
+      include: { mentor: { select: { user_id: true } } },
+    });
+
+    if (!course) {
+      return NextResponse.json(
+        { error: 'Kursus tidak ditemukan' },
+        { status: 404 }
+      );
+    }
+
+    const isMentor = course.mentor.user_id === authUser.userId;
+    const isAdmin = hasRole(authUser, [UserRole.ADMIN]);
+
+    if (!isMentor && !isAdmin) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    // Archive course
+    const updatedCourse = await prisma.course.update({
+      where: { id },
+      data: {
+        status: CourseStatus.ARCHIVED,
       },
-      "Course archived successfully"
-    );
+    });
+
+
+    return NextResponse.json({
+      message: 'Kursus berhasil diarsipkan',
+      course: updatedCourse,
+    });
   } catch (error) {
-    if (error instanceof Error) {
-      return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
-    }
-    return errorResponse(
-      "Failed to archive course",
-      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    console.error('Archive course error:', error);
+    return NextResponse.json(
+      { error: 'Terjadi kesalahan server' },
+      { status: 500 }
     );
   }
 }
-
-// Gunakan requireAuth untuk wrap handler
-const authenticatedHandler = requireAuth(handler);
-
-export const POST = errorHandler(
-  loggingMiddleware(corsMiddleware(authenticatedHandler))
-);

@@ -1,60 +1,94 @@
-import { NextRequest } from "next/server";
-import { verifyEmailSchema } from "@/lib/validation";
-import authService from "@/services/auth.service";
-import {
-  successResponse,
-  validationErrorResponse,
-  errorResponse,
-} from "@/utils/response.util";
-import { validateData } from "@/utils/validation.util";
-import { errorHandler } from "@/middlewares/error.middleware";
-import { corsMiddleware } from "@/middlewares/cors.middleware";
-import { loggingMiddleware } from "@/middlewares/logging.middleware";
-import { HTTP_STATUS } from "@/lib/constants";
+import { NextRequest, NextResponse } from 'next/server';
+import prisma from '@/lib/prisma';
+import { verifyEmailSchema } from '@/lib/validation';
 
-async function handler(request: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
-    // Parse request body
-    let body;
-    try {
-      body = await request.json();
-    } catch {
-      return errorResponse(
-        "Invalid JSON in request body",
-        HTTP_STATUS.BAD_REQUEST
-      );
-    }
-
+    const body = await request.json();
+    
     // Validate input
-    const validation = await validateData(verifyEmailSchema, body);
-    if (!validation.success) {
-      return validationErrorResponse(validation.errors);
-    }
-
-    // Check token format
-    if (!validation.data.token || validation.data.token.length < 16) {
-      return errorResponse(
-        "Invalid verification token format",
-        HTTP_STATUS.BAD_REQUEST
+    const result = verifyEmailSchema.safeParse(body);
+    if (!result.success) {
+      return NextResponse.json(
+        { error: 'Validasi gagal', details: result.error.flatten().fieldErrors },
+        { status: 400 }
       );
     }
 
-    // Verify email
-    await authService.verifyEmail(validation.data.token);
+    const { token } = result.data;
 
-    return successResponse(
-      null,
-      "Email verified successfully. You can now access all features."
-    );
-  } catch (error) {
-    if (error instanceof Error) {
-      return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
+    // Find token
+    const verificationToken = await prisma.verificationToken.findUnique({
+      where: { token },
+      include: { user: true },
+    });
+
+    if (!verificationToken) {
+      return NextResponse.json(
+        { error: 'Token tidak valid' },
+        { status: 400 }
+      );
     }
-    return errorResponse(
-      "Failed to verify email",
-      HTTP_STATUS.INTERNAL_SERVER_ERROR
+
+    // Check if token is expired
+    if (verificationToken.expires_at < new Date()) {
+      return NextResponse.json(
+        { error: 'Token sudah kadaluarsa' },
+        { status: 400 }
+      );
+    }
+
+    // Check if token is already used
+    if (verificationToken.used_at) {
+      return NextResponse.json(
+        { error: 'Token sudah digunakan' },
+        { status: 400 }
+      );
+    }
+
+    // Check token type
+    if (verificationToken.type !== 'EMAIL_VERIFICATION') {
+      return NextResponse.json(
+        { error: 'Token tidak valid' },
+        { status: 400 }
+      );
+    }
+
+    // Update user and mark token as used
+    await prisma.$transaction([
+      prisma.user.update({
+        where: { id: verificationToken.user_id },
+        data: {
+          email_verified: true,
+          email_verified_at: new Date(),
+        },
+      }),
+      prisma.verificationToken.update({
+        where: { id: verificationToken.id },
+        data: { used_at: new Date() },
+      }),
+    ]);
+
+    // Log activity
+    await prisma.activityLog.create({
+      data: {
+        user_id: verificationToken.user_id,
+        action: 'VERIFY_EMAIL',
+        entity_type: 'user',
+        entity_id: verificationToken.user_id,
+        ip_address: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || null,
+        user_agent: request.headers.get('user-agent') || null,
+      },
+    });
+
+    return NextResponse.json({
+      message: 'Email berhasil diverifikasi',
+    });
+  } catch (error) {
+    console.error('Verify email error:', error);
+    return NextResponse.json(
+      { error: 'Terjadi kesalahan server' },
+      { status: 500 }
     );
   }
 }
-
-export const POST = errorHandler(loggingMiddleware(corsMiddleware(handler)));

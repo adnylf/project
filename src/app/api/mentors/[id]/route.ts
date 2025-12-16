@@ -1,35 +1,49 @@
-import { NextRequest } from 'next/server';
-import mentorService from '@/services/mentor.service';
-import { successResponse, errorResponse } from '@/utils/response.util';
-import { errorHandler } from '@/middlewares/error.middleware';
-import { corsMiddleware } from '@/middlewares/cors.middleware';
-import { loggingMiddleware } from '@/middlewares/logging.middleware';
-import { HTTP_STATUS } from '@/lib/constants';
+import { NextRequest, NextResponse } from 'next/server';
+import prisma from '@/lib/prisma';
 
-/**
- * GET /api/mentors/:id
- * Get mentor details by ID
- */
-async function handler(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  try {
-    const { id } = await params;
-
-    // Get mentor details
-    const mentor = await mentorService.getMentorById(id);
-
-    return successResponse(mentor, 'Mentor retrieved successfully');
-  } catch (error) {
-    if (error instanceof Error) {
-      return errorResponse(error.message, HTTP_STATUS.NOT_FOUND);
-    }
-    return errorResponse('Failed to get mentor', HTTP_STATUS.INTERNAL_SERVER_ERROR);
-  }
+interface RouteParams {
+  params: { id: string };
 }
 
-// Properly typed export
-export const GET = (request: NextRequest, context: { params: Promise<{ id: string }> }) =>
-  errorHandler((req: NextRequest) =>
-    loggingMiddleware((req2: NextRequest) =>
-      corsMiddleware((req3: NextRequest) => handler(req3, context))(req2)
-    )(req)
-  )(request);
+// GET /api/mentors/[id] - Get mentor by ID
+export async function GET(request: NextRequest, { params }: RouteParams) {
+  try {
+    const { id } = params;
+
+    const mentor = await prisma.mentorProfile.findFirst({
+      where: {
+        OR: [{ id }, { user_id: id }],
+        status: 'APPROVED',
+      },
+      include: {
+        user: {
+          select: { id: true, full_name: true, avatar_url: true, bio: true },
+        },
+        courses: {
+          where: { status: 'PUBLISHED' },
+          take: 6,
+          orderBy: { total_students: 'desc' },
+          select: {
+            id: true,
+            title: true,
+            slug: true,
+            thumbnail: true,
+            price: true,
+            discount_price: true,
+            average_rating: true,
+            total_students: true,
+          },
+        },
+      },
+    });
+
+    if (!mentor) {
+      return NextResponse.json({ error: 'Mentor tidak ditemukan' }, { status: 404 });
+    }
+
+    return NextResponse.json({ mentor });
+  } catch (error) {
+    console.error('Get mentor error:', error);
+    return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 });
+  }
+}

@@ -1,123 +1,180 @@
+// Validation Middleware
 import { NextRequest, NextResponse } from 'next/server';
-import { ZodSchema } from 'zod';
-import { validateData } from '@/utils/validation.util';
-import { validationErrorResponse } from '@/utils/response.util';
+import { ZodSchema, ZodError } from 'zod';
+import { HTTP_STATUS, ERROR_MESSAGES } from '@/lib/constants';
 
-/**
- * Validation Middleware
- * Validates request body against Zod schema
- */
-export function validateBody(
-  schema: ZodSchema
-): (
-  handler: (request: NextRequest) => Promise<NextResponse>
-) => (request: NextRequest) => Promise<NextResponse> {
-  return (handler) => {
-    return async (request: NextRequest) => {
-      try {
-        // Parse request body
-        const body = await request.json();
-
-        // Validate against schema
-        const validation = await validateData(schema, body);
-
-        if (!validation.success) {
-          return validationErrorResponse(validation.errors);
-        }
-
-        // Attach validated data to request headers as JSON string
-        const requestHeaders = new Headers(request.headers);
-        requestHeaders.set('x-validated-body', JSON.stringify(validation.data));
-
-        // Create new request with validated data
-        const newRequest = new NextRequest(request.url, {
-          method: request.method,
-          headers: requestHeaders,
-          body: JSON.stringify(validation.data),
-        });
-
-        return handler(newRequest);
-      } catch {
-        return validationErrorResponse(
-          { body: ['Invalid JSON body'] },
-          'Request body validation failed'
-        );
-      }
-    };
-  };
+interface ValidationResult<T> {
+  success: boolean;
+  data?: T;
+  error?: NextResponse;
 }
 
-/**
- * Get validated body from request
- */
-export function getValidatedBody<T = Record<string, unknown>>(request: NextRequest): T | null {
-  const validatedBody = request.headers.get('x-validated-body');
-
-  if (!validatedBody) {
-    return null;
-  }
-
+// Validate request body
+export async function validateBody<T>(
+  request: NextRequest,
+  schema: ZodSchema<T>
+): Promise<ValidationResult<T>> {
   try {
-    return JSON.parse(validatedBody) as T;
-  } catch {
-    return null;
+    const body = await request.json();
+    const data = schema.parse(body);
+    
+    return { success: true, data };
+  } catch (error) {
+    if (error instanceof ZodError) {
+      const fieldErrors = error.flatten().fieldErrors;
+      return {
+        success: false,
+        error: NextResponse.json(
+          {
+            error: ERROR_MESSAGES.VALIDATION_ERROR,
+            details: fieldErrors,
+          },
+          { status: HTTP_STATUS.BAD_REQUEST }
+        ),
+      };
+    }
+    
+    if (error instanceof SyntaxError) {
+      return {
+        success: false,
+        error: NextResponse.json(
+          { error: 'Format JSON tidak valid' },
+          { status: HTTP_STATUS.BAD_REQUEST }
+        ),
+      };
+    }
+    
+    throw error;
   }
 }
 
-/**
- * Validate query parameters
- */
-export function validateQuery(
-  schema: ZodSchema
-): (
-  handler: (request: NextRequest) => Promise<NextResponse>
-) => (request: NextRequest) => Promise<NextResponse> {
-  return (handler) => {
-    return async (request: NextRequest) => {
-      try {
-        // Parse query parameters
-        const { searchParams } = new URL(request.url);
-        const queryObject: Record<string, string> = {};
-
-        searchParams.forEach((value, key) => {
-          queryObject[key] = value;
-        });
-
-        // Validate against schema
-        const validation = await validateData(schema, queryObject);
-
-        if (!validation.success) {
-          return validationErrorResponse(validation.errors);
-        }
-
-        // Attach validated query to request headers
-        const requestHeaders = new Headers(request.headers);
-        requestHeaders.set('x-validated-query', JSON.stringify(validation.data));
-
-        return handler(request);
-      } catch {
-        return validationErrorResponse(
-          { query: ['Invalid query parameters'] },
-          'Query validation failed'
-        );
-      }
-    };
-  };
-}
-
-/**
- * Get validated query from request
- */
-export function getValidatedQuery<T = Record<string, unknown>>(request: NextRequest): T | null {
-  const validatedQuery = request.headers.get('x-validated-query');
-
-  if (!validatedQuery) {
-    return null;
-  }
-
+// Validate query parameters
+export function validateQuery<T>(
+  request: NextRequest,
+  schema: ZodSchema<T>
+): ValidationResult<T> {
   try {
-    return JSON.parse(validatedQuery) as T;
-  } catch {
-    return null;
+    const { searchParams } = new URL(request.url);
+    const params: Record<string, string | string[]> = {};
+    
+    searchParams.forEach((value, key) => {
+      if (params[key]) {
+        if (Array.isArray(params[key])) {
+          (params[key] as string[]).push(value);
+        } else {
+          params[key] = [params[key] as string, value];
+        }
+      } else {
+        params[key] = value;
+      }
+    });
+    
+    const data = schema.parse(params);
+    return { success: true, data };
+  } catch (error) {
+    if (error instanceof ZodError) {
+      const fieldErrors = error.flatten().fieldErrors;
+      return {
+        success: false,
+        error: NextResponse.json(
+          {
+            error: ERROR_MESSAGES.VALIDATION_ERROR,
+            details: fieldErrors,
+          },
+          { status: HTTP_STATUS.BAD_REQUEST }
+        ),
+      };
+    }
+    throw error;
   }
+}
+
+// Validate path parameters
+export function validateParams<T>(
+  params: Record<string, string>,
+  schema: ZodSchema<T>
+): ValidationResult<T> {
+  try {
+    const data = schema.parse(params);
+    return { success: true, data };
+  } catch (error) {
+    if (error instanceof ZodError) {
+      const fieldErrors = error.flatten().fieldErrors;
+      return {
+        success: false,
+        error: NextResponse.json(
+          {
+            error: ERROR_MESSAGES.VALIDATION_ERROR,
+            details: fieldErrors,
+          },
+          { status: HTTP_STATUS.BAD_REQUEST }
+        ),
+      };
+    }
+    throw error;
+  }
+}
+
+// Validate file upload
+export function validateFile(
+  file: File | null,
+  options: {
+    required?: boolean;
+    maxSize?: number;
+    allowedTypes?: string[];
+  }
+): ValidationResult<File> {
+  const { required = true, maxSize, allowedTypes } = options;
+  
+  if (!file) {
+    if (required) {
+      return {
+        success: false,
+        error: NextResponse.json(
+          { error: 'File wajib diisi' },
+          { status: HTTP_STATUS.BAD_REQUEST }
+        ),
+      };
+    }
+    return { success: true };
+  }
+  
+  if (maxSize && file.size > maxSize) {
+    const maxSizeMB = (maxSize / (1024 * 1024)).toFixed(0);
+    return {
+      success: false,
+      error: NextResponse.json(
+        { error: `Ukuran file maksimal ${maxSizeMB}MB` },
+        { status: HTTP_STATUS.BAD_REQUEST }
+      ),
+    };
+  }
+  
+  if (allowedTypes && !allowedTypes.includes(file.type)) {
+    return {
+      success: false,
+      error: NextResponse.json(
+        { error: `Format file tidak didukung. Gunakan: ${allowedTypes.join(', ')}` },
+        { status: HTTP_STATUS.BAD_REQUEST }
+      ),
+    };
+  }
+  
+  return { success: true, data: file };
+}
+
+// Create validation middleware for body
+export function withBodyValidation<T>(schema: ZodSchema<T>) {
+  return async (
+    request: NextRequest,
+    handler: (data: T) => Promise<NextResponse>
+  ): Promise<NextResponse> => {
+    const result = await validateBody(request, schema);
+    
+    if (!result.success) {
+      return result.error!;
+    }
+    
+    return handler(result.data!);
+  };
 }

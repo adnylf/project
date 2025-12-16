@@ -1,151 +1,128 @@
-import winston from "winston";
-import path from "path";
-import fs from "fs";
+// Logger utilities
 
-// Ensure log directory exists
-const logDir = process.env.LOG_FILE_PATH || "./logs";
-if (!fs.existsSync(logDir)) {
-  fs.mkdirSync(logDir, { recursive: true });
+type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+
+interface LogEntry {
+  level: LogLevel;
+  message: string;
+  timestamp: string;
+  data?: unknown;
+  context?: string;
 }
 
-// Define log levels
-const levels = {
-  error: 0,
-  warn: 1,
-  info: 2,
-  http: 3,
-  debug: 4,
+// Log levels priority
+const LOG_LEVELS: Record<LogLevel, number> = {
+  debug: 0,
+  info: 1,
+  warn: 2,
+  error: 3,
 };
 
-// Define log format
-const format = winston.format.combine(
-  winston.format.timestamp({ format: "YYYY-MM-DD HH:mm:ss" }),
-  winston.format.errors({ stack: true }),
-  winston.format.printf(({ timestamp, level, message, stack, ...meta }) => {
-    let log = `${timestamp} [${level.toUpperCase()}]: ${message}`;
+// Current log level from environment
+const currentLevel: LogLevel = (process.env.LOG_LEVEL as LogLevel) || 'info';
 
-    if (stack) {
-      log += `\n${stack}`;
-    }
+// Check if should log
+function shouldLog(level: LogLevel): boolean {
+  return LOG_LEVELS[level] >= LOG_LEVELS[currentLevel];
+}
 
-    if (Object.keys(meta).length > 0) {
-      log += `\n${JSON.stringify(meta, null, 2)}`;
-    }
-
-    return log;
-  })
-);
-
-// Define transports
-const transports = [
-  // Console transport
-  new winston.transports.Console({
-    format: winston.format.combine(
-      winston.format.colorize(),
-      winston.format.simple()
-    ),
-  }),
-
-  // Error log file
-  new winston.transports.File({
-    filename: path.join(logDir, "error.log"),
-    level: "error",
-    format,
-  }),
-
-  // Combined log file
-  new winston.transports.File({
-    filename: path.join(logDir, "combined.log"),
-    format,
-  }),
-];
+// Format log entry
+function formatLog(entry: LogEntry): string {
+  const parts = [
+    `[${entry.timestamp}]`,
+    `[${entry.level.toUpperCase()}]`,
+    entry.context ? `[${entry.context}]` : '',
+    entry.message,
+  ].filter(Boolean);
+  
+  return parts.join(' ');
+}
 
 // Create logger instance
-const logger = winston.createLogger({
-  level: process.env.LOG_LEVEL || "info",
-  levels,
-  format,
-  transports,
-  exceptionHandlers: [
-    new winston.transports.File({
-      filename: path.join(logDir, "exceptions.log"),
-    }),
-  ],
-  rejectionHandlers: [
-    new winston.transports.File({
-      filename: path.join(logDir, "rejections.log"),
-    }),
-  ],
-});
+export function createLogger(context?: string) {
+  const log = (level: LogLevel, message: string, data?: unknown) => {
+    if (!shouldLog(level)) return;
+    
+    const entry: LogEntry = {
+      level,
+      message,
+      timestamp: new Date().toISOString(),
+      data,
+      context,
+    };
+    
+    const formattedMessage = formatLog(entry);
+    
+    switch (level) {
+      case 'debug':
+        console.debug(formattedMessage, data ?? '');
+        break;
+      case 'info':
+        console.info(formattedMessage, data ?? '');
+        break;
+      case 'warn':
+        console.warn(formattedMessage, data ?? '');
+        break;
+      case 'error':
+        console.error(formattedMessage, data ?? '');
+        break;
+    }
+  };
+  
+  return {
+    debug: (message: string, data?: unknown) => log('debug', message, data),
+    info: (message: string, data?: unknown) => log('info', message, data),
+    warn: (message: string, data?: unknown) => log('warn', message, data),
+    error: (message: string, data?: unknown) => log('error', message, data),
+  };
+}
 
-// Export logger methods
-export default logger;
+// Default logger
+export const logger = createLogger();
 
-/**
- * Log error dengan stack trace
- */
-export function logError(message: string, error?: unknown): void {
-  if (error instanceof Error) {
-    logger.error(message, {
-      error: error.message,
-      stack: error.stack,
-    });
-  } else {
-    logger.error(message, { error });
+// Log request
+export function logRequest(method: string, path: string, statusCode?: number, duration?: number) {
+  const parts = [method, path, statusCode, duration ? `${duration}ms` : ''].filter(Boolean);
+  logger.info(parts.join(' '));
+}
+
+// Log error
+export function logError(error: Error, context?: string) {
+  const errorLogger = createLogger(context);
+  errorLogger.error(error.message, { stack: error.stack });
+}
+
+// Log database query (for development)
+export function logQuery(query: string, params?: unknown[]) {
+  if (process.env.NODE_ENV === 'development') {
+    const dbLogger = createLogger('DB');
+    dbLogger.debug(query, params);
   }
 }
 
-/**
- * Log warning
- */
-export function logWarn(message: string, meta?: unknown): void {
-  logger.warn(message, meta);
+// Log API call
+export function logApiCall(service: string, method: string, url: string, status?: number) {
+  const apiLogger = createLogger('API');
+  apiLogger.info(`${service}: ${method} ${url} ${status ?? ''}`);
 }
 
-/**
- * Log info
- */
-export function logInfo(message: string, meta?: unknown): void {
-  logger.info(message, meta);
+// Log authentication events
+export function logAuth(event: string, userId?: string, success: boolean = true) {
+  const authLogger = createLogger('AUTH');
+  const level = success ? 'info' : 'warn';
+  authLogger[level](`${event} ${userId ?? 'unknown'}`);
 }
 
-/**
- * Log debug
- */
-export function logDebug(message: string, meta?: unknown): void {
-  logger.debug(message, meta);
-}
-
-/**
- * Log HTTP request
- */
-export function logHttp(message: string, meta?: unknown): void {
-  logger.http(message, meta);
-}
-
-/**
- * Log database query
- */
-export function logQuery(query: string, duration?: number): void {
-  logger.debug(`DB Query: ${query}${duration ? ` (${duration}ms)` : ""}`);
-}
-
-/**
- * Log API request
- */
-export function logApiRequest(
-  method: string,
-  url: string,
-  statusCode: number,
-  duration: number
-): void {
-  const message = `${method} ${url} ${statusCode} - ${duration}ms`;
-
-  if (statusCode >= 500) {
-    logger.error(message);
-  } else if (statusCode >= 400) {
-    logger.warn(message);
-  } else {
-    logger.http(message);
-  }
+// Performance logger
+export function createPerfLogger(label: string) {
+  const start = performance.now();
+  
+  return {
+    end: () => {
+      const duration = performance.now() - start;
+      const perfLogger = createLogger('PERF');
+      perfLogger.debug(`${label}: ${duration.toFixed(2)}ms`);
+      return duration;
+    },
+  };
 }

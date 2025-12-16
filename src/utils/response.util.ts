@@ -1,165 +1,118 @@
+// Response utilities
 import { NextResponse } from 'next/server';
 import { HTTP_STATUS } from '@/lib/constants';
 
-// Standard API Response Interface
-export interface ApiResponse<T = unknown> {
-  success: boolean;
-  message: string;
-  data?: T;
-  error?: string;
-  errors?: Record<string, string[]>;
-  meta?: {
-    page?: number;
-    limit?: number;
-    total?: number;
-    totalPages?: number;
-  };
-  timestamp: string;
+// Success response
+export function successResponse<T>(data: T, status: number = HTTP_STATUS.OK): NextResponse {
+  return NextResponse.json(data, { status });
 }
 
-/**
- * Success Response
- */
-export function successResponse<T>(
-  data: T,
-  message: string = 'Success',
-  statusCode: number = HTTP_STATUS.OK
-): NextResponse<ApiResponse<T>> {
-  return NextResponse.json(
-    {
-      success: true,
-      message,
-      data,
-      timestamp: new Date().toISOString(),
-    },
-    { status: statusCode }
-  );
+// Created response
+export function createdResponse<T>(data: T): NextResponse {
+  return NextResponse.json(data, { status: HTTP_STATUS.CREATED });
 }
 
-/**
- * Success Response with Pagination
- */
-export function paginatedResponse<T>(
-  data: T[],
-  meta: {
-    page: number;
-    limit: number;
-    total: number;
-  },
-  message: string = 'Success'
-): NextResponse<ApiResponse<T[]>> {
-  const totalPages = Math.ceil(meta.total / meta.limit);
-
-  return NextResponse.json(
-    {
-      success: true,
-      message,
-      data,
-      meta: {
-        ...meta,
-        totalPages,
-      },
-      timestamp: new Date().toISOString(),
-    },
-    { status: HTTP_STATUS.OK }
-  );
-}
-
-/**
- * Created Response (201)
- */
-export function createdResponse<T>(
-  data: T,
-  message: string = 'Created successfully'
-): NextResponse<ApiResponse<T>> {
-  return successResponse(data, message, HTTP_STATUS.CREATED);
-}
-
-/**
- * No Content Response (204)
- */
+// No content response
 export function noContentResponse(): NextResponse {
   return new NextResponse(null, { status: HTTP_STATUS.NO_CONTENT });
 }
 
-/**
- * Error Response
- */
-export function errorResponse(
-  message: string,
-  statusCode: number = HTTP_STATUS.BAD_REQUEST,
-  error?: string
-): NextResponse {
-  return NextResponse.json(
-    {
-      success: false,
-      message,
-      error,
-      timestamp: new Date().toISOString(),
-    },
-    { status: statusCode }
-  );
+// Error response
+export function errorResponse(message: string, status: number = HTTP_STATUS.BAD_REQUEST): NextResponse {
+  return NextResponse.json({ error: message }, { status });
 }
 
-/**
- * Validation Error Response (422)
- */
+// Validation error response
 export function validationErrorResponse(
-  errors: Record<string, string[]>,
-  message: string = 'Validation failed'
+  message: string,
+  details?: Record<string, string[]>
 ): NextResponse {
   return NextResponse.json(
-    {
-      success: false,
-      message,
-      errors,
-      timestamp: new Date().toISOString(),
-    },
-    { status: HTTP_STATUS.UNPROCESSABLE_ENTITY }
+    { error: message, details },
+    { status: HTTP_STATUS.BAD_REQUEST }
   );
 }
 
-/**
- * Unauthorized Response (401)
- */
+// Not found response
+export function notFoundResponse(message: string = 'Resource tidak ditemukan'): NextResponse {
+  return NextResponse.json({ error: message }, { status: HTTP_STATUS.NOT_FOUND });
+}
+
+// Unauthorized response
 export function unauthorizedResponse(message: string = 'Unauthorized'): NextResponse {
-  return errorResponse(message, HTTP_STATUS.UNAUTHORIZED);
+  return NextResponse.json({ error: message }, { status: HTTP_STATUS.UNAUTHORIZED });
 }
 
-/**
- * Forbidden Response (403)
- */
+// Forbidden response
 export function forbiddenResponse(message: string = 'Forbidden'): NextResponse {
-  return errorResponse(message, HTTP_STATUS.FORBIDDEN);
+  return NextResponse.json({ error: message }, { status: HTTP_STATUS.FORBIDDEN });
 }
 
-/**
- * Not Found Response (404)
- */
-export function notFoundResponse(message: string = 'Not found'): NextResponse {
-  return errorResponse(message, HTTP_STATUS.NOT_FOUND);
+// Conflict response
+export function conflictResponse(message: string): NextResponse {
+  return NextResponse.json({ error: message }, { status: HTTP_STATUS.CONFLICT });
 }
 
-/**
- * Conflict Response (409)
- */
-export function conflictResponse(message: string = 'Conflict'): NextResponse {
-  return errorResponse(message, HTTP_STATUS.CONFLICT);
+// Server error response
+export function serverErrorResponse(message: string = 'Terjadi kesalahan server'): NextResponse {
+  return NextResponse.json({ error: message }, { status: HTTP_STATUS.INTERNAL_SERVER_ERROR });
 }
 
-/**
- * Internal Server Error Response (500)
- */
-export function internalErrorResponse(
-  message: string = 'Internal server error',
-  error?: string
+// Paginated response
+export function paginatedResponse<T>(
+  data: T[],
+  total: number,
+  page: number,
+  limit: number
 ): NextResponse {
-  return errorResponse(message, HTTP_STATUS.INTERNAL_SERVER_ERROR, error);
+  const totalPages = Math.ceil(total / limit);
+  
+  return NextResponse.json({
+    data,
+    meta: {
+      total,
+      page,
+      limit,
+      totalPages,
+      hasMore: page < totalPages,
+    },
+  });
 }
 
-/**
- * Rate Limit Response (429)
- */
-export function rateLimitResponse(message: string = 'Too many requests'): NextResponse {
-  return errorResponse(message, HTTP_STATUS.TOO_MANY_REQUESTS);
+// List response
+export function listResponse<T>(items: T[], total?: number): NextResponse {
+  return NextResponse.json({
+    items,
+    total: total ?? items.length,
+  });
+}
+
+// Message response
+export function messageResponse(message: string, data?: Record<string, unknown>): NextResponse {
+  return NextResponse.json({ message, ...data });
+}
+
+// Redirect response
+export function redirectResponse(url: string, permanent: boolean = false): NextResponse {
+  const status = permanent ? 308 : 307;
+  return NextResponse.redirect(url, status);
+}
+
+// JSON with custom headers
+export function jsonWithHeaders<T>(
+  data: T,
+  headers: Record<string, string>,
+  status: number = HTTP_STATUS.OK
+): NextResponse {
+  return NextResponse.json(data, { status, headers });
+}
+
+// Stream response
+export function streamResponse(
+  stream: ReadableStream,
+  contentType: string = 'application/octet-stream'
+): NextResponse {
+  return new NextResponse(stream, {
+    headers: { 'Content-Type': contentType },
+  });
 }

@@ -1,128 +1,122 @@
-import { NextRequest, NextResponse } from "next/server";
-import transactionService from "@/services/transaction.service";
-import { authMiddleware } from "@/middlewares/auth.middleware";
-import { errorHandler } from "@/middlewares/error.middleware";
-import { corsMiddleware } from "@/middlewares/cors.middleware";
-import { loggingMiddleware } from "@/middlewares/logging.middleware";
-import { HTTP_STATUS } from "@/lib/constants";
+import { NextRequest, NextResponse } from 'next/server';
+import prisma from '@/lib/prisma';
+import { getAuthUser, hasRole, unauthorizedResponse, forbiddenResponse } from '@/lib/auth';
+import { createTransactionSchema } from '@/lib/validation';
+import { UserRole, TransactionStatus, PaymentMethod } from '@prisma/client';
 
-/**
- * GET /api/transactions
- * Get user transactions with pagination and filtering
- */
-async function getHandler(request: NextRequest, user: any) {
+// GET /api/transactions - List transactions
+export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url);
-    const status = searchParams.get("status") || undefined;
-    const page = parseInt(searchParams.get("page") || "1");
-    const limit = parseInt(searchParams.get("limit") || "10");
+    const authUser = getAuthUser(request);
+    if (!authUser) return unauthorizedResponse();
 
-    const result = await transactionService.getUserTransactions(user.userId, {
-      status,
-      page,
-      limit,
-    });
+    const isAdmin = hasRole(authUser, [UserRole.ADMIN]);
+    const { searchParams } = new URL(request.url);
+    const page = parseInt(searchParams.get('page') || '1');
+    const limit = parseInt(searchParams.get('limit') || '10');
+    const status = searchParams.get('status');
+
+    const skip = (page - 1) * limit;
+    const where: Record<string, unknown> = isAdmin ? {} : { user_id: authUser.userId };
+    if (status) where.status = status;
+
+    const [transactions, total] = await Promise.all([
+      prisma.transaction.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { created_at: 'desc' },
+        include: {
+          user: { select: { id: true, full_name: true, email: true } },
+          course: { select: { id: true, title: true, thumbnail: true } },
+        },
+      }),
+      prisma.transaction.count({ where }),
+    ]);
 
     return NextResponse.json({
-      success: true,
-      data: result.transactions,
-      pagination: {
-        total: result.total,
-        page: result.page,
-        limit: limit, // Menggunakan limit dari parameter, bukan dari result
-        totalPages: result.totalPages,
-      },
+      transactions,
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     });
   } catch (error) {
-    console.error("GET transactions error:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch transactions" },
-      { status: HTTP_STATUS.INTERNAL_SERVER_ERROR }
-    );
+    console.error('Get transactions error:', error);
+    return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 });
   }
 }
 
-/**
- * POST /api/transactions
- * Create new transaction
- */
-async function postHandler(request: NextRequest, user: any) {
+// POST /api/transactions - Create transaction
+export async function POST(request: NextRequest) {
   try {
+    const authUser = getAuthUser(request);
+    if (!authUser) return unauthorizedResponse();
+
     const body = await request.json();
-    const { courseId, paymentMethod } = body;
-
-    if (!courseId || !paymentMethod) {
-      return NextResponse.json(
-        { error: "Course ID and payment method are required" },
-        { status: HTTP_STATUS.BAD_REQUEST }
-      );
+    const result = createTransactionSchema.safeParse(body);
+    if (!result.success) {
+      return NextResponse.json({ error: 'Validasi gagal', details: result.error.flatten().fieldErrors }, { status: 400 });
     }
 
-    const validPaymentMethods = [
-      "CREDIT_CARD",
-      "BANK_TRANSFER",
-      "E_WALLET",
-      "VIRTUAL_ACCOUNT",
-    ];
-    if (!validPaymentMethods.includes(paymentMethod)) {
-      return NextResponse.json(
-        { error: "Invalid payment method" },
-        { status: HTTP_STATUS.BAD_REQUEST }
-      );
+    const { course_id, payment_method } = result.data;
+
+    const course = await prisma.course.findUnique({
+      where: { id: course_id },
+    });
+
+    if (!course) {
+      return NextResponse.json({ error: 'Kursus tidak ditemukan' }, { status: 404 });
     }
 
-    const transactionData = {
-      courseId,
-      paymentMethod,
-      userId: user.userId,
-    };
+    if (course.status !== 'PUBLISHED') {
+      return NextResponse.json({ error: 'Kursus tidak tersedia' }, { status: 400 });
+    }
 
-    const transaction = await transactionService.createTransaction(
-      transactionData
-    );
-
-    return NextResponse.json(
-      {
-        success: true,
-        data: transaction,
-        message: "Transaction created successfully",
+    // Check existing enrollment
+    const enrollment = await prisma.enrollment.findUnique({
+      where: {
+        user_id_course_id: { user_id: authUser.userId, course_id },
       },
-      { status: HTTP_STATUS.CREATED }
-    );
+    });
+
+    if (enrollment) {
+      return NextResponse.json({ error: 'Anda sudah terdaftar di kursus ini' }, { status: 400 });
+    }
+
+    // Check pending transaction
+    const pendingTx = await prisma.transaction.findFirst({
+      where: {
+        user_id: authUser.userId,
+        course_id,
+        status: TransactionStatus.PENDING,
+      },
+    });
+
+    if (pendingTx) {
+      return NextResponse.json({ error: 'Anda memiliki transaksi yang belum selesai', transaction: pendingTx }, { status: 400 });
+    }
+
+    const amount = course.price;
+    const discount = course.discount_price ? course.price - course.discount_price : 0;
+    const totalAmount = course.discount_price || course.price;
+
+    const orderId = `ORD-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+
+    const transaction = await prisma.transaction.create({
+      data: {
+        user_id: authUser.userId,
+        course_id,
+        order_id: orderId,
+        amount,
+        discount,
+        total_amount: totalAmount,
+        payment_method: payment_method as PaymentMethod,
+        status: TransactionStatus.PENDING,
+        expired_at: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      },
+    });
+
+    return NextResponse.json({ message: 'Transaksi berhasil dibuat', transaction }, { status: 201 });
   } catch (error) {
-    console.error("POST transaction error:", error);
-    return NextResponse.json(
-      { error: "Failed to create transaction" },
-      { status: HTTP_STATUS.INTERNAL_SERVER_ERROR }
-    );
+    console.error('Create transaction error:', error);
+    return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 });
   }
 }
-
-// Apply middlewares
-async function authenticatedGetHandler(
-  request: NextRequest
-): Promise<NextResponse> {
-  const authResult = await authMiddleware(request);
-  if (authResult instanceof NextResponse) {
-    return authResult;
-  }
-  return getHandler(request, authResult);
-}
-
-async function authenticatedPostHandler(
-  request: NextRequest
-): Promise<NextResponse> {
-  const authResult = await authMiddleware(request);
-  if (authResult instanceof NextResponse) {
-    return authResult;
-  }
-  return postHandler(request, authResult);
-}
-
-// Export handlers
-export const GET = errorHandler(
-  loggingMiddleware(corsMiddleware(authenticatedGetHandler))
-);
-export const POST = errorHandler(
-  loggingMiddleware(corsMiddleware(authenticatedPostHandler))
-);

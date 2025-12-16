@@ -1,530 +1,471 @@
-// app/user/certificates/[id]/page.tsx
 "use client";
 
-import { useEffect, useState, useRef } from "react";
-import { useParams, useRouter } from "next/navigation";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useState, useEffect, useCallback } from "react";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
-  Download,
-  Share,
+  Award,
+  Loader2,
   ArrowLeft,
-  Printer,
-  Copy,
+  Download,
+  Eye,
   CheckCircle,
-  BadgeCheck,
-  Calendar,
-  User,
-  BookOpen,
   Clock,
+  XCircle,
+  AlertCircle,
+  BookOpen,
+  Calendar,
+  Hash,
+  User,
+  Share2,
+  Linkedin,
+  Facebook,
+  Twitter,
+  Link as LinkIcon,
+  Copy,
+  Printer,
+  ExternalLink,
 } from "lucide-react";
-import Link from "next/link";
 import UserLayout from "@/components/user/user-layout";
-import html2canvas from "html2canvas";
-import jsPDF from "jspdf";
+import ProtectedRoute from "@/components/auth/protected-route";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import Link from "next/link";
+import { useParams } from "next/navigation";
 
-// Data sertifikat (sama dengan data sebelumnya)
-const certificates = [
-  {
-    id: 1,
-    courseName: "Dasar-Dasar Pemrograman Web",
-    instructor: "Dr. Ahmad Fauzi",
-    completionDate: "15 September 2024",
-    certificateCode: "CERT-WEB-2024-001",
-    status: "verified",
-    downloadCount: 3,
-    thumbnail:
-      "https://images.pexels.com/photos/11035380/pexels-photo-11035380.jpeg?auto=compress&cs=tinysrgb&w=800",
-    issueDate: "2024-09-15",
-    skills: ["HTML", "CSS", "JavaScript"],
-    studentName: "John Doe",
-    duration: "40 jam",
-    grade: "A",
-    description: "Sertifikat ini diberikan sebagai pengakuan atas penyelesaian kursus Dasar-Dasar Pemrograman Web dengan nilai yang memuaskan.",
-  },
-  {
-    id: 2,
-    courseName: "Bahasa Inggris Percakapan",
-    instructor: "John Smith",
-    completionDate: "10 Agustus 2024",
-    certificateCode: "CERT-ENG-2024-002",
-    status: "verified",
-    downloadCount: 5,
-    thumbnail:
-      "https://images.pexels.com/photos/256417/pexels-photo-256417.jpeg?auto=compress&cs=tinysrgb&w=800",
-    issueDate: "2024-08-10",
-    skills: ["Speaking", "Listening", "Grammar"],
-    studentName: "John Doe",
-    duration: "30 jam",
-    grade: "A-",
-    description: "Sertifikat ini diberikan sebagai pengakuan atas penyelesaian kursus Bahasa Inggris Percakapan dengan kemampuan komunikasi yang baik.",
-  },
-  {
-    id: 3,
-    courseName: "UI/UX Design Mastery",
-    instructor: "Budi Santoso",
-    completionDate: "20 Juli 2024",
-    certificateCode: "CERT-UX-2024-003",
-    status: "verified",
-    downloadCount: 2,
-    thumbnail:
-      "https://images.pexels.com/photos/196644/pexels-photo-196644.jpeg?auto=compress&cs=tinysrgb&w=800",
-    issueDate: "2024-07-20",
-    skills: ["Figma", "User Research", "Prototyping"],
-    studentName: "John Doe",
-    duration: "50 jam",
-    grade: "A+",
-    description: "Sertifikat ini diberikan sebagai pengakuan atas penyelesaian kursus UI/UX Design Mastery dengan proyek yang luar biasa.",
-  },
-  {
-    id: 4,
-    courseName: "Data Science dengan Python",
-    instructor: "Dr. Maria Chen",
-    completionDate: "5 Juni 2024",
-    certificateCode: "CERT-DS-2024-004",
-    status: "verified",
-    downloadCount: 4,
-    thumbnail:
-      "https://images.pexels.com/photos/1181671/pexels-photo-1181671.jpeg?auto=compress&cs=tinysrgb&w=800",
-    issueDate: "2024-06-05",
-    skills: ["Python", "Pandas", "Data Analysis"],
-    studentName: "John Doe",
-    duration: "60 jam",
-    grade: "A",
-    description: "Sertifikat ini diberikan sebagai pengakuan atas penyelesaian kursus Data Science dengan Python dengan pemahaman mendalam tentang analisis data.",
-  },
-  {
-    id: 5,
-    courseName: "Digital Marketing Fundamentals",
-    instructor: "Rina Wijaya",
-    completionDate: "18 Mei 2024",
-    certificateCode: "CERT-DM-2024-005",
-    status: "verified",
-    downloadCount: 1,
-    thumbnail:
-      "https://images.pexels.com/photos/265087/pexels-photo-265087.jpeg?auto=compress&cs=tinysrgb&w=800",
-    issueDate: "2024-05-18",
-    skills: ["SEO", "Social Media", "Content Marketing"],
-    studentName: "John Doe",
-    duration: "35 jam",
-    grade: "B+",
-    description: "Sertifikat ini diberikan sebagai pengakuan atas penyelesaian kursus Digital Marketing Fundamentals dengan strategi pemasaran yang efektif.",
-  },
-  {
-    id: 6,
-    courseName: "Mobile App Development",
-    instructor: "Alex Johnson",
-    completionDate: "30 April 2024",
-    certificateCode: "CERT-MOB-2024-006",
-    status: "verified",
-    downloadCount: 2,
-    thumbnail:
-      "https://images.pexels.com/photos/1092644/pexels-photo-1092644.jpeg?auto=compress&cs=tinysrgb&w=800",
-    issueDate: "2024-04-30",
-    skills: ["React Native", "Firebase", "API Integration"],
-    studentName: "John Doe",
-    duration: "55 jam",
-    grade: "A",
-    description: "Sertifikat ini diberikan sebagai pengakuan atas penyelesaian kursus Mobile App Development dengan aplikasi yang fungsional dan user-friendly.",
-  },
-];
+const API_BASE_URL = "http://localhost:3000/api";
 
-export default function CertificateDetail() {
+interface Certificate {
+  id: string;
+  certificate_number: string;
+  status: "PENDING" | "ISSUED" | "REVOKED";
+  issued_at: string | null;
+  revoked_at: string | null;
+  revoke_reason: string | null;
+  pdf_url: string | null;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+  course: {
+    id: string;
+    title: string;
+    slug: string;
+    thumbnail: string | null;
+    mentor: {
+      user: { full_name: string };
+    };
+  };
+  user: {
+    id: string;
+    full_name: string;
+    email: string;
+  };
+}
+
+const formatDate = (dateString: string) => {
+  return new Date(dateString).toLocaleDateString("id-ID", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+};
+
+const getStatusBadge = (status: string) => {
+  switch (status) {
+    case "ISSUED":
+      return <Badge className="bg-[#008A00] text-white border border-[#008A00] pointer-events-none text-base px-4 py-2"><CheckCircle className="h-4 w-4 mr-2" />Tersedia</Badge>;
+    case "PENDING":
+      return <Badge className="bg-[#F4B400] text-[#1A1A1A] border border-[#F4B400] pointer-events-none text-base px-4 py-2"><Clock className="h-4 w-4 mr-2" />Menunggu</Badge>;
+    case "REVOKED":
+      return <Badge className="bg-[#D93025] text-white border border-[#D93025] pointer-events-none text-base px-4 py-2"><XCircle className="h-4 w-4 mr-2" />Dicabut</Badge>;
+    default:
+      return <Badge className="bg-gray-100 text-gray-800 border border-gray-300 pointer-events-none">{status}</Badge>;
+  }
+};
+
+export default function UserCertificateDetailPage() {
   const params = useParams();
-  const router = useRouter();
-  const certificateRef = useRef<HTMLDivElement>(null);
-  const [certificate, setCertificate] = useState<any>(null);
-  const [isDownloading, setIsDownloading] = useState(false);
-  const [isCopied, setIsCopied] = useState(false);
+  const certificateId = params.id as string;
 
+  const [certificate, setCertificate] = useState<Certificate | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
+  const [previewContent, setPreviewContent] = useState("");
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const getAuthToken = useCallback(() => typeof window !== "undefined" ? localStorage.getItem("token") || localStorage.getItem("accessToken") : null, []);
+
+  // Fetch certificate detail
   useEffect(() => {
-    const certificateId = parseInt(params.id as string);
-    const foundCertificate = certificates.find(cert => cert.id === certificateId);
-    
-    if (foundCertificate) {
-      setCertificate(foundCertificate);
-    } else {
-      router.push("/user/certificates");
+    const fetchCertificate = async () => {
+      try {
+        setLoading(true);
+        const token = getAuthToken();
+
+        const response = await fetch(`${API_BASE_URL}/users/certificates/${certificateId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        if (!response.ok) {
+          if (response.status === 404) {
+            throw new Error("Sertifikat tidak ditemukan");
+          }
+          throw new Error("Gagal memuat sertifikat");
+        }
+
+        const data = await response.json();
+        setCertificate(data.certificate);
+
+        // Also fetch the preview HTML
+        const previewResponse = await fetch(`${API_BASE_URL}/users/certificates/${certificateId}/preview`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (previewResponse.ok) {
+          const previewData = await previewResponse.json();
+          setPreviewContent(previewData.html || "");
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Terjadi kesalahan");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (certificateId) {
+      fetchCertificate();
     }
-  }, [params.id, router]);
+  }, [certificateId, getAuthToken]);
 
-  const handleDownloadPDF = async () => {
-    if (!certificateRef.current) return;
-
-    setIsDownloading(true);
+  // Preview certificate
+  const handlePreview = async () => {
     try {
-      const canvas = await html2canvas(certificateRef.current, {
-        useCORS: true,
-        logging: false,
+      const token = getAuthToken();
+      const response = await fetch(`${API_BASE_URL}/users/certificates/${certificateId}/preview`, {
+        headers: { Authorization: `Bearer ${token}` },
       });
 
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF('landscape', 'mm', 'a4');
-      const imgWidth = 297; // A4 width in mm
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-
-      pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
-      pdf.save(`sertifikat-${certificate.certificateCode}.pdf`);
-    } catch (error) {
-      console.error('Error generating PDF:', error);
-    } finally {
-      setIsDownloading(false);
+      if (response.ok) {
+        const data = await response.json();
+        setPreviewContent(data.html || "");
+        setPreviewDialogOpen(true);
+      }
+    } catch (err) {
+      console.error("Preview error:", err);
     }
   };
 
-  const handleShare = async () => {
-    const shareUrl = `${window.location.origin}/user/certificates/${certificate.id}`;
+  // Copy share link
+  const handleCopyLink = () => {
+    const shareUrl = `${window.location.origin}/certificates/verify/${certificate?.certificate_number}`;
+    navigator.clipboard.writeText(shareUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  // Share to social media
+  const handleShare = (platform: string) => {
+    const shareUrl = `${window.location.origin}/certificates/verify/${certificate?.certificate_number}`;
+    const text = `Saya telah menyelesaikan kursus "${certificate?.course.title}" dan mendapatkan sertifikat!`;
     
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: `Sertifikat ${certificate.courseName}`,
-          text: `Lihat sertifikat saya untuk kursus ${certificate.courseName}`,
-          url: shareUrl,
-        });
-      } catch (error) {
-        console.log('Error sharing:', error);
+    let url = "";
+    switch (platform) {
+      case "linkedin":
+        url = `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(shareUrl)}`;
+        break;
+      case "twitter":
+        url = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(shareUrl)}`;
+        break;
+      case "facebook":
+        url = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`;
+        break;
+    }
+    
+    if (url) window.open(url, "_blank", "width=600,height=400");
+  };
+
+  // Print certificate
+  const handlePrint = () => {
+    if (previewContent) {
+      const printWindow = window.open("", "_blank");
+      if (printWindow) {
+        printWindow.document.write(previewContent);
+        printWindow.document.close();
+        printWindow.focus();
+        printWindow.print();
       }
     } else {
-      // Fallback untuk browser yang tidak support Web Share API
-      await handleCopyLink();
+      handlePreview();
     }
   };
 
-  const handleCopyLink = async () => {
-    const shareUrl = `${window.location.origin}/user/certificates/${certificate.id}`;
-    
-    try {
-      await navigator.clipboard.writeText(shareUrl);
-      setIsCopied(true);
-      setTimeout(() => setIsCopied(false), 2000);
-    } catch (error) {
-      console.error('Error copying to clipboard:', error);
-    }
-  };
-
-  const handlePrint = () => {
-    window.print();
-  };
-
-  if (!certificate) {
+  if (loading) {
     return (
-      <UserLayout>
-        <div className="container mx-auto p-8 text-center">
-          <p>Loading...</p>
-        </div>
-      </UserLayout>
+      <ProtectedRoute allowedRoles={["STUDENT"]}>
+        <UserLayout>
+          <div className="flex items-center justify-center min-h-[400px]">
+            <Loader2 className="h-12 w-12 animate-spin text-[#005EB8]" />
+          </div>
+        </UserLayout>
+      </ProtectedRoute>
+    );
+  }
+
+  if (error || !certificate) {
+    return (
+      <ProtectedRoute allowedRoles={["STUDENT"]}>
+        <UserLayout>
+          <div className="flex flex-col items-center justify-center min-h-[400px]">
+            <AlertCircle className="h-16 w-16 text-[#D93025] mb-4" />
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">{error || "Sertifikat tidak ditemukan"}</h2>
+            <Link href="/user/certificates">
+              <Button variant="outline" className="mt-4 border-gray-300 dark:border-gray-600">
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Kembali
+              </Button>
+            </Link>
+          </div>
+        </UserLayout>
+      </ProtectedRoute>
     );
   }
 
   return (
-    <UserLayout>
-      <div className="space-y-8">
-        {/* Header dengan navigasi */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 animate-fadeIn">
+    <ProtectedRoute allowedRoles={["STUDENT"]}>
+      <UserLayout>
+        <div className="space-y-8">
+          {/* Header */}
           <div className="flex items-center gap-4">
             <Link href="/user/certificates">
-              <Button variant="outline" size="sm">
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                Kembali ke Sertifikat
+              {/* Button Ikon Panah Kiri - Style diubah seperti button Lihat Semua di dashboard */}
+              <Button 
+                variant="outline" 
+                size="icon" 
+                className="border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10 dark:border-[#005EB8] dark:text-[#005EB8]"
+              >
+                <ArrowLeft className="h-5 w-5" />
               </Button>
             </Link>
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-                Detail Sertifikat
+            <div className="flex-1">
+              <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-3">
+                <Award className="h-8 w-8 text-[#005EB8]" />
+                Sertifikat
               </h1>
               <p className="text-gray-600 dark:text-gray-400">
-                {certificate.courseName}
+                {certificate.course.title}
               </p>
             </div>
           </div>
-          <div className="flex gap-2">
-            <Button
-              onClick={handleDownloadPDF}
-              disabled={isDownloading}
-              className="bg-[#005EB8] hover:bg-[#004A93]"
-            >
-              <Download className="h-4 w-4 mr-2" />
-              {isDownloading ? "Mengunduh..." : "Unduh PDF"}
-            </Button>
-            <Button variant="outline" onClick={handlePrint}>
-              <Printer className="h-4 w-4 mr-2" />
-              Print
-            </Button>
-            <Button variant="outline" onClick={handleShare}>
-              <Share className="h-4 w-4 mr-2" />
-              Bagikan
-            </Button>
-          </div>
-        </div>
 
-        {/* Main Content */}
-        <div className="grid lg:grid-cols-3 gap-8">
-          {/* Certificate Preview - Takes 2/3 width */}
-          <div className="lg:col-span-2">
-            <Card className="rounded-lg border bg-card text-card-foreground shadow-sm border-gray-200 dark:border-gray-700 overflow-hidden">
-              <CardContent className="p-0">
-                {/* Certificate Design */}
-                <div
-                  ref={certificateRef}
-                  className="bg-gradient-to-br from-blue-50 to-green-50 p-8 print:p-12"
-                  style={{ minHeight: "600px" }}
-                >
-                  {/* Certificate Border */}
-                  <div className="border-4 border-[#005EB8] rounded-lg p-8 h-full flex flex-col justify-between relative">
-                    
-                    {/* Background Pattern */}
-                    <div className="absolute inset-0 opacity-5">
-                      <div className="absolute top-4 left-4 w-20 h-20 border-2 border-[#005EB8] rounded-full"></div>
-                      <div className="absolute bottom-4 right-4 w-16 h-16 border-2 border-[#008A00] rounded-full"></div>
-                      <div className="absolute top-1/2 left-1/4 w-12 h-12 border-2 border-[#F4B400] rounded-full"></div>
-                    </div>
-
-                    {/* Header */}
-                    <div className="text-center mb-8 relative z-10">
-                      <div className="flex justify-center mb-4">
-                        <BadgeCheck className="h-16 w-16 text-[#005EB8]" />
-                      </div>
-                      <h1 className="text-4xl font-bold text-[#005EB8] mb-2">
-                        SERTIFIKAT KELULUSAN
-                      </h1>
-                      <p className="text-lg text-gray-600">
-                        Dengan bangga diberikan kepada
-                      </p>
-                    </div>
-
-                    {/* Student Name */}
-                    <div className="text-center my-12 relative z-10">
-                      <h2 className="text-5xl font-bold text-gray-900 mb-6 font-serif">
-                        {certificate.studentName}
-                      </h2>
-                      <div className="w-64 h-1 bg-gradient-to-r from-[#005EB8] to-[#008A00] mx-auto mb-6"></div>
-                      <p className="text-xl text-gray-600">
-                        telah berhasil menyelesaikan kursus
-                      </p>
-                    </div>
-
-                    {/* Course Name */}
-                    <div className="text-center my-8 relative z-10">
-                      <h3 className="text-3xl font-bold text-[#008A00] mb-4">
-                        {certificate.courseName}
-                      </h3>
-                      <p className="text-lg text-gray-600 mb-2">
-                        dengan durasi {certificate.duration}
-                      </p>
-                      <p className="text-lg text-gray-600">
-                        dan memperoleh nilai <span className="font-bold text-[#F4B400]">{certificate.grade}</span>
-                      </p>
-                    </div>
-
-                    {/* Footer with Signatures */}
-                    <div className="mt-12 grid grid-cols-2 gap-8 relative z-10">
-                      <div className="text-center">
-                        <div className="mb-4">
-                          <p className="text-lg font-semibold text-gray-900">{certificate.instructor}</p>
-                          <p className="text-gray-600">Instruktur</p>
-                        </div>
-                        <div className="border-t-2 border-gray-900 pt-4 mt-8">
-                          <p className="text-sm text-gray-600">Tanda Tangan</p>
-                        </div>
-                      </div>
-                      <div className="text-center">
-                        <div className="mb-4">
-                          <p className="text-lg font-semibold text-gray-900">Online Course Platform</p>
-                          <p className="text-gray-600">Lembaga Pendidikan</p>
-                        </div>
-                        <div className="border-t-2 border-gray-900 pt-4 mt-8">
-                          <p className="text-sm text-gray-600">Stempel</p>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Certificate Code and Date */}
-                    <div className="mt-8 text-center relative z-10">
-                      <p className="text-sm text-gray-500 mb-2">
-                        Kode Verifikasi: <span className="font-mono font-bold">{certificate.certificateCode}</span>
-                      </p>
-                      <p className="text-sm text-gray-500">
-                        Tanggal Terbit: {new Date(certificate.issueDate).toLocaleDateString('id-ID', {
-                          day: 'numeric',
-                          month: 'long',
-                          year: 'numeric'
-                        })}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Sidebar Information */}
-          <div className="space-y-6">
-            {/* Certificate Info */}
-            <Card className="rounded-lg border bg-card text-card-foreground shadow-sm border-gray-200 dark:border-gray-700">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <BadgeCheck className="h-5 w-5 text-[#005EB8]" />
-                  Informasi Sertifikat
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-600 dark:text-gray-400">Status</span>
-                  <Badge className="bg-[#008A00]">Terverifikasi</Badge>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-600 dark:text-gray-400">Kode</span>
-                  <span className="font-mono text-sm font-bold text-[#005EB8]">
-                    {certificate.certificateCode}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-600 dark:text-gray-400">Diunduh</span>
-                  <span className="font-medium">{certificate.downloadCount} kali</span>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Course Details */}
-            <Card className="rounded-lg border bg-card text-card-foreground shadow-sm border-gray-200 dark:border-gray-700">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <BookOpen className="h-5 w-5 text-[#005EB8]" />
-                  Detail Kursus
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
+          {/* Certificate Display */}
+          <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 overflow-hidden">
+            {/* Status */}
+            <CardContent className="p-4 border-b border-gray-200 dark:border-gray-700">
+              <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <User className="h-4 w-4 text-gray-400" />
+                  <Award className="h-6 w-6 text-[#005EB8]" />
                   <div>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">Instruktur</p>
-                    <p className="font-medium">{certificate.instructor}</p>
+                    <h2 className="font-bold text-gray-900 dark:text-white">{certificate.course.title}</h2>
+                    <p className="text-sm text-gray-500">No: {certificate.certificate_number}</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-3">
-                  <Clock className="h-4 w-4 text-gray-400" />
-                  <div>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">Durasi</p>
-                    <p className="font-medium">{certificate.duration}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <Calendar className="h-4 w-4 text-gray-400" />
-                  <div>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">Selesai</p>
-                    <p className="font-medium">{certificate.completionDate}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <CheckCircle className="h-4 w-4 text-gray-400" />
-                  <div>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">Nilai</p>
-                    <p className="font-medium text-[#F4B400]">{certificate.grade}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+                {getStatusBadge(certificate.status)}
+              </div>
+            </CardContent>
 
-            {/* Skills Gained */}
-            <Card className="rounded-lg border bg-card text-card-foreground shadow-sm border-gray-200 dark:border-gray-700">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <CheckCircle className="h-5 w-5 text-[#005EB8]" />
-                  Keterampilan yang Diperoleh
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="flex flex-wrap gap-2">
-                  {certificate.skills.map((skill: string, index: number) => (
-                    <Badge 
-                      key={index} 
-                      variant="outline" 
-                      className="bg-[#005EB8]/10 text-[#005EB8] border-[#005EB8]/20"
-                    >
-                      {skill}
-                    </Badge>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+            {/* Rendered Certificate Template */}
+            {previewContent ? (
+              <div className="bg-white">
+                <iframe 
+                  srcDoc={previewContent} 
+                  className="w-full border-0" 
+                  style={{ minHeight: '500px', height: 'auto' }}
+                  title="Sertifikat"
+                />
+              </div>
+            ) : (
+              <div className="p-8 text-center">
+                <Loader2 className="h-8 w-8 animate-spin text-[#005EB8] mx-auto mb-4" />
+                <p className="text-gray-500">Memuat template sertifikat...</p>
+              </div>
+            )}
 
-            {/* Share Certificate */}
-            <Card className="rounded-lg border bg-card text-card-foreground shadow-sm border-gray-200 dark:border-gray-700">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Share className="h-5 w-5 text-[#005EB8]" />
-                  Bagikan Sertifikat
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Bagikan pencapaian Anda dengan jaringan profesional
-                </p>
-                <div className="flex gap-2">
+            <CardContent className="p-6 border-t border-gray-200 dark:border-gray-700">
+              {/* Certificate Details */}
+              <div className="grid md:grid-cols-3 gap-4 mb-6">
+                <div className="text-center p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                  <Hash className="h-5 w-5 mx-auto mb-2 text-gray-400" />
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Nomor Sertifikat</p>
+                  <p className="font-mono font-medium text-gray-900 dark:text-white">{certificate.certificate_number}</p>
+                </div>
+                <div className="text-center p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                  <Calendar className="h-5 w-5 mx-auto mb-2 text-gray-400" />
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Tanggal Terbit</p>
+                  <p className="font-medium text-gray-900 dark:text-white">{certificate.issued_at ? formatDate(certificate.issued_at) : "-"}</p>
+                </div>
+                <div className="text-center p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                  <User className="h-5 w-5 mx-auto mb-2 text-gray-400" />
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Mentor</p>
+                  <p className="font-medium text-gray-900 dark:text-white">{certificate.course.mentor.user.full_name}</p>
+                </div>
+              </div>
+
+              {/* Revoked Warning */}
+              {certificate.status === "REVOKED" && (
+                <div className="bg-red-50 dark:bg-red-900/20 border border-[#D93025]/20 dark:border-[#D93025]/30 rounded-lg p-4 mb-8 text-center">
+                  <XCircle className="h-8 w-8 text-[#D93025] mx-auto mb-2" />
+                  <h4 className="font-semibold text-[#D93025] dark:text-[#D93025] mb-1">Sertifikat Dicabut</h4>
+                  <p className="text-sm text-[#D93025]/80 dark:text-[#D93025]">{certificate.revoke_reason || "Hubungi admin untuk informasi lebih lanjut"}</p>
+                  {certificate.revoked_at && (
+                    <p className="text-xs text-[#D93025] mt-2">Dicabut pada: {formatDate(certificate.revoked_at)}</p>
+                  )}
+                </div>
+              )}
+
+              {/* Pending Info */}
+              {certificate.status === "PENDING" && (
+                <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-[#F4B400]/20 dark:border-[#F4B400]/30 rounded-lg p-4 mb-8 text-center">
+                  <Clock className="h-8 w-8 text-[#F4B400] mx-auto mb-2" />
+                  <h4 className="font-semibold text-[#F4B400] dark:text-[#F4B400] mb-1">Sertifikat Dalam Proses</h4>
+                  <p className="text-sm text-[#F4B400]/80 dark:text-[#F4B400]">Sertifikat Anda sedang dalam proses pembuatan. Silakan cek kembali nanti.</p>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              {certificate.status === "ISSUED" && (
+                <div className="flex flex-wrap justify-center gap-3">
+                  {/* Button Preview - Style diubah seperti button Lihat Semua di dashboard */}
                   <Button 
                     variant="outline" 
-                    className="flex-1"
-                    onClick={handleCopyLink}
+                    onClick={handlePreview} 
+                    className="border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10 dark:border-[#005EB8] dark:text-[#005EB8]"
                   >
-                    {isCopied ? (
-                      <>
-                        <CheckCircle className="h-4 w-4 mr-2 text-[#008A00]" />
-                        Tersalin!
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="h-4 w-4 mr-2" />
-                        Salin Link
-                      </>
-                    )}
+                    <Eye className="h-4 w-4 mr-2" />
+                    Preview
                   </Button>
+                  {certificate.pdf_url && (
+                    <Button className="bg-[#005EB8] hover:bg-[#004A93] text-white" asChild>
+                      <a href={certificate.pdf_url} target="_blank" download>
+                        <Download className="h-4 w-4 mr-2" />
+                        Download PDF
+                      </a>
+                    </Button>
+                  )}
+                  {/* Button Bagikan - Style diubah seperti button Lihat Semua di dashboard */}
                   <Button 
-                    variant="outline"
-                    className="flex-1"
-                    onClick={handleShare}
+                    variant="outline" 
+                    onClick={() => setShareDialogOpen(true)} 
+                    className="border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10 dark:border-[#005EB8] dark:text-[#005EB8]"
                   >
-                    <Share className="h-4 w-4 mr-2" />
+                    <Share2 className="h-4 w-4 mr-2" />
                     Bagikan
                   </Button>
+                  {/* Button Cetak - Style diubah seperti button Lihat Semua di dashboard */}
+                  <Button 
+                    variant="outline" 
+                    onClick={handlePrint} 
+                    className="border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10 dark:border-[#005EB8] dark:text-[#005EB8]"
+                  >
+                    <Printer className="h-4 w-4 mr-2" />
+                    Cetak
+                  </Button>
                 </div>
-              </CardContent>
-            </Card>
-          </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Verification Info */}
+          <Card className="rounded-lg border bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800">
+            <CardContent className="p-4">
+              <div className="flex items-start gap-3">
+                <CheckCircle className="h-5 w-5 text-[#005EB8]" />
+                <div>
+                  <h4 className="font-semibold text-[#005EB8] dark:text-[#005EB8]">Verifikasi Sertifikat</h4>
+                  <p className="text-sm text-[#005EB8]/80 dark:text-[#005EB8]">
+                    Sertifikat ini dapat diverifikasi keasliannya melalui nomor sertifikat: <span className="font-mono font-bold text-gray-900 dark:text-white">{certificate.certificate_number}</span>
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
-        {/* Certificate Description */}
-        <Card className="rounded-lg border bg-card text-card-foreground shadow-sm border-gray-200 dark:border-gray-700">
-          <CardHeader>
-            <CardTitle>Deskripsi Sertifikat</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-gray-600 dark:text-gray-400 leading-relaxed">
-              {certificate.description}
-            </p>
-          </CardContent>
-        </Card>
-      </div>
+        {/* Preview Dialog */}
+        <Dialog open={previewDialogOpen} onOpenChange={setPreviewDialogOpen}>
+          <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Preview Sertifikat</DialogTitle>
+            </DialogHeader>
+            <div className="border rounded-lg p-4 bg-white">
+              <iframe srcDoc={previewContent} className="w-full h-[600px] border-0" />
+            </div>
+            <div className="flex justify-end gap-2">
+              {/* Button Cetak di dialog - Style diubah seperti button Lihat Semua di dashboard */}
+              <Button 
+                variant="outline" 
+                onClick={handlePrint} 
+                className="border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10 dark:border-[#005EB8] dark:text-[#005EB8]"
+              >
+                <Printer className="h-4 w-4 mr-2" />
+                Cetak
+              </Button>
+              {certificate.pdf_url && (
+                <Button className="bg-[#005EB8] hover:bg-[#004A93] text-white" asChild>
+                  <a href={certificate.pdf_url} target="_blank" download>
+                    <Download className="h-4 w-4 mr-2" />
+                    Download PDF
+                  </a>
+                </Button>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
 
-      {/* Print Styles */}
-      <style jsx global>{`
-        @media print {
-          body * {
-            visibility: hidden;
-          }
-          #certificate-container,
-          #certificate-container * {
-            visibility: visible;
-          }
-          #certificate-container {
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 100%;
-          }
-        }
-      `}</style>
-    </UserLayout>
+        {/* Share Dialog */}
+        <Dialog open={shareDialogOpen} onOpenChange={setShareDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Bagikan Sertifikat</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <p className="text-gray-500 dark:text-gray-400">Bagikan pencapaian Anda ke media sosial</p>
+              
+              {/* Social Buttons */}
+              <div className="flex justify-center gap-4">
+                <Button variant="outline" size="lg" className="flex-1 border-gray-300 dark:border-gray-600" onClick={() => handleShare("linkedin")}>
+                  <Linkedin className="h-5 w-5 mr-2 text-[#0A66C2]" />
+                  LinkedIn
+                </Button>
+                <Button variant="outline" size="lg" className="flex-1 border-gray-300 dark:border-gray-600" onClick={() => handleShare("twitter")}>
+                  <Twitter className="h-5 w-5 mr-2 text-[#1DA1F2]" />
+                  Twitter
+                </Button>
+                <Button variant="outline" size="lg" className="flex-1 border-gray-300 dark:border-gray-600" onClick={() => handleShare("facebook")}>
+                  <Facebook className="h-5 w-5 mr-2 text-[#1877F2]" />
+                  Facebook
+                </Button>
+              </div>
+
+              {/* Copy Link */}
+              <div className="flex gap-2">
+                <div className="flex-1 p-3 bg-gray-100 dark:bg-gray-800 rounded-lg text-sm font-mono truncate text-gray-900 dark:text-gray-300">
+                  {`${typeof window !== "undefined" ? window.location.origin : ""}/certificates/verify/${certificate.certificate_number}`}
+                </div>
+                <Button variant="outline" onClick={handleCopyLink} className="border-gray-300 dark:border-gray-600">
+                  {copied ? <CheckCircle className="h-4 w-4 text-[#008A00]" /> : <Copy className="h-4 w-4" />}
+                </Button>
+              </div>
+              {copied && <p className="text-xs text-[#008A00] text-center">Link berhasil disalin!</p>}
+            </div>
+          </DialogContent>
+        </Dialog>
+      </UserLayout>
+    </ProtectedRoute>
   );
 }

@@ -1,199 +1,147 @@
-import { ZodError } from "zod";
-import {
-  PrismaClientKnownRequestError,
-  PrismaClientValidationError,
-} from "@prisma/client/runtime/library";
-import { HTTP_STATUS, ERROR_MESSAGES } from "@/lib/constants";
+// Error utilities
+import { HTTP_STATUS, ERROR_MESSAGES } from '@/lib/constants';
 
-// Custom Error Classes
+// Error codes
+export const ERROR_CODES = {
+  // Auth errors
+  UNAUTHORIZED: 'UNAUTHORIZED',
+  FORBIDDEN: 'FORBIDDEN',
+  INVALID_TOKEN: 'INVALID_TOKEN',
+  TOKEN_EXPIRED: 'TOKEN_EXPIRED',
+  
+  // Validation errors
+  VALIDATION_ERROR: 'VALIDATION_ERROR',
+  INVALID_INPUT: 'INVALID_INPUT',
+  
+  // Resource errors
+  NOT_FOUND: 'NOT_FOUND',
+  ALREADY_EXISTS: 'ALREADY_EXISTS',
+  CONFLICT: 'CONFLICT',
+  
+  // Server errors
+  INTERNAL_ERROR: 'INTERNAL_ERROR',
+  DATABASE_ERROR: 'DATABASE_ERROR',
+  EXTERNAL_SERVICE_ERROR: 'EXTERNAL_SERVICE_ERROR',
+  
+  // Business logic errors
+  INSUFFICIENT_FUNDS: 'INSUFFICIENT_FUNDS',
+  LIMIT_EXCEEDED: 'LIMIT_EXCEEDED',
+  OPERATION_NOT_ALLOWED: 'OPERATION_NOT_ALLOWED',
+} as const;
+
+export type ErrorCode = typeof ERROR_CODES[keyof typeof ERROR_CODES];
+
+// Base app error
 export class AppError extends Error {
-  public statusCode: number;
-  public isOperational: boolean;
+  public readonly statusCode: number;
+  public readonly code: ErrorCode;
+  public readonly isOperational: boolean;
+  public readonly details?: Record<string, unknown>;
 
-  constructor(message: string, statusCode: number = HTTP_STATUS.BAD_REQUEST) {
+  constructor(
+    message: string,
+    statusCode: number = HTTP_STATUS.INTERNAL_SERVER_ERROR,
+    code: ErrorCode = ERROR_CODES.INTERNAL_ERROR,
+    details?: Record<string, unknown>
+  ) {
     super(message);
     this.statusCode = statusCode;
+    this.code = code;
     this.isOperational = true;
-
+    this.details = details;
+    
     Error.captureStackTrace(this, this.constructor);
+    Object.setPrototypeOf(this, AppError.prototype);
   }
 }
 
-export class ValidationError extends AppError {
-  constructor(message: string = "Validation failed") {
-    super(message, HTTP_STATUS.UNPROCESSABLE_ENTITY);
+// Specific error classes
+export class NotFoundError extends AppError {
+  constructor(resource: string = 'Resource') {
+    super(`${resource} tidak ditemukan`, HTTP_STATUS.NOT_FOUND, ERROR_CODES.NOT_FOUND);
   }
 }
 
 export class UnauthorizedError extends AppError {
   constructor(message: string = ERROR_MESSAGES.UNAUTHORIZED) {
-    super(message, HTTP_STATUS.UNAUTHORIZED);
+    super(message, HTTP_STATUS.UNAUTHORIZED, ERROR_CODES.UNAUTHORIZED);
   }
 }
 
 export class ForbiddenError extends AppError {
   constructor(message: string = ERROR_MESSAGES.FORBIDDEN) {
-    super(message, HTTP_STATUS.FORBIDDEN);
+    super(message, HTTP_STATUS.FORBIDDEN, ERROR_CODES.FORBIDDEN);
   }
 }
 
-export class NotFoundError extends AppError {
-  constructor(message: string = ERROR_MESSAGES.NOT_FOUND) {
-    super(message, HTTP_STATUS.NOT_FOUND);
+export class ValidationError extends AppError {
+  constructor(message: string, details?: Record<string, string[]>) {
+    super(message, HTTP_STATUS.BAD_REQUEST, ERROR_CODES.VALIDATION_ERROR, details);
   }
 }
 
 export class ConflictError extends AppError {
-  constructor(message: string = "Resource already exists") {
-    super(message, HTTP_STATUS.CONFLICT);
+  constructor(message: string) {
+    super(message, HTTP_STATUS.CONFLICT, ERROR_CODES.CONFLICT);
   }
 }
 
-export class RateLimitError extends AppError {
-  constructor(message: string = "Too many requests") {
-    super(message, HTTP_STATUS.TOO_MANY_REQUESTS);
+export class DatabaseError extends AppError {
+  constructor(message: string = 'Database error') {
+    super(message, HTTP_STATUS.INTERNAL_SERVER_ERROR, ERROR_CODES.DATABASE_ERROR);
   }
 }
 
-/**
- * Format Zod Validation Errors
- */
-export function formatZodError(error: ZodError): Record<string, string[]> {
-  const formattedErrors: Record<string, string[]> = {};
-
-  error.issues.forEach((issue) => {
-    const path = issue.path.join(".");
-    if (!formattedErrors[path]) {
-      formattedErrors[path] = [];
-    }
-    formattedErrors[path].push(issue.message);
-  });
-
-  return formattedErrors;
+// Check if error is AppError
+export function isAppError(error: unknown): error is AppError {
+  return error instanceof AppError;
 }
 
-/**
- * Format Prisma Errors
- */
-export function formatPrismaError(error: unknown): {
-  message: string;
-  statusCode: number;
-} {
-  // Check for Prisma known request errors
-  if (error instanceof PrismaClientKnownRequestError) {
-    switch (error.code) {
-      case "P2002":
-        // Unique constraint violation
-        const field = (error.meta as any)?.target as string[];
-        return {
-          message: `${field?.[0] || "Field"} already exists`,
-          statusCode: HTTP_STATUS.CONFLICT,
-        };
-
-      case "P2025":
-        // Record not found
-        return {
-          message: ERROR_MESSAGES.NOT_FOUND,
-          statusCode: HTTP_STATUS.NOT_FOUND,
-        };
-
-      case "P2003":
-        // Foreign key constraint violation
-        return {
-          message: "Invalid reference to related record",
-          statusCode: HTTP_STATUS.BAD_REQUEST,
-        };
-
-      case "P2014":
-        // Invalid ID
-        return {
-          message: "Invalid ID provided",
-          statusCode: HTTP_STATUS.BAD_REQUEST,
-        };
-
-      default:
-        return {
-          message: "Database operation failed",
-          statusCode: HTTP_STATUS.BAD_REQUEST,
-        };
-    }
-  }
-
-  // Check for Prisma validation errors
-  if (error instanceof PrismaClientValidationError) {
-    return {
-      message: "Invalid data provided",
-      statusCode: HTTP_STATUS.BAD_REQUEST,
-    };
-  }
-
-  // Handle generic errors
-  if (error instanceof Error) {
-    return {
-      message: error.message,
-      statusCode: HTTP_STATUS.BAD_REQUEST,
-    };
-  }
-
-  // Unknown error
-  return {
-    message: ERROR_MESSAGES.INTERNAL_ERROR,
-    statusCode: HTTP_STATUS.INTERNAL_SERVER_ERROR,
-  };
-}
-
-/**
- * Check if error is operational (safe to send to client)
- */
+// Check if error is operational (expected)
 export function isOperationalError(error: unknown): boolean {
-  if (error instanceof AppError) {
+  if (isAppError(error)) {
     return error.isOperational;
   }
   return false;
 }
 
-/**
- * Safe error message for client
- */
-export function getSafeErrorMessage(error: unknown): string {
-  if (isOperationalError(error)) {
-    return (error as AppError).message;
-  }
-
-  // Don't expose internal errors to client
-  return ERROR_MESSAGES.INTERNAL_ERROR;
-}
-
-/**
- * Check if error is a database error
- */
-export function isDatabaseError(error: unknown): boolean {
-  return (
-    error instanceof PrismaClientKnownRequestError ||
-    error instanceof PrismaClientValidationError
-  );
-}
-
-/**
- * Create error from unknown type
- */
-export function createErrorFromUnknown(error: unknown): AppError {
-  if (error instanceof AppError) {
-    return error;
-  }
-
-  if (error instanceof ZodError) {
-    return new ValidationError("Validation failed");
-  }
-
-  if (isDatabaseError(error)) {
-    const { message, statusCode } = formatPrismaError(error);
-    return new AppError(message, statusCode);
-  }
-
+// Format error for logging
+export function formatErrorForLog(error: unknown): string {
   if (error instanceof Error) {
-    return new AppError(error.message);
+    return `${error.name}: ${error.message}\n${error.stack}`;
   }
+  return String(error);
+}
 
-  return new AppError("An unexpected error occurred");
+// Format error for response
+export function formatErrorForResponse(error: unknown): { 
+  error: string; 
+  code?: string; 
+  details?: unknown 
+} {
+  if (isAppError(error)) {
+    return {
+      error: error.message,
+      code: error.code,
+      details: error.details,
+    };
+  }
+  
+  if (error instanceof Error) {
+    return {
+      error: process.env.NODE_ENV === 'production' 
+        ? ERROR_MESSAGES.SERVER_ERROR 
+        : error.message,
+    };
+  }
+  
+  return { error: ERROR_MESSAGES.SERVER_ERROR };
+}
+
+// Get status code from error
+export function getErrorStatusCode(error: unknown): number {
+  if (isAppError(error)) {
+    return error.statusCode;
+  }
+  return HTTP_STATUS.INTERNAL_SERVER_ERROR;
 }

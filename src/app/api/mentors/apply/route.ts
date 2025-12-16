@@ -1,82 +1,83 @@
-import { NextRequest } from "next/server";
-import mentorService from "@/services/mentor.service";
-import { applyMentorSchema } from "@/lib/validation";
-import {
-  successResponse,
-  validationErrorResponse,
-  errorResponse,
-} from "@/utils/response.util";
-import { validateData } from "@/utils/validation.util";
-import { errorHandler } from "@/middlewares/error.middleware";
-import { requireAuth } from "@/middlewares/auth.middleware";
-import { corsMiddleware } from "@/middlewares/cors.middleware";
-import { loggingMiddleware } from "@/middlewares/logging.middleware";
-import { HTTP_STATUS } from "@/lib/constants";
+import { NextRequest, NextResponse } from 'next/server';
+import prisma from '@/lib/prisma';
+import { getAuthUser, unauthorizedResponse, hasRole } from '@/lib/auth';
+import { applyMentorSchema } from '@/lib/validation';
+import { UserRole, MentorStatus } from '@prisma/client';
 
-/**
- * POST /api/mentors/apply
- * Apply to become a mentor
- */
-async function handler(
-  request: NextRequest,
-  context: { user: { userId: string; email: string; role: string } }
-) {
-  const { user } = context;
-
+// POST /api/mentors/apply - Apply to become a mentor
+export async function POST(request: NextRequest) {
   try {
-    // Parse request body
-    let body;
-    try {
-      body = await request.json();
-    } catch {
-      return errorResponse(
-        "Invalid JSON in request body",
-        HTTP_STATUS.BAD_REQUEST
+    const authUser = getAuthUser(request);
+    if (!authUser) return unauthorizedResponse();
+
+    // Check if already a mentor
+    const existingProfile = await prisma.mentorProfile.findUnique({
+      where: { user_id: authUser.userId },
+    });
+
+    if (existingProfile) {
+      return NextResponse.json(
+        { error: 'Anda sudah memiliki profil mentor', profile: existingProfile },
+        { status: 400 }
       );
     }
 
-    // Validate input
-    const validation = await validateData(applyMentorSchema, body);
+    const body = await request.json();
 
-    if (!validation.success) {
-      return validationErrorResponse(validation.errors);
+    // Extract phone from body (it's for user table, not mentor profile)
+    const { phone, ...applyData } = body;
+
+    const result = applyMentorSchema.safeParse(applyData);
+    if (!result.success) {
+      return NextResponse.json(
+        { error: 'Validasi gagal', details: result.error.flatten().fieldErrors },
+        { status: 400 }
+      );
     }
 
-    // Handle website: convert null to undefined
-    const dataToApply = {
-      ...validation.data,
-      website:
-        validation.data.website === null ? undefined : validation.data.website,
-      linkedin:
-        validation.data.linkedin === null
-          ? undefined
-          : validation.data.linkedin,
-      twitter:
-        validation.data.twitter === null ? undefined : validation.data.twitter,
-      portfolio:
-        validation.data.portfolio === null
-          ? undefined
-          : validation.data.portfolio,
-    };
+    const data = result.data;
 
-    // Apply as mentor
-    const result = await mentorService.applyAsMentor(user.userId, dataToApply);
+    // Create mentor profile
+    const profile = await prisma.mentorProfile.create({
+      data: {
+        user_id: authUser.userId,
+        expertise: data.expertise,
+        experience: data.experience,
+        education: data.education,
+        bio: data.bio,
+        headline: data.headline,
+        website: data.website || null,
+        linkedin: data.linkedin || null,
+        twitter: data.twitter || null,
+        portfolio: data.portfolio || null,
+        status: MentorStatus.PENDING,
+      },
+    });
 
-    return successResponse(result, result.message, HTTP_STATUS.CREATED);
-  } catch (error) {
-    if (error instanceof Error) {
-      return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
-    }
-    return errorResponse(
-      "Failed to submit application",
-      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    // Update user role to MENTOR and phone if provided
+    await prisma.user.update({
+      where: { id: authUser.userId },
+      data: { 
+        role: UserRole.MENTOR,
+        ...(phone && { phone }),
+      },
+    });
+
+    await prisma.activityLog.create({
+      data: {
+        user_id: authUser.userId,
+        action: 'APPLY_MENTOR',
+        entity_type: 'mentor_profile',
+        entity_id: profile.id,
+      },
+    });
+
+    return NextResponse.json(
+      { message: 'Pendaftaran mentor berhasil diajukan', profile },
+      { status: 201 }
     );
+  } catch (error) {
+    console.error('Apply mentor error:', error);
+    return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 });
   }
 }
-
-// Apply authentication
-const authenticatedHandler = requireAuth(handler);
-
-export const POST = errorHandler(
-  loggingMiddleware(corsMiddleware(authenticatedHandler))
-);

@@ -1,86 +1,75 @@
-import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
-import { verifyAccessToken } from "@/lib/auth";
-import prisma from "@/lib/prisma";
-import { USER_STATUS, USER_ROLES } from "@/lib/constants";
+// Main Middleware file
+import { NextRequest, NextResponse } from 'next/server';
 
-// Daftar route publik yang tidak memerlukan autentikasi
-const publicRoutes = [
-  "/",
-  "/login",
-  "/register",
-  "/forgot-password",
-  "/reset-password",
-];
+// Re-export all middlewares
+export * from './auth.middleware';
+export * from './cors.middleware';
+export * from './error.middleware';
+export * from './logging.middleware';
+export * from './ratelimit.middleware';
+export * from './role.middleware';
+export * from './validation.middleware';
+export * from './withParams';
 
-// Prefix route berdasarkan role
-const protectedPrefixes = {
-  admin: "/admin",
-  mentor: "/mentor",
-  student: "/user",
-};
-
-export async function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl;
-
-  // 1. Izinkan akses ke route publik
-  if (publicRoutes.some((route) => pathname.startsWith(route))) {
-    return NextResponse.next();
-  }
-
-  // 2. Ambil token dari cookies
-  const token = request.cookies.get("accessToken")?.value;
-  if (!token) {
-    return NextResponse.redirect(new URL("/login", request.url));
-  }
-
-  try {
-    // 3. Verifikasi token
-    const payload = verifyAccessToken(token);
-
-    // 4. Ambil data user dari database
-    const user = await prisma.user.findUnique({
-      where: { id: payload.userId },
-      select: { id: true, role: true, status: true },
-    });
-
-    // 5. Validasi user
-    if (!user || user.status !== USER_STATUS.ACTIVE) {
-      return NextResponse.redirect(new URL("/login", request.url));
+// Compose multiple middlewares
+export function composeMiddlewares(
+  ...middlewares: ((request: NextRequest) => NextResponse | null | Promise<NextResponse | null>)[]
+) {
+  return async (request: NextRequest): Promise<NextResponse | null> => {
+    for (const middleware of middlewares) {
+      const result = await middleware(request);
+      if (result) return result;
     }
-
-    // 6. Proteksi berdasarkan role dan route
-    const role = user.role.toUpperCase();
-    const isStudentRoute = pathname.startsWith(protectedPrefixes.student);
-    const isMentorRoute = pathname.startsWith(protectedPrefixes.mentor);
-    const isAdminRoute = pathname.startsWith(protectedPrefixes.admin);
-
-    // Cek akses berdasarkan role
-    if (
-      (isStudentRoute && role !== USER_ROLES.STUDENT) ||
-      (isMentorRoute &&
-        ![USER_ROLES.MENTOR, USER_ROLES.ADMIN].includes(role)) ||
-      (isAdminRoute && role !== USER_ROLES.ADMIN)
-    ) {
-      // Redirect ke login untuk semua kasus unauthorized
-      return NextResponse.redirect(new URL("/login", request.url));
-    }
-
-    return NextResponse.next();
-  } catch (error) {
-    console.error("Middleware error:", error);
-    return NextResponse.redirect(new URL("/login", request.url));
-  }
+    return null;
+  };
 }
 
-// Konfigurasi matcher untuk middleware
-export const config = {
-  matcher: [
-    /*
-     * Match semua route kecuali:
-     * - API routes (/api/)
-     * - File statis (_next/static, _next/image, favicon.ico)
-     */
-    "/((?!api|_next/static|_next/image|favicon.ico).*)",
-  ],
-};
+// Chain middleware with handler
+export function withMiddleware(
+  middlewares: ((request: NextRequest) => NextResponse | null | Promise<NextResponse | null>)[],
+  handler: (request: NextRequest, ...args: unknown[]) => Promise<NextResponse>
+) {
+  return async (request: NextRequest, ...args: unknown[]): Promise<NextResponse> => {
+    // Run middlewares
+    for (const middleware of middlewares) {
+      const result = await middleware(request);
+      if (result) return result;
+    }
+    
+    // Run handler
+    return handler(request, ...args);
+  };
+}
+
+// Create API route with common middleware
+export function createApiRoute(
+  handler: (request: NextRequest, ...args: unknown[]) => Promise<NextResponse>,
+  options?: {
+    rateLimit?: boolean;
+    logging?: boolean;
+    cors?: boolean;
+  }
+) {
+  const middlewares: ((request: NextRequest) => NextResponse | null)[] = [];
+  
+  // CORS is handled differently - just add headers
+  
+  return async (request: NextRequest, ...args: unknown[]): Promise<NextResponse> => {
+    // Run middlewares
+    for (const middleware of middlewares) {
+      const result = middleware(request);
+      if (result) return result;
+    }
+    
+    // Run handler
+    try {
+      return await handler(request, ...args);
+    } catch (error) {
+      console.error('API Error:', error);
+      return NextResponse.json(
+        { error: 'Terjadi kesalahan server' },
+        { status: 500 }
+      );
+    }
+  };
+}

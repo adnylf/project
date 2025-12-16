@@ -1,58 +1,44 @@
-import { NextRequest } from "next/server";
-import commentService from "@/services/comment.service";
-import { successResponse, errorResponse } from "@/utils/response.util";
-import { errorHandler } from "@/middlewares/error.middleware";
-import { requireAuth } from "@/middlewares/auth.middleware";
-import { corsMiddleware } from "@/middlewares/cors.middleware";
-import { loggingMiddleware } from "@/middlewares/logging.middleware";
-import { HTTP_STATUS } from "@/lib/constants";
+import { NextRequest, NextResponse } from 'next/server';
+import prisma from '@/lib/prisma';
+import { getAuthUser, unauthorizedResponse } from '@/lib/auth';
+import { reportSchema } from '@/lib/validation';
 
-/**
- * POST /api/comments/report
- * Report inappropriate comment
- */
-async function handler(
-  request: NextRequest,
-  { user }: { user: { userId: string; email: string; role: string } }
-) {
+// POST /api/comments/report - Report a comment
+export async function POST(request: NextRequest) {
   try {
+    const authUser = getAuthUser(request);
+    if (!authUser) return unauthorizedResponse();
+
     const body = await request.json();
-    const { commentId, reason } = body;
+    const { comment_id, reason, description } = body;
 
-    if (!commentId || !reason) {
-      return errorResponse(
-        "Comment ID and reason are required",
-        HTTP_STATUS.BAD_REQUEST
-      );
+    if (!comment_id) {
+      return NextResponse.json({ error: 'Comment ID wajib diisi' }, { status: 400 });
     }
 
-    if (reason.trim().length < 10) {
-      return errorResponse(
-        "Reason must be at least 10 characters",
-        HTTP_STATUS.BAD_REQUEST
-      );
+    const result = reportSchema.safeParse({ reason, description });
+    if (!result.success) {
+      return NextResponse.json({ error: 'Validasi gagal', details: result.error.flatten().fieldErrors }, { status: 400 });
     }
 
-    const result = await commentService.reportComment(
-      commentId,
-      user.userId,
-      reason
-    );
+    const comment = await prisma.comment.findUnique({ where: { id: comment_id } });
+    if (!comment) {
+      return NextResponse.json({ error: 'Komentar tidak ditemukan' }, { status: 404 });
+    }
 
-    return successResponse(result, result.message);
+    await prisma.activityLog.create({
+      data: {
+        user_id: authUser.userId,
+        action: 'REPORT_COMMENT',
+        entity_type: 'comment',
+        entity_id: comment_id,
+        metadata: { reason: result.data.reason, description: result.data.description },
+      },
+    });
+
+    return NextResponse.json({ message: 'Laporan berhasil dikirim' });
   } catch (error) {
-    if (error instanceof Error) {
-      return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
-    }
-    return errorResponse(
-      "Failed to report comment",
-      HTTP_STATUS.INTERNAL_SERVER_ERROR
-    );
+    console.error('Report comment error:', error);
+    return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 });
   }
 }
-
-const authenticatedHandler = requireAuth(handler);
-
-export const POST = errorHandler(
-  loggingMiddleware(corsMiddleware(authenticatedHandler))
-);

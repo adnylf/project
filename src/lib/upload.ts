@@ -1,165 +1,144 @@
-import multer from 'multer';
-import path from 'path';
+// File upload utilities
 import { storageConfig } from '@/config/storage.config';
-import { generateUniqueFilename } from '@/utils/file.util';
+import { mkdir, writeFile } from 'fs/promises';
+import path from 'path';
+import { generateFilename, validateFileType, validateFileSize, getUploadPath } from './storage';
 
-/**
- * Multer Storage Configuration for Local Storage
- */
-const localStorage = multer.diskStorage({
-  destination: (_req, file, cb) => {
-    // Determine destination based on file type
-    let destination = storageConfig.local.basePath;
+type UploadCategory = 'image' | 'video' | 'document';
 
-    if (file.mimetype.startsWith('video/')) {
-      destination = path.join(destination, storageConfig.local.directories.videos.originals);
-    } else if (file.mimetype.startsWith('image/')) {
-      destination = path.join(destination, storageConfig.local.directories.images.courses);
-    } else {
-      destination = path.join(destination, storageConfig.local.directories.documents.others);
-    }
-
-    cb(null, destination);
-  },
-  filename: (_req, file, cb) => {
-    // Generate unique filename
-    const uniqueFilename = generateUniqueFilename(file.originalname);
-    cb(null, uniqueFilename);
-  },
-});
-
-/**
- * File Filter for Validation
- */
-const fileFilter = (
-  _req: unknown,
-  file: Express.Multer.File,
-  cb: multer.FileFilterCallback
-): void => {
-  const allowedTypes = [
-    ...storageConfig.limits.allowedVideoTypes,
-    ...storageConfig.limits.allowedImageTypes,
-    ...storageConfig.limits.allowedDocumentTypes,
-  ];
-
-  if (allowedTypes.includes(file.mimetype as (typeof allowedTypes)[number])) {
-    cb(null, true);
-  } else {
-    cb(new Error(`File type ${file.mimetype} is not allowed`));
-  }
-};
-
-/**
- * Video Upload Configuration
- */
-export const videoUpload = multer({
-  storage: localStorage,
-  limits: {
-    fileSize: storageConfig.limits.maxVideoSize,
-  },
-  fileFilter: (_req, file, cb) => {
-    const videoTypes = storageConfig.limits.allowedVideoTypes;
-    if ((videoTypes as readonly string[]).includes(file.mimetype)) {
-      cb(null, true);
-    } else {
-      cb(new Error('Only video files are allowed'));
-    }
-  },
-});
-
-/**
- * Image Upload Configuration
- */
-export const imageUpload = multer({
-  storage: localStorage,
-  limits: {
-    fileSize: storageConfig.limits.maxImageSize,
-  },
-  fileFilter: (_req, file, cb) => {
-    const imageTypes = storageConfig.limits.allowedImageTypes;
-    if ((imageTypes as readonly string[]).includes(file.mimetype)) {
-      cb(null, true);
-    } else {
-      cb(new Error('Only image files are allowed'));
-    }
-  },
-});
-
-/**
- * Document Upload Configuration
- */
-export const documentUpload = multer({
-  storage: localStorage,
-  limits: {
-    fileSize: storageConfig.limits.maxDocumentSize,
-  },
-  fileFilter: (_req, file, cb) => {
-    const documentTypes = storageConfig.limits.allowedDocumentTypes;
-    if ((documentTypes as readonly string[]).includes(file.mimetype)) {
-      cb(null, true);
-    } else {
-      cb(new Error('Only document files are allowed'));
-    }
-  },
-});
-
-/**
- * General Upload Configuration
- */
-export const generalUpload = multer({
-  storage: localStorage,
-  limits: {
-    fileSize: storageConfig.limits.maxVideoSize, // Use max size
-  },
-  fileFilter,
-});
-
-/**
- * Memory Storage (for processing before saving)
- */
-export const memoryUpload = multer({
-  storage: multer.memoryStorage(),
-  limits: {
-    fileSize: storageConfig.limits.maxVideoSize,
-  },
-  fileFilter,
-});
-
-/**
- * Upload Handler Wrapper for Next.js API Routes
- */
-export function uploadHandler(
-  upload: multer.Multer,
-  fieldName: string = 'file'
-): (req: Express.Request, res: Express.Response) => Promise<void> {
-  return (req: Express.Request, res: Express.Response) =>
-    new Promise<void>((resolve, reject) => {
-      upload.single(fieldName)(req as never, res as never, (err: unknown) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve();
-        }
-      });
-    });
+interface UploadResult {
+  success: boolean;
+  filename?: string;
+  path?: string;
+  url?: string;
+  size?: number;
+  mimeType?: string;
+  error?: string;
 }
 
-/**
- * Multiple Files Upload Handler
- */
-export function uploadMultipleHandler(
-  upload: multer.Multer,
-  fieldName: string = 'files',
-  maxCount: number = 10
-): (req: Express.Request, res: Express.Response) => Promise<void> {
-  return (req: Express.Request, res: Express.Response) =>
-    new Promise<void>((resolve, reject) => {
-      upload.array(fieldName, maxCount)(req as never, res as never, (err: unknown) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve();
-        }
-      });
-    });
+interface UploadOptions {
+  category: UploadCategory;
+  subPath?: string;
+  prefix?: string;
+  maxSize?: number;
+  allowedTypes?: string[];
+}
+
+// Process file upload from FormData
+export async function processFileUpload(
+  file: File,
+  options: UploadOptions
+): Promise<UploadResult> {
+  try {
+    const { category, subPath, prefix } = options;
+    
+    // Validate file type
+    const allowedTypes = options.allowedTypes || storageConfig.allowedTypes[category];
+    if (!allowedTypes?.includes(file.type)) {
+      return {
+        success: false,
+        error: `Format file tidak didukung. Gunakan: ${allowedTypes?.join(', ')}`,
+      };
+    }
+    
+    // Validate file size
+    const maxSize = options.maxSize || storageConfig.limits[category];
+    if (file.size > maxSize) {
+      const maxSizeMB = (maxSize / (1024 * 1024)).toFixed(0);
+      return {
+        success: false,
+        error: `Ukuran file maksimal ${maxSizeMB}MB`,
+      };
+    }
+    
+    // Get upload directory
+    const uploadDir = getUploadPath(category, subPath);
+    await mkdir(uploadDir, { recursive: true });
+    
+    // Generate filename
+    const filename = generateFilename(file.name, prefix);
+    const filepath = path.join(uploadDir, filename);
+    
+    // Save file
+    const bytes = await file.arrayBuffer();
+    const uint8Array = new Uint8Array(bytes);
+    await writeFile(filepath, uint8Array);
+    
+    // Generate relative path for URL
+    const relativePath = path.relative(storageConfig.uploadDir, filepath).replace(/\\/g, '/');
+    const url = `/uploads/${relativePath}`;
+    
+    return {
+      success: true,
+      filename,
+      path: filepath,
+      url,
+      size: file.size,
+      mimeType: file.type,
+    };
+  } catch (error) {
+    console.error('Upload error:', error);
+    return {
+      success: false,
+      error: 'Gagal mengupload file',
+    };
+  }
+}
+
+// Upload profile picture
+export async function uploadProfilePicture(file: File, userId: string): Promise<UploadResult> {
+  return processFileUpload(file, {
+    category: 'image',
+    subPath: 'profiles',
+    prefix: `profile_${userId}`,
+    maxSize: 5 * 1024 * 1024, // 5MB
+  });
+}
+
+// Upload course thumbnail
+export async function uploadCourseThumbnail(file: File, courseId: string): Promise<UploadResult> {
+  return processFileUpload(file, {
+    category: 'image',
+    subPath: 'courses',
+    prefix: `thumbnail_${courseId}`,
+    maxSize: 10 * 1024 * 1024, // 10MB
+  });
+}
+
+// Upload course video
+export async function uploadCourseVideo(file: File, materialId: string): Promise<UploadResult> {
+  return processFileUpload(file, {
+    category: 'video',
+    prefix: `video_${materialId}`,
+    maxSize: 500 * 1024 * 1024, // 500MB
+  });
+}
+
+// Upload course document
+export async function uploadCourseDocument(file: File, materialId: string): Promise<UploadResult> {
+  return processFileUpload(file, {
+    category: 'document',
+    prefix: `doc_${materialId}`,
+    maxSize: 50 * 1024 * 1024, // 50MB
+  });
+}
+
+// Get file extension
+export function getFileExtension(filename: string): string {
+  return path.extname(filename).toLowerCase().slice(1);
+}
+
+// Check if file is image
+export function isImageFile(mimeType: string): boolean {
+  return storageConfig.allowedTypes.image.includes(mimeType);
+}
+
+// Check if file is video
+export function isVideoFile(mimeType: string): boolean {
+  return storageConfig.allowedTypes.video.includes(mimeType);
+}
+
+// Check if file is document
+export function isDocumentFile(mimeType: string): boolean {
+  return storageConfig.allowedTypes.document.includes(mimeType);
 }

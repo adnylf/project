@@ -1,132 +1,138 @@
-import { NextRequest } from 'next/server';
-import userService from '@/services/user.service';
-import { updateProfileSchema } from '@/lib/validation';
-import {
-  successResponse,
-  validationErrorResponse,
-  errorResponse,
-  noContentResponse,
-} from '@/utils/response.util';
-import { validateData } from '@/utils/validation.util';
-import { authMiddleware, getAuthenticatedUser } from '@/middlewares/auth.middleware';
-import { HTTP_STATUS, USER_ROLES } from '@/lib/constants';
+import { NextRequest, NextResponse } from 'next/server';
+import prisma from '@/lib/prisma';
+import { getAuthUser, hasRole, unauthorizedResponse, forbiddenResponse } from '@/lib/auth';
+import { updateUserSchema } from '@/lib/validation';
+import { UserRole } from '@prisma/client';
 
-/**
- * GET /api/users/:id
- * Get user by ID
- */
-export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+interface RouteParams {
+  params: { id: string };
+}
+
+// GET /api/users/[id] - Get user by ID
+export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
-    // Auth check
-    const authResult = await authMiddleware(request);
-    if (authResult) return authResult;
+    const authUser = getAuthUser(request);
+    if (!authUser) return unauthorizedResponse();
 
-    const user = getAuthenticatedUser(request);
+    const { id } = params;
+    const isAdmin = hasRole(authUser, [UserRole.ADMIN]);
+    const isSelf = authUser.userId === id;
+
+    if (!isAdmin && !isSelf) return forbiddenResponse();
+
+    const user = await prisma.user.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        email: true,
+        full_name: true,
+        role: true,
+        status: true,
+        disability_type: true,
+        avatar_url: true,
+        bio: true,
+        phone: true,
+        date_of_birth: true,
+        address: true,
+        city: true,
+        email_verified: true,
+        last_login: true,
+        created_at: true,
+        updated_at: true,
+        mentor_profile: isAdmin ? {
+          select: { id: true, status: true, expertise: true },
+        } : false,
+        _count: {
+          select: { enrollments: true, certificates: true, reviews: true },
+        },
+      },
+    });
+
     if (!user) {
-      return errorResponse('Unauthorized', HTTP_STATUS.UNAUTHORIZED);
+      return NextResponse.json({ error: 'User tidak ditemukan' }, { status: 404 });
     }
 
-    const { id: targetUserId } = await params;
-
-    // Users can view their own profile, admins can view any profile
-    if (user.userId !== targetUserId && user.role !== USER_ROLES.ADMIN) {
-      return errorResponse('Insufficient permissions', HTTP_STATUS.FORBIDDEN);
-    }
-
-    // Get user
-    const userData = await userService.getUserById(targetUserId);
-
-    return successResponse(userData, 'User retrieved successfully');
+    return NextResponse.json({ user });
   } catch (error) {
-    if (error instanceof Error) {
-      return errorResponse(error.message, HTTP_STATUS.NOT_FOUND);
-    }
-    return errorResponse('Failed to get user', HTTP_STATUS.INTERNAL_SERVER_ERROR);
+    console.error('Get user error:', error);
+    return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 });
   }
 }
 
-/**
- * PUT /api/users/:id
- * Update user by ID
- */
-export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+// PUT /api/users/[id] - Update user (admin only)
+export async function PUT(request: NextRequest, { params }: RouteParams) {
   try {
-    // Auth check
-    const authResult = await authMiddleware(request);
-    if (authResult) return authResult;
+    const authUser = getAuthUser(request);
+    if (!authUser) return unauthorizedResponse();
+    if (!hasRole(authUser, [UserRole.ADMIN])) return forbiddenResponse();
 
-    const user = getAuthenticatedUser(request);
-    if (!user) {
-      return errorResponse('Unauthorized', HTTP_STATUS.UNAUTHORIZED);
-    }
-
-    const { id: targetUserId } = await params;
-
-    // Users can update their own profile, admins can update any profile
-    if (user.userId !== targetUserId && user.role !== USER_ROLES.ADMIN) {
-      return errorResponse('Insufficient permissions', HTTP_STATUS.FORBIDDEN);
-    }
-
-    // Parse request body
+    const { id } = params;
     const body = await request.json();
 
-    // Validate input
-    const validation = await validateData(updateProfileSchema, body);
-
-    if (!validation.success) {
-      return validationErrorResponse(validation.errors);
+    const result = updateUserSchema.safeParse(body);
+    if (!result.success) {
+      return NextResponse.json(
+        { error: 'Validasi gagal', details: result.error.flatten().fieldErrors },
+        { status: 400 }
+      );
     }
 
-    // Update user
-    const updatedUser = await userService.updateUser(targetUserId, validation.data);
+    const user = await prisma.user.update({
+      where: { id },
+      data: result.data,
+      select: {
+        id: true,
+        email: true,
+        full_name: true,
+        role: true,
+        status: true,
+        updated_at: true,
+      },
+    });
 
-    return successResponse(updatedUser, 'User updated successfully');
+    await prisma.activityLog.create({
+      data: {
+        user_id: authUser.userId,
+        action: 'UPDATE_USER',
+        entity_type: 'user',
+        entity_id: id,
+      },
+    });
+
+    return NextResponse.json({ message: 'User berhasil diperbarui', user });
   } catch (error) {
-    if (error instanceof Error) {
-      return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
-    }
-    return errorResponse('Failed to update user', HTTP_STATUS.INTERNAL_SERVER_ERROR);
+    console.error('Update user error:', error);
+    return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 });
   }
 }
 
-/**
- * DELETE /api/users/:id
- * Delete user by ID (soft delete)
- */
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+// DELETE /api/users/[id] - Delete user (admin only)
+export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
-    // Auth check
-    const authResult = await authMiddleware(request);
-    if (authResult) return authResult;
+    const authUser = getAuthUser(request);
+    if (!authUser) return unauthorizedResponse();
+    if (!hasRole(authUser, [UserRole.ADMIN])) return forbiddenResponse();
 
-    const user = getAuthenticatedUser(request);
-    if (!user) {
-      return errorResponse('Unauthorized', HTTP_STATUS.UNAUTHORIZED);
+    const { id } = params;
+
+    if (id === authUser.userId) {
+      return NextResponse.json({ error: 'Tidak dapat menghapus akun sendiri' }, { status: 400 });
     }
 
-    // Only admin can delete users
-    if (user.role !== USER_ROLES.ADMIN) {
-      return errorResponse('Insufficient permissions', HTTP_STATUS.FORBIDDEN);
-    }
+    await prisma.user.delete({ where: { id } });
 
-    const { id: targetUserId } = await params;
+    await prisma.activityLog.create({
+      data: {
+        user_id: authUser.userId,
+        action: 'DELETE_USER',
+        entity_type: 'user',
+        entity_id: id,
+      },
+    });
 
-    // Prevent self-deletion
-    if (user.userId === targetUserId) {
-      return errorResponse('Cannot delete your own account', HTTP_STATUS.BAD_REQUEST);
-    }
-
-    // Delete user (soft delete)
-    await userService.deleteUser(targetUserId);
-
-    return noContentResponse();
+    return NextResponse.json({ message: 'User berhasil dihapus' });
   } catch (error) {
-    if (error instanceof Error) {
-      return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
-    }
-    return errorResponse('Failed to delete user', HTTP_STATUS.INTERNAL_SERVER_ERROR);
+    console.error('Delete user error:', error);
+    return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 });
   }
 }

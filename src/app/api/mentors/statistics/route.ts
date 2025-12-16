@@ -1,286 +1,51 @@
-import { NextRequest, NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
-import mentorService from "@/services/mentor.service";
-import { successResponse, errorResponse } from "@/utils/response.util";
-import { errorHandler } from "@/middlewares/error.middleware";
-import { authMiddleware } from "@/middlewares/auth.middleware";
-import { corsMiddleware } from "@/middlewares/cors.middleware";
-import { loggingMiddleware } from "@/middlewares/logging.middleware";
-import { HTTP_STATUS } from "@/lib/constants";
+import { NextRequest, NextResponse } from 'next/server';
+import prisma from '@/lib/prisma';
+import { getAuthUser, unauthorizedResponse, hasRole } from '@/lib/auth';
+import { UserRole } from '@prisma/client';
 
-/**
- * GET /api/mentors/statistics
- * Get comprehensive mentor statistics
- */
-async function handler(request: NextRequest, user: any) {
+// GET /api/mentors/statistics - Get mentor's statistics
+export async function GET(request: NextRequest) {
   try {
-    // Get mentor profile
-    const mentor = await mentorService.getMentorByUserId(user.userId);
+    const authUser = getAuthUser(request);
+    if (!authUser) return unauthorizedResponse();
+    if (!hasRole(authUser, [UserRole.MENTOR, UserRole.ADMIN])) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
 
-    // Date ranges for analytics
-    const now = new Date();
-    const lastMonth = new Date(
-      now.getFullYear(),
-      now.getMonth() - 1,
-      now.getDate()
-    );
-    const lastWeek = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const mentorProfile = await prisma.mentorProfile.findUnique({
+      where: { user_id: authUser.userId },
+    });
 
-    // Parallel queries for better performance
-    const [
-      // Course statistics
-      totalCourses,
-      publishedCourses,
-      draftCourses,
+    if (!mentorProfile) {
+      return NextResponse.json({ error: 'Profil mentor tidak ditemukan' }, { status: 404 });
+    }
 
-      // Student statistics
-      totalStudents,
-      activeStudents,
-      newStudentsThisMonth,
-      newStudentsThisWeek,
+    const courses = await prisma.course.findMany({
+      where: { mentor_id: mentorProfile.id },
+      select: { id: true, status: true },
+    });
 
-      // Engagement statistics
-      totalEnrollments,
-      completedEnrollments,
-      averageProgress,
+    const courseIds = courses.map(c => c.id);
 
-      // Revenue statistics
-      totalRevenue,
-      revenueThisMonth,
-      revenueLastMonth,
-
-      // Review statistics
-      averageRating,
-      totalReviews,
-      reviewsThisMonth,
-
-      // Certificate statistics
-      totalCertificates,
-
-      // Top performing courses
-      topCourses,
-    ] = await Promise.all([
-      // Courses
-      prisma.course.count({ where: { mentor_id: mentor.id } }),
-      prisma.course.count({
-        where: { mentor_id: mentor.id, status: "PUBLISHED" },
-      }),
-      prisma.course.count({ where: { mentor_id: mentor.id, status: "DRAFT" } }),
-
-      // Students
-      prisma.enrollment
-        .findMany({
-          where: { course: { mentor_id: mentor.id } },
-          distinct: ["user_id"],
-          select: { user_id: true },
-        })
-        .then((enrollments: any[]) => enrollments.length),
-
-      prisma.enrollment.count({
-        where: {
-          course: { mentor_id: mentor.id },
-          status: "ACTIVE",
-        },
-      }),
-
-      prisma.enrollment
-        .findMany({
-          where: {
-            course: { mentor_id: mentor.id },
-            created_at: { gte: lastMonth },
-          },
-          distinct: ["user_id"],
-          select: { user_id: true },
-        })
-        .then((enrollments: any[]) => enrollments.length),
-
-      prisma.enrollment
-        .findMany({
-          where: {
-            course: { mentor_id: mentor.id },
-            created_at: { gte: lastWeek },
-          },
-          distinct: ["user_id"],
-          select: { user_id: true },
-        })
-        .then((enrollments: any[]) => enrollments.length),
-
-      // Enrollments
-      prisma.enrollment.count({
-        where: { course: { mentor_id: mentor.id } },
-      }),
-
-      prisma.enrollment.count({
-        where: {
-          course: { mentor_id: mentor.id },
-          status: "COMPLETED",
-        },
-      }),
-
-      prisma.enrollment
-        .aggregate({
-          where: { course: { mentor_id: mentor.id } },
-          _avg: { progress: true },
-        })
-        .then((result: any) => result._avg.progress || 0),
-
-      // Revenue
-      prisma.transaction
-        .aggregate({
-          where: {
-            status: "PAID",
-            course: { mentor_id: mentor.id },
-          },
-          _sum: { total_amount: true },
-        })
-        .then((result: any) => result._sum.total_amount || 0),
-
-      prisma.transaction
-        .aggregate({
-          where: {
-            status: "PAID",
-            course: { mentor_id: mentor.id },
-            paid_at: { gte: lastMonth },
-          },
-          _sum: { total_amount: true },
-        })
-        .then((result: any) => result._sum.total_amount || 0),
-
-      prisma.transaction
-        .aggregate({
-          where: {
-            status: "PAID",
-            course: { mentor_id: mentor.id },
-            paid_at: {
-              gte: new Date(
-                lastMonth.getFullYear(),
-                lastMonth.getMonth() - 1,
-                lastMonth.getDate()
-              ),
-              lt: lastMonth,
-            },
-          },
-          _sum: { total_amount: true },
-        })
-        .then((result: any) => result._sum.total_amount || 0),
-
-      // Reviews
-      prisma.review
-        .aggregate({
-          where: { course: { mentor_id: mentor.id } },
-          _avg: { rating: true },
-        })
-        .then((result: any) => result._avg.rating || 0),
-
-      prisma.review.count({
-        where: { course: { mentor_id: mentor.id } },
-      }),
-
-      prisma.review.count({
-        where: {
-          course: { mentor_id: mentor.id },
-          created_at: { gte: lastMonth },
-        },
-      }),
-
-      // Certificates
-      prisma.certificate.count({
-        where: {
-          enrollment: {
-            course: { mentor_id: mentor.id },
-          },
-          status: "ISSUED",
-        },
-      }),
-
-      // Top courses
-      prisma.course.findMany({
-        where: {
-          mentor_id: mentor.id,
-          status: "PUBLISHED",
-        },
-        orderBy: [{ total_students: "desc" }, { average_rating: "desc" }],
-        take: 5,
-        select: {
-          id: true,
-          title: true,
-          slug: true,
-          thumbnail: true,
-          total_students: true,
-          average_rating: true,
-          total_reviews: true,
-        },
+    const [totalEnrollments, totalReviews, totalRevenue] = await Promise.all([
+      prisma.enrollment.count({ where: { course_id: { in: courseIds } } }),
+      prisma.review.count({ where: { course_id: { in: courseIds } } }),
+      prisma.transaction.aggregate({
+        where: { course_id: { in: courseIds }, status: 'PAID' },
+        _sum: { total_amount: true },
       }),
     ]);
 
-    // Calculate completion rate
-    const completionRate =
-      totalEnrollments > 0
-        ? (completedEnrollments / totalEnrollments) * 100
-        : 0;
-
-    // Calculate revenue growth
-    const revenueGrowth =
-      revenueLastMonth > 0
-        ? ((revenueThisMonth - revenueLastMonth) / revenueLastMonth) * 100
-        : 0;
-
-    // Build response
-    const statistics = {
-      overview: {
-        totalCourses,
-        publishedCourses,
-        draftCourses,
-        totalStudents,
-        activeStudents,
-        totalRevenue,
-        averageRating: Math.round(averageRating * 10) / 10,
-        totalReviews,
-      },
-
-      engagement: {
-        totalEnrollments,
-        completedEnrollments,
-        averageProgress: Math.round(averageProgress * 10) / 10,
-        completionRate: Math.round(completionRate * 10) / 10,
-        totalCertificates,
-      },
-
-      growth: {
-        newStudentsThisWeek,
-        newStudentsThisMonth,
-        reviewsThisMonth,
-        revenueThisMonth,
-        revenueLastMonth,
-        revenueGrowth: Math.round(revenueGrowth * 10) / 10,
-      },
-
-      topCourses,
-    };
-
-    return successResponse(statistics, "Statistics retrieved successfully");
+    return NextResponse.json({
+      total_courses: courses.length,
+      published_courses: courses.filter(c => c.status === 'PUBLISHED').length,
+      total_students: totalEnrollments,
+      total_reviews: totalReviews,
+      average_rating: mentorProfile.average_rating,
+      total_revenue: totalRevenue._sum.total_amount || 0,
+    });
   } catch (error) {
-    if (error instanceof Error) {
-      return errorResponse(error.message, HTTP_STATUS.NOT_FOUND);
-    }
-    return errorResponse(
-      "Failed to get statistics",
-      HTTP_STATUS.INTERNAL_SERVER_ERROR
-    );
+    console.error('Get mentor statistics error:', error);
+    return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 });
   }
 }
-
-// Apply middlewares and export
-async function authenticatedHandler(
-  request: NextRequest
-): Promise<NextResponse> {
-  const authResult = await authMiddleware(request);
-  if (authResult instanceof NextResponse) {
-    return authResult;
-  }
-  return handler(request, authResult);
-}
-
-export const GET = errorHandler(
-  loggingMiddleware(corsMiddleware(authenticatedHandler))
-);

@@ -1,0 +1,319 @@
+<html><head><meta charset="utf-8"/><title>Laporan Pengujian Whitebox - E-Learning Platform</title><style type="text/css">:root {
+  --text-primary: #111;
+  --text-secondary: #4f4f4f;
+  --success: #006633;
+  --success-bright: #80ffbf;
+  --danger: #cc071e;
+  --danger-bright: #fbdfe0;
+  --warning: #995c00;
+  --warning-bright: #ffeea8;
+  --panel: #eee;
+  --border: #949494;
+  --disabled: #6b6b6b;
+}
+
+html,
+body {
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 16px;
+  margin: 0;
+  padding: 0;
+  color: var(--text-primary);
+}
+body {
+  padding: 2rem 1rem;
+}
+.jesthtml-content {
+  margin: 0 auto;
+  max-width: 70rem;
+}
+header {
+  display: flex;
+  align-items: center;
+}
+#title {
+  margin: 0;
+  flex-grow: 1;
+}
+#logo {
+  height: 4rem;
+}
+#timestamp {
+  color: var(--text-secondary);
+  margin-top: 0.5rem;
+}
+
+#metadata-container {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  margin-bottom: 2rem;
+}
+
+.additional-information-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  color: var(--text-secondary);
+}
+
+/** SUMMARY */
+#summary {
+  color: var(--text-primary);
+  display: flex;
+  font-family: monospace;
+  font-size: 1rem;
+}
+#summary > div {
+  margin-right: 0.5rem;
+  background: var(--panel);
+  padding: 1rem;
+  min-width: 15rem;
+}
+#summary > div:last-child {
+  margin-right: 0;
+}
+@media only screen and (max-width: 720px) {
+  #summary {
+    flex-direction: column;
+  }
+  #summary > div {
+    margin-right: 0;
+    margin-top: 1rem;
+  }
+  #summary > div:first-child {
+    margin-top: 0;
+  }
+}
+
+.summary-total {
+  font-weight: bold;
+  margin-bottom: 0.5rem;
+}
+.summary-passed {
+  color: var(--success);
+  border-left: 0.4rem solid var(--success);
+  padding-left: 0.5rem;
+  margin-bottom: 0.15rem;
+}
+.summary-failed,
+.summary-obsolete-snapshots {
+  color: var(--danger);
+  border-left: 0.4rem solid var(--danger);
+  padding-left: 0.5rem;
+  margin-bottom: 0.15rem;
+}
+.summary-pending {
+  color: var(--warning);
+  border-left: 0.4rem solid var(--warning);
+  padding-left: 0.5rem;
+  margin-bottom: 0.15rem;
+}
+.summary-empty {
+  color: var(--disabled);
+  border-left: 0.4rem solid var(--disabled);
+  margin-bottom: 0.15rem;
+}
+
+.test-result {
+  padding: 1rem;
+  margin-bottom: 0.25rem;
+}
+.test-result:last-child {
+  border: 0;
+}
+.test-result.passed {
+  background-color: var(--success-bright);
+  color: var(--success);
+}
+.test-result.failed {
+  background-color: var(--danger-bright);
+  color: var(--danger);
+}
+.test-result.pending {
+  background-color: var(--warning-bright);
+  color: var(--warning);
+}
+
+.test-info {
+  display: flex;
+  justify-content: space-between;
+}
+.test-suitename {
+  width: 20%;
+  text-align: left;
+  font-weight: bold;
+  word-break: break-word;
+}
+.test-title {
+  width: 40%;
+  text-align: left;
+  font-style: italic;
+}
+.test-status {
+  width: 20%;
+  text-align: right;
+}
+.test-duration {
+  width: 10%;
+  text-align: right;
+  font-size: 0.85rem;
+}
+
+.failureMessages {
+  padding: 0 1rem;
+  margin-top: 1rem;
+  border-top: 1px dashed var(--danger);
+}
+.failureMessages.suiteFailure {
+  border-top: none;
+}
+.failureMsg {
+  white-space: pre-wrap;
+  white-space: -moz-pre-wrap;
+  white-space: -pre-wrap;
+  white-space: -o-pre-wrap;
+  word-wrap: break-word;
+}
+
+.suite-container {
+  margin-bottom: 1rem;
+}
+.suite-info {
+  padding: 1rem;
+  background-color: var(--panel);
+  color: var(--text-secondary);
+  border: 0.15rem solid;
+  border-color: var(--panel);
+  display: flex;
+  align-items: center;
+  margin-bottom: 0.25rem;
+}
+.suite-info:hover {
+  border-color: var(--border);
+  cursor: pointer;
+}
+.suite-info .suite-path {
+  word-break: break-all;
+  flex-grow: 1;
+  font-family: monospace;
+  font-size: 1rem;
+}
+.suite-info .suite-time {
+  margin-left: 1rem;
+  padding: 0.2rem 0.3rem;
+  font-size: 0.85rem;
+}
+.suite-info .suite-time.warn {
+  background-color: var(--danger);
+  color: #fff;
+}
+.suite-info:before {
+  content: "\2303";
+  display: inline-block;
+  margin-right: 1rem;
+  transform: rotate(180deg) translateY(0.15rem);
+}
+.suite-container[open] .suite-info:before {
+  transform: rotate(0deg) translateY(0.15rem);
+}
+
+/* CONSOLE LOGS */
+.suite-consolelog {
+  margin-bottom: 0.25rem;
+  padding: 1rem;
+  background-color: var(--panel);
+}
+.suite-consolelog-header {
+  font-weight: bold;
+}
+.suite-consolelog-item {
+  padding: 0.5rem;
+}
+.suite-consolelog-item pre {
+  margin: 0.5rem 0;
+  white-space: pre-wrap;
+  white-space: -moz-pre-wrap;
+  white-space: -pre-wrap;
+  white-space: -o-pre-wrap;
+  word-wrap: break-word;
+}
+.suite-consolelog-item-origin {
+  color: var(--text-secondary);
+  font-weight: bold;
+}
+.suite-consolelog-item-message {
+  color: var(--text-primary);
+  font-size: 1rem;
+  padding: 0 0.5rem;
+}
+
+/* OBSOLETE SNAPSHOTS */
+.suite-obsolete-snapshots {
+  margin-bottom: 0.25rem;
+  padding: 1rem;
+  background-color: var(--danger-bright);
+  color: var(--danger);
+}
+.suite-obsolete-snapshots-header {
+  font-weight: bold;
+}
+.suite-obsolete-snapshots-item {
+  padding: 0.5rem;
+}
+.suite-obsolete-snapshots-item pre {
+  margin: 0.5rem 0;
+  white-space: pre-wrap;
+  white-space: -moz-pre-wrap;
+  white-space: -pre-wrap;
+  white-space: -o-pre-wrap;
+  word-wrap: break-word;
+}
+.suite-obsolete-snapshots-item-message {
+  color: var(--text-primary);
+  font-size: 1rem;
+  padding: 0 0.5rem;
+}
+</style></head><body><main class="jesthtml-content"><header><h1 id="title">Laporan Pengujian Whitebox - E-Learning Platform</h1></header><section id="metadata-container"><div id="timestamp">Started: 2025-12-14 19:19:32</div><div id="summary"><div id="suite-summary"><div class="summary-total">Suites (12)</div><div class="summary-passed ">7 passed</div><div class="summary-failed ">5 failed</div><div class="summary-pending  summary-empty">0 pending</div></div><div id="test-summary"><div class="summary-total">Tests (98)</div><div class="summary-passed ">89 passed</div><div class="summary-failed ">9 failed</div><div class="summary-pending  summary-empty">0 pending</div></div></div></section><details id="suite-1" class="suite-container" open=""><summary class="suite-info"><div class="suite-path">D:\project\tests\unit\services\mentor.service.test.ts</div><div class="suite-time">2.425s</div></summary><div class="suite-tests"><div class="test-result passed"><div class="test-info"><div class="test-suitename">Mentor Service</div><div class="test-title">UT-MNT-001: applyAsMentor() - Apply sebagai mentor</div><div class="test-status">passed</div><div class="test-duration">0.03s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Mentor Service</div><div class="test-title">UT-MNT-002: getMentorProfileByUserId() - Ambil profil mentor</div><div class="test-status">passed</div><div class="test-duration">0.008s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Mentor Service</div><div class="test-title">UT-MNT-003: updateMentorProfile() - Update profil mentor</div><div class="test-status">passed</div><div class="test-duration">0.009s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Mentor Service</div><div class="test-title">UT-MNT-004: approveMentor() - Admin approve mentor</div><div class="test-status">passed</div><div class="test-duration">0.022s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Mentor Service</div><div class="test-title">UT-MNT-005: rejectMentor() - Admin reject mentor</div><div class="test-status">passed</div><div class="test-duration">0.014s</div></div></div></div></details><details id="suite-2" class="suite-container" open=""><summary class="suite-info"><div class="suite-path">D:\project\tests\unit\services\enrollment.service.test.ts</div><div class="suite-time">2.411s</div></summary><div class="suite-tests"><div class="test-result passed"><div class="test-info"><div class="test-suitename">Enrollment Service</div><div class="test-title">UT-ENR-001: enrollUser() - Enroll kursus gratis berhasil</div><div class="test-status">passed</div><div class="test-duration">0.032s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Enrollment Service</div><div class="test-title">UT-ENR-002: enrollUser() - Kursus tidak ditemukan</div><div class="test-status">passed</div><div class="test-duration">0.036s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Enrollment Service</div><div class="test-title">UT-ENR-003: enrollUser() - Kursus belum published</div><div class="test-status">passed</div><div class="test-duration">0.022s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Enrollment Service</div><div class="test-title">UT-ENR-004: enrollUser() - Sudah terdaftar</div><div class="test-status">passed</div><div class="test-duration">0.013s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Enrollment Service</div><div class="test-title">UT-ENR-005: enrollUser() - Kursus berbayar</div><div class="test-status">passed</div><div class="test-duration">0.013s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Enrollment Service</div><div class="test-title">UT-ENR-006: getUserEnrollments() - Ambil enrollments user</div><div class="test-status">passed</div><div class="test-duration">0.016s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Enrollment Service</div><div class="test-title">UT-ENR-007: isUserEnrolled() - User sudah enrolled</div><div class="test-status">passed</div><div class="test-duration">0.035s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Enrollment Service</div><div class="test-title">UT-ENR-008: isUserEnrolled() - User belum enrolled</div><div class="test-status">passed</div><div class="test-duration">0.011s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Enrollment Service</div><div class="test-title">UT-ENR-009: updateProgress() - Update progress material</div><div class="test-status">passed</div><div class="test-duration">0.011s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Enrollment Service</div><div class="test-title">UT-ENR-010: updateEnrollmentProgress() - Hitung progress keseluruhan</div><div class="test-status">passed</div><div class="test-duration">0.045s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Enrollment Service</div><div class="test-title">UT-ENR-011: getContinueLearning() - Ambil kursus yang sedang dipelajari</div><div class="test-status">passed</div><div class="test-duration">0.015s</div></div></div></div></details><details id="suite-3" class="suite-container" open=""><summary class="suite-info"><div class="suite-path">D:\project\tests\unit\services\transaction.service.test.ts</div><div class="suite-time">2.459s</div></summary><div class="suite-tests"><div class="test-result passed"><div class="test-info"><div class="test-suitename">Transaction Service</div><div class="test-title">UT-TRX-001: createTransaction() - Buat transaksi baru</div><div class="test-status">passed</div><div class="test-duration">0.04s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Transaction Service</div><div class="test-title">UT-TRX-002: getTransactionById() - Ambil transaksi valid</div><div class="test-status">passed</div><div class="test-duration">0.021s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Transaction Service</div><div class="test-title">UT-TRX-003: updateTransactionStatus() - Update status ke PAID</div><div class="test-status">passed</div><div class="test-duration">0.045s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Transaction Service</div><div class="test-title">UT-TRX-004: getUserTransactions() - Ambil transaksi user</div><div class="test-status">passed</div><div class="test-duration">0.041s</div></div></div></div></details><details id="suite-4" class="suite-container" open=""><summary class="suite-info"><div class="suite-path">D:\project\tests\integration\api\admin.test.ts</div><div class="suite-time">2.749s</div></summary><div class="suite-tests"><div class="test-result passed"><div class="test-info"><div class="test-suitename">Admin API Routes</div><div class="test-title">IT-ADM-001: GET /api/admin/users - Ambil semua users (Admin token)</div><div class="test-status">passed</div><div class="test-duration">0.136s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Admin API Routes</div><div class="test-title">IT-ADM-002: GET /api/admin/users - Akses tanpa admin (Student token)</div><div class="test-status">passed</div><div class="test-duration">0.015s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Admin API Routes</div><div class="test-title">IT-ADM-003: PUT /api/admin/courses/[id]/approve - Approve kursus</div><div class="test-status">passed</div><div class="test-duration">0.043s</div></div></div><div class="test-result failed"><div class="test-info"><div class="test-suitename">Admin API Routes</div><div class="test-title">IT-ADM-004: PUT /api/admin/mentors/[id]/approve - Approve mentor</div><div class="test-status">failed</div><div class="test-duration">0.035s</div></div><div class="failureMessages"> <pre class="failureMsg">TypeError: PUT is not a function
+    at Object.PUT (D:\project\tests\integration\api\admin.test.ts:79:23)
+    at processTicksAndRejections (node:internal/process/task_queues:105:5)</pre></div></div></div></details><details id="suite-5" class="suite-container" open=""><summary class="suite-info"><div class="suite-path">D:\project\tests\unit\services\course.service.test.ts</div><div class="suite-time">2.823s</div></summary><div class="suite-tests"><div class="test-result passed"><div class="test-info"><div class="test-suitename">Course Service</div><div class="test-title">UT-CRS-001: createCourse() - Buat kursus baru berhasil</div><div class="test-status">passed</div><div class="test-duration">0.043s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Course Service</div><div class="test-title">UT-CRS-002: getCourseById() - Ambil kursus dengan ID valid</div><div class="test-status">passed</div><div class="test-duration">0.014s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Course Service</div><div class="test-title">UT-CRS-003: getCourseById() - Kursus tidak ditemukan</div><div class="test-status">passed</div><div class="test-duration">0.025s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Course Service</div><div class="test-title">UT-CRS-004: getCourseBySlug() - Ambil kursus dengan slug valid</div><div class="test-status">passed</div><div class="test-duration">0.009s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Course Service</div><div class="test-title">UT-CRS-005: updateCourse() - Update kursus berhasil</div><div class="test-status">passed</div><div class="test-duration">0.008s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Course Service</div><div class="test-title">UT-CRS-006: updateCourse() - Bukan pemilik kursus</div><div class="test-status">passed</div><div class="test-duration">0.056s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Course Service</div><div class="test-title">UT-CRS-007: deleteCourse() - Hapus kursus berhasil</div><div class="test-status">passed</div><div class="test-duration">0.01s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Course Service</div><div class="test-title">UT-CRS-008: deleteCourse() - Admin hapus kursus</div><div class="test-status">passed</div><div class="test-duration">0.013s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Course Service</div><div class="test-title">UT-CRS-009: getCourses() - Filter berdasarkan status</div><div class="test-status">passed</div><div class="test-duration">0.021s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Course Service</div><div class="test-title">UT-CRS-010: getCourses() - Filter berdasarkan category</div><div class="test-status">passed</div><div class="test-duration">0.057s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Course Service</div><div class="test-title">UT-CRS-011: getCourses() - Search by title</div><div class="test-status">passed</div><div class="test-duration">0.02s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Course Service</div><div class="test-title">UT-CRS-012: submitForReview() - Submit untuk review berhasil</div><div class="test-status">passed</div><div class="test-duration">0.012s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Course Service</div><div class="test-title">UT-CRS-013: submitForReview() - Kursus tanpa section</div><div class="test-status">passed</div><div class="test-duration">0.048s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Course Service</div><div class="test-title">UT-CRS-014: approveCourse() - Approve kursus</div><div class="test-status">passed</div><div class="test-duration">0.078s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Course Service</div><div class="test-title">UT-CRS-015: rejectCourse() - Reject kursus dengan alasan</div><div class="test-status">passed</div><div class="test-duration">0.009s</div></div></div></div></details><details id="suite-6" class="suite-container" open=""><summary class="suite-info"><div class="suite-path">D:\project\tests\unit\services\auth.service.test.ts</div><div class="suite-time">0.618s</div></summary><div class="suite-tests"><div class="test-result passed"><div class="test-info"><div class="test-suitename">Auth Service</div><div class="test-title">UT-AUTH-001: register() - Registrasi user baru berhasil</div><div class="test-status">passed</div><div class="test-duration">0.002s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Auth Service</div><div class="test-title">UT-AUTH-002: register() - Email sudah terdaftar</div><div class="test-status">passed</div><div class="test-duration">0.031s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Auth Service</div><div class="test-title">UT-AUTH-003: login() - Login berhasil</div><div class="test-status">passed</div><div class="test-duration">0.008s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Auth Service</div><div class="test-title">UT-AUTH-004: login() - Email tidak ditemukan</div><div class="test-status">passed</div><div class="test-duration">0.009s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Auth Service</div><div class="test-title">UT-AUTH-005: login() - Password salah</div><div class="test-status">passed</div><div class="test-duration">0.025s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Auth Service</div><div class="test-title">UT-AUTH-006: login() - Akun suspended</div><div class="test-status">passed</div><div class="test-duration">0.046s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Auth Service</div><div class="test-title">UT-AUTH-007: generateToken() - Generate token valid</div><div class="test-status">passed</div><div class="test-duration">0.059s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Auth Service</div><div class="test-title">UT-AUTH-008: verifyToken() - Verify token valid</div><div class="test-status">passed</div><div class="test-duration">0.032s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Auth Service</div><div class="test-title">UT-AUTH-009: verifyToken() - Verify token invalid</div><div class="test-status">passed</div><div class="test-duration">0.008s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Auth Service</div><div class="test-title">UT-AUTH-010: changePassword() - Ganti password berhasil</div><div class="test-status">passed</div><div class="test-duration">0.012s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Auth Service</div><div class="test-title">UT-AUTH-011: changePassword() - Password lama salah</div><div class="test-status">passed</div><div class="test-duration">0.015s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Auth Service</div><div class="test-title">UT-AUTH-012: verifyEmail() - Verifikasi email berhasil</div><div class="test-status">passed</div><div class="test-duration">0.067s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Auth Service</div><div class="test-title">UT-AUTH-013: verifyEmail() - Token expired</div><div class="test-status">passed</div><div class="test-duration">0.012s</div></div></div></div></details><details id="suite-7" class="suite-container" open=""><summary class="suite-info"><div class="suite-path">D:\project\tests\unit\services\user.service.test.ts</div><div class="suite-time">2.885s</div></summary><div class="suite-tests"><div class="test-result passed"><div class="test-info"><div class="test-suitename">User Service</div><div class="test-title">UT-USR-001: getUserById() - Ambil user dengan ID valid</div><div class="test-status">passed</div><div class="test-duration">0.028s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">User Service</div><div class="test-title">UT-USR-002: getUserById() - User tidak ditemukan</div><div class="test-status">passed</div><div class="test-duration">0.008s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">User Service</div><div class="test-title">UT-USR-003: updateProfile() - Update profile berhasil</div><div class="test-status">passed</div><div class="test-duration">0.007s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">User Service</div><div class="test-title">UT-USR-004: updateAvatar() - Update avatar berhasil</div><div class="test-status">passed</div><div class="test-duration">0.017s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">User Service</div><div class="test-title">UT-USR-005: getUsers() - Admin ambil daftar users</div><div class="test-status">passed</div><div class="test-duration">0.014s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">User Service</div><div class="test-title">UT-USR-006: getUsers() - Filter by role</div><div class="test-status">passed</div><div class="test-duration">0.034s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">User Service</div><div class="test-title">UT-USR-007: updateUserStatus() - Update status user</div><div class="test-status">passed</div><div class="test-duration">0.033s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">User Service</div><div class="test-title">UT-USR-008: deleteUser() - Hapus user</div><div class="test-status">passed</div><div class="test-duration">0.013s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">User Service</div><div class="test-title">UT-USR-009: getUserStats() - Ambil statistik user</div><div class="test-status">passed</div><div class="test-duration">0.02s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">User Service</div><div class="test-title">UT-USR-010: emailExists() - Email sudah ada</div><div class="test-status">passed</div><div class="test-duration">0.066s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">User Service</div><div class="test-title">UT-USR-011: emailExists() - Email belum ada</div><div class="test-status">passed</div><div class="test-duration">0.018s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">User Service</div><div class="test-title">UT-USR-012: addToWishlist() - Tambah ke wishlist</div><div class="test-status">passed</div><div class="test-duration">0.065s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">User Service</div><div class="test-title">UT-USR-013: addToWishlist() - Sudah ada di wishlist</div><div class="test-status">passed</div><div class="test-duration">0.12s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">User Service</div><div class="test-title">UT-USR-014: removeFromWishlist() - Hapus dari wishlist</div><div class="test-status">passed</div><div class="test-duration">0.034s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">User Service</div><div class="test-title">UT-USR-015: getWishlist() - Ambil wishlist user</div><div class="test-status">passed</div><div class="test-duration">0.034s</div></div></div></div></details><details id="suite-8" class="suite-container" open=""><summary class="suite-info"><div class="suite-path">D:\project\tests\unit\services\review.service.test.ts</div><div class="suite-time">2.894s</div></summary><div class="suite-tests"><div class="test-result passed"><div class="test-info"><div class="test-suitename">Review Service</div><div class="test-title">UT-REV-001: createReview() - Buat review berhasil</div><div class="test-status">passed</div><div class="test-duration">0.034s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Review Service</div><div class="test-title">UT-REV-002: createReview() - Belum terdaftar</div><div class="test-status">passed</div><div class="test-duration">0.083s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Review Service</div><div class="test-title">UT-REV-003: createReview() - Progress &lt; 10%</div><div class="test-status">passed</div><div class="test-duration">0.031s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Review Service</div><div class="test-title">UT-REV-004: createReview() - Sudah pernah review</div><div class="test-status">passed</div><div class="test-duration">0.025s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Review Service</div><div class="test-title">UT-REV-005: createReview() - Rating invalid</div><div class="test-status">passed</div><div class="test-duration">0.021s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Review Service</div><div class="test-title">UT-REV-006: updateReview() - Update review berhasil</div><div class="test-status">passed</div><div class="test-duration">0.087s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Review Service</div><div class="test-title">UT-REV-007: updateReview() - Bukan pemilik review</div><div class="test-status">passed</div><div class="test-duration">0.019s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Review Service</div><div class="test-title">UT-REV-008: deleteReview() - Hapus review berhasil</div><div class="test-status">passed</div><div class="test-duration">0.111s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Review Service</div><div class="test-title">UT-REV-009: deleteReview() - Admin hapus review</div><div class="test-status">passed</div><div class="test-duration">0.019s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Review Service</div><div class="test-title">UT-REV-010: getCourseReviews() - Ambil reviews dengan pagination</div><div class="test-status">passed</div><div class="test-duration">0.101s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Review Service</div><div class="test-title">UT-REV-011: markReviewHelpful() - Tandai review helpful</div><div class="test-status">passed</div><div class="test-duration">0.016s</div></div></div></div></details><details id="suite-9" class="suite-container" open=""><summary class="suite-info"><div class="suite-path">D:\project\tests\integration\api\courses.test.ts</div><div class="suite-time">3.171s</div></summary><div class="suite-tests"><div class="test-result passed"><div class="test-info"><div class="test-suitename">Course API Routes</div><div class="test-title">IT-CRS-001: GET /api/courses - Ambil semua kursus published</div><div class="test-status">passed</div><div class="test-duration">0.718s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Course API Routes</div><div class="test-title">IT-CRS-002: GET /api/courses - Filter by category</div><div class="test-status">passed</div><div class="test-duration">0.009s</div></div></div><div class="test-result failed"><div class="test-info"><div class="test-suitename">Course API Routes</div><div class="test-title">IT-CRS-003: GET /api/courses/[id] - Ambil detail kursus</div><div class="test-status">failed</div><div class="test-duration">0.03s</div></div><div class="failureMessages"> <pre class="failureMsg">Error: expect(received).toBe(expected) // Object.is equality
+
+Expected: 200
+Received: 404
+    at Object.toBe (D:\project\tests\integration\api\courses.test.ts:48:24)
+    at processTicksAndRejections (node:internal/process/task_queues:105:5)</pre></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Course API Routes</div><div class="test-title">IT-CRS-004: GET /api/courses/[id] - Kursus tidak ada</div><div class="test-status">passed</div><div class="test-duration">0.023s</div></div></div><div class="test-result failed"><div class="test-info"><div class="test-suitename">Course API Routes</div><div class="test-title">IT-CRS-005: POST /api/courses/[id]/enroll - Enroll kursus gratis</div><div class="test-status">failed</div><div class="test-duration">0.025s</div></div><div class="failureMessages"> <pre class="failureMsg">Error: expect(received).toBe(expected) // Object.is equality
+
+Expected: 201
+Received: 200
+    at Object.toBe (D:\project\tests\integration\api\courses.test.ts:74:24)
+    at processTicksAndRejections (node:internal/process/task_queues:105:5)</pre></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Course API Routes</div><div class="test-title">IT-CRS-006: POST /api/courses/[id]/enroll - Tanpa auth</div><div class="test-status">passed</div><div class="test-duration">0.031s</div></div></div></div></details><details id="suite-10" class="suite-container" open=""><summary class="suite-info"><div class="suite-path">D:\project\tests\integration\api\users.test.ts</div><div class="suite-time">3.175s</div></summary><div class="suite-tests"><div class="test-result passed"><div class="test-info"><div class="test-suitename">User API Routes</div><div class="test-title">IT-USR-001: GET /api/users/profile - Ambil profil sendiri</div><div class="test-status">passed</div><div class="test-duration">0.71s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">User API Routes</div><div class="test-title">IT-USR-002: PUT /api/users/profile - Update profil</div><div class="test-status">passed</div><div class="test-duration">0.014s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">User API Routes</div><div class="test-title">IT-USR-003: GET /api/users/enrollments - Ambil enrollments</div><div class="test-status">passed</div><div class="test-duration">0.021s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">User API Routes</div><div class="test-title">IT-USR-004: GET /api/users/wishlist - Ambil wishlist</div><div class="test-status">passed</div><div class="test-duration">0.042s</div></div></div><div class="test-result failed"><div class="test-info"><div class="test-suitename">User API Routes</div><div class="test-title">IT-USR-005: POST /api/users/wishlist - Tambah ke wishlist</div><div class="test-status">failed</div><div class="test-duration">0.021s</div></div><div class="failureMessages"> <pre class="failureMsg">Error: expect(received).toBe(expected) // Object.is equality
+
+Expected: 201
+Received: 400
+    at Object.toBe (D:\project\tests\integration\api\users.test.ts:81:24)
+    at processTicksAndRejections (node:internal/process/task_queues:105:5)</pre></div></div></div></details><details id="suite-11" class="suite-container" open=""><summary class="suite-info"><div class="suite-path">D:\project\tests\integration\api\reviews.test.ts</div><div class="suite-time">3.356s</div></summary><div class="suite-tests"><div class="test-result failed"><div class="test-info"><div class="test-suitename">Review API Routes</div><div class="test-title">IT-REV-001: GET /api/reviews/[id] - Ambil reviews kursus</div><div class="test-status">failed</div><div class="test-duration">0.725s</div></div><div class="failureMessages"> <pre class="failureMsg">Error: expect(received).toBe(expected) // Object.is equality
+
+Expected: 200
+Received: 404
+    at Object.toBe (D:\project\tests\integration\api\reviews.test.ts:32:24)
+    at processTicksAndRejections (node:internal/process/task_queues:105:5)</pre></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Review API Routes</div><div class="test-title">IT-REV-002: POST - Buat review baru</div><div class="test-status">passed</div><div class="test-duration">0.026s</div></div></div><div class="test-result failed"><div class="test-info"><div class="test-suitename">Review API Routes</div><div class="test-title">IT-REV-003: PUT /api/users/reviews/[id] - Update review</div><div class="test-status">failed</div><div class="test-duration">0.047s</div></div><div class="failureMessages"> <pre class="failureMsg">Error: expect(received).toBe(expected) // Object.is equality
+
+Expected: 200
+Received: 404
+    at Object.toBe (D:\project\tests\integration\api\reviews.test.ts:63:24)
+    at processTicksAndRejections (node:internal/process/task_queues:105:5)</pre></div></div><div class="test-result failed"><div class="test-info"><div class="test-suitename">Review API Routes</div><div class="test-title">IT-REV-004: DELETE /api/users/reviews/[id] - Hapus review</div><div class="test-status">failed</div><div class="test-duration">0.027s</div></div><div class="failureMessages"> <pre class="failureMsg">Error: expect(received).toBe(expected) // Object.is equality
+
+Expected: 200
+Received: 404
+    at Object.toBe (D:\project\tests\integration\api\reviews.test.ts:79:24)
+    at processTicksAndRejections (node:internal/process/task_queues:105:5)</pre></div></div></div></details><details id="suite-12" class="suite-container" open=""><summary class="suite-info"><div class="suite-path">D:\project\tests\integration\api\auth.test.ts</div><div class="suite-time warn">6.896s</div></summary><div class="suite-tests"><div class="test-result passed"><div class="test-info"><div class="test-suitename">Auth API Routes</div><div class="test-title">IT-AUTH-001: POST /api/auth/register - Registrasi berhasil</div><div class="test-status">passed</div><div class="test-duration">4.746s</div></div></div><div class="test-result failed"><div class="test-info"><div class="test-suitename">Auth API Routes</div><div class="test-title">IT-AUTH-002: POST /api/auth/register - Email duplikat</div><div class="test-status">failed</div><div class="test-duration">0.012s</div></div><div class="failureMessages"> <pre class="failureMsg">Error: expect(received).toBe(expected) // Object.is equality
+
+Expected: 400
+Received: 409
+    at Object.toBe (D:\project\tests\integration\api\auth.test.ts:49:24)
+    at processTicksAndRejections (node:internal/process/task_queues:105:5)</pre></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Auth API Routes</div><div class="test-title">IT-AUTH-003: POST /api/auth/login - Login berhasil</div><div class="test-status">passed</div><div class="test-duration">0.022s</div></div></div><div class="test-result passed"><div class="test-info"><div class="test-suitename">Auth API Routes</div><div class="test-title">IT-AUTH-004: POST /api/auth/login - Credentials invalid</div><div class="test-status">passed</div><div class="test-duration">0.019s</div></div></div><div class="test-result failed"><div class="test-info"><div class="test-suitename">Auth API Routes</div><div class="test-title">IT-AUTH-005: POST /api/auth/change-password - Ganti password</div><div class="test-status">failed</div><div class="test-duration">0.019s</div></div><div class="failureMessages"> <pre class="failureMsg">Error: expect(received).toBe(expected) // Object.is equality
+
+Expected: 200
+Received: 400
+    at Object.toBe (D:\project\tests\integration\api\auth.test.ts:97:24)
+    at processTicksAndRejections (node:internal/process/task_queues:105:5)</pre></div></div></div></details></main></body></html>

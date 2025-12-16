@@ -1,74 +1,44 @@
-import { NextRequest } from "next/server";
-import prisma from "@/lib/prisma";
-import { paginatedResponse, errorResponse } from "@/utils/response.util";
-import { validatePagination } from "@/utils/validation.util";
-import { errorHandler } from "@/middlewares/error.middleware";
-import { requireAuth } from "@/middlewares/auth.middleware";
-import { corsMiddleware } from "@/middlewares/cors.middleware";
-import { loggingMiddleware } from "@/middlewares/logging.middleware";
-import { HTTP_STATUS } from "@/lib/constants";
-import type { EnrollmentStatus, Prisma } from "@prisma/client";
+import { NextRequest, NextResponse } from 'next/server';
+import prisma from '@/lib/prisma';
+import { getAuthUser, unauthorizedResponse } from '@/lib/auth';
 
-/**
- * GET /api/users/enrollments
- * Get user enrolled courses with progress
- */
-async function handler(
-  request: NextRequest,
-  context: { user: { userId: string; email: string; role: string } }
-) {
-  const { user } = context;
-
+// GET /api/users/enrollments - Get user's enrollments
+export async function GET(request: NextRequest) {
   try {
-    // Parse query parameters
+    const authUser = getAuthUser(request);
+    if (!authUser) return unauthorizedResponse();
+
     const { searchParams } = new URL(request.url);
-    const page = parseInt(searchParams.get("page") || "1");
-    const limit = parseInt(searchParams.get("limit") || "10");
-    const status = searchParams.get("status") as EnrollmentStatus | undefined;
+    const page = parseInt(searchParams.get('page') || '1');
+    const limit = parseInt(searchParams.get('limit') || '10');
+    const status = searchParams.get('status');
 
-    // Validate pagination
-    const validatedPagination = validatePagination(page, limit);
+    const skip = (page - 1) * limit;
 
-    // Build where clause
-    const where: Prisma.EnrollmentWhereInput = { user_id: user.userId };
-    if (status) {
-      where.status = status;
-    }
+    const where: Record<string, unknown> = {
+      user_id: authUser.userId,
+    };
 
-    // Calculate skip
-    const skip = (validatedPagination.page - 1) * validatedPagination.limit;
+    if (status) where.status = status;
 
-    // Get enrollments
     const [enrollments, total] = await Promise.all([
       prisma.enrollment.findMany({
         where,
         skip,
-        take: validatedPagination.limit,
-        orderBy: { created_at: "desc" },
-        select: {
-          id: true,
-          status: true,
-          progress: true,
-          completed_at: true,
-          last_accessed_at: true,
-          created_at: true,
+        take: limit,
+        orderBy: { created_at: 'desc' },
+        include: {
           course: {
             select: {
               id: true,
               title: true,
               slug: true,
               thumbnail: true,
-              level: true,
               total_duration: true,
               total_lectures: true,
               mentor: {
                 select: {
-                  user: {
-                    select: {
-                      full_name: true,
-                      avatar_url: true,
-                    },
-                  },
+                  user: { select: { full_name: true, avatar_url: true } },
                 },
               },
             },
@@ -77,7 +47,17 @@ async function handler(
             select: {
               id: true,
               certificate_number: true,
+              status: true,
               issued_at: true,
+            },
+          },
+          progress_records: {
+            select: {
+              id: true,
+              material_id: true,
+              is_completed: true,
+              watched_duration: true,
+              last_position: true,
             },
           },
         },
@@ -85,29 +65,12 @@ async function handler(
       prisma.enrollment.count({ where }),
     ]);
 
-    return paginatedResponse(
+    return NextResponse.json({
       enrollments,
-      {
-        page: validatedPagination.page,
-        limit: validatedPagination.limit,
-        total,
-      },
-      "Enrollments retrieved successfully"
-    );
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    });
   } catch (error) {
-    if (error instanceof Error) {
-      return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
-    }
-    return errorResponse(
-      "Failed to get enrollments",
-      HTTP_STATUS.INTERNAL_SERVER_ERROR
-    );
+    console.error('Get enrollments error:', error);
+    return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 });
   }
 }
-
-// Apply authentication
-const authenticatedHandler = requireAuth(handler);
-
-export const GET = errorHandler(
-  loggingMiddleware(corsMiddleware(authenticatedHandler))
-);

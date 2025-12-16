@@ -1,132 +1,66 @@
-import { NextRequest } from "next/server";
-import analyticsService from "@/services/analytics.service";
-import {
-  successResponse,
-  errorResponse,
-  validationErrorResponse,
-} from "@/utils/response.util";
-import { errorHandler } from "@/middlewares/error.middleware";
-import { requireAuth } from "@/middlewares/auth.middleware";
-import { corsMiddleware } from "@/middlewares/cors.middleware";
-import { loggingMiddleware } from "@/middlewares/logging.middleware";
-import { rateLimit } from "@/middlewares/ratelimit.middleware";
-import { HTTP_STATUS } from "@/lib/constants";
+import { NextRequest, NextResponse } from 'next/server';
+import prisma from '@/lib/prisma';
+import { getAuthUser, hasRole, unauthorizedResponse, forbiddenResponse } from '@/lib/auth';
+import { UserRole } from '@prisma/client';
 
-/**
- * POST /api/analytics/events
- * Track batch events
- */
-async function handler(
-  request: NextRequest,
-  context: { user: { userId: string; email: string; role: string } }
-) {
+// GET /api/analytics/events - Get analytics events (admin only)
+export async function GET(request: NextRequest) {
   try {
-    const { user } = context;
+    const authUser = getAuthUser(request);
+    if (!authUser) return unauthorizedResponse();
+    if (!hasRole(authUser, [UserRole.ADMIN])) return forbiddenResponse();
 
-    // Parse request body
-    let body;
-    try {
-      body = await request.json();
-    } catch {
-      return errorResponse(
-        "Invalid JSON in request body",
-        HTTP_STATUS.BAD_REQUEST
-      );
+    const { searchParams } = new URL(request.url);
+    const page = parseInt(searchParams.get('page') || '1');
+    const limit = parseInt(searchParams.get('limit') || '50');
+    const eventType = searchParams.get('event_type');
+    const startDate = searchParams.get('start_date');
+    const endDate = searchParams.get('end_date');
+
+    // Use activity logs as analytics events
+    const where: Record<string, unknown> = {};
+    
+    if (eventType) where.action = eventType;
+    if (startDate || endDate) {
+      where.created_at = {};
+      if (startDate) (where.created_at as Record<string, Date>).gte = new Date(startDate);
+      if (endDate) (where.created_at as Record<string, Date>).lte = new Date(endDate);
     }
 
-    const { events } = body;
+    const [events, total] = await Promise.all([
+      prisma.activityLog.findMany({
+        where,
+        include: {
+          user: { select: { id: true, full_name: true, email: true } },
+        },
+        orderBy: { created_at: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.activityLog.count({ where }),
+    ]);
 
-    // Validate events array
-    if (!Array.isArray(events) || events.length === 0) {
-      return validationErrorResponse({
-        events: ["Events must be a non-empty array"],
-      });
-    }
+    // Aggregate by event type
+    const eventCounts = await prisma.activityLog.groupBy({
+      by: ['action'],
+      _count: { id: true },
+      where: startDate ? { created_at: { gte: new Date(startDate) } } : undefined,
+      orderBy: { _count: { id: 'desc' } },
+    });
 
-    if (events.length > 100) {
-      return errorResponse(
-        "Maximum 100 events per batch",
-        HTTP_STATUS.BAD_REQUEST
-      );
-    }
-
-    // Get request metadata
-    const ipAddress =
-      request.headers.get("x-forwarded-for") ||
-      request.headers.get("x-real-ip") ||
-      "unknown";
-    const userAgent = request.headers.get("user-agent") || undefined;
-    const referrer = request.headers.get("referer") || undefined;
-
-    // Track all events
-    const results = [];
-    for (const event of events) {
-      if (!event.eventType || !event.eventData) {
-        results.push({
-          success: false,
-          error: "eventType and eventData are required",
-        });
-        continue;
-      }
-
-      try {
-        await analyticsService.trackEvent({
-          userId: user.userId, // Use authenticated user ID
-          eventType: event.eventType,
-          eventData: event.eventData,
-          sessionId: event.sessionId,
-          ipAddress,
-          userAgent,
-          referrer,
-          timestamp: event.timestamp ? new Date(event.timestamp) : new Date(),
-        });
-
-        results.push({
-          success: true,
-          eventType: event.eventType,
-        });
-      } catch (error) {
-        results.push({
-          success: false,
-          eventType: event.eventType,
-          error: error instanceof Error ? error.message : "Unknown error",
-        });
-      }
-    }
-
-    const successCount = results.filter((r) => r.success).length;
-    const failedCount = results.length - successCount;
-
-    return successResponse(
-      {
-        total: results.length,
-        success: successCount,
-        failed: failedCount,
-        results,
-      },
-      `Tracked ${successCount} events successfully`
-    );
+    return NextResponse.json({
+      events,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+      summary: eventCounts.map(e => ({
+        event_type: e.action,
+        count: e._count.id,
+      })),
+    });
   } catch (error) {
-    if (error instanceof Error) {
-      return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
-    }
-    return errorResponse(
-      "Failed to track events",
-      HTTP_STATUS.INTERNAL_SERVER_ERROR
-    );
+    console.error('Get analytics events error:', error);
+    return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 });
   }
 }
-
-// Apply authentication and rate limiting
-const authenticatedHandler = requireAuth(handler);
-
-export const POST = errorHandler(
-  loggingMiddleware(
-    corsMiddleware(
-      rateLimit({
-        windowMs: 60 * 1000, // 1 minute
-        maxRequests: 100, // 100 requests per minute
-      })(authenticatedHandler)
-    )
-  )
-);

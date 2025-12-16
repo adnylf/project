@@ -1,62 +1,94 @@
-import { NextRequest } from "next/server";
-import { resendVerificationSchema } from "@/lib/validation"; // PERBAIKI IMPORT
-import authService from "@/services/auth.service";
-import {
-  successResponse,
-  validationErrorResponse,
-  errorResponse,
-} from "@/utils/response.util";
-import { validateData } from "@/utils/validation.util";
-import { errorHandler } from "@/middlewares/error.middleware";
-import { corsMiddleware } from "@/middlewares/cors.middleware";
-import { loggingMiddleware } from "@/middlewares/logging.middleware";
-import { rateLimit } from "@/middlewares/ratelimit.middleware";
-import { HTTP_STATUS } from "@/lib/constants";
+import { NextRequest, NextResponse } from 'next/server';
+import prisma from '@/lib/prisma';
+import { generateRandomToken } from '@/lib/auth';
+import { resendVerificationSchema } from '@/lib/validation';
+import { sendVerificationEmail } from '@/services/email.service';
 
-async function handler(request: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
-    // Parse request body
-    let body;
-    try {
-      body = await request.json();
-    } catch {
-      return errorResponse(
-        "Invalid JSON in request body",
-        HTTP_STATUS.BAD_REQUEST
+    const body = await request.json();
+    
+    // Validate input
+    const result = resendVerificationSchema.safeParse(body);
+    if (!result.success) {
+      return NextResponse.json(
+        { error: 'Validasi gagal', details: result.error.flatten().fieldErrors },
+        { status: 400 }
       );
     }
 
-    // Validate input - GUNAKAN SCHEMA YANG BENAR
-    const validation = await validateData(resendVerificationSchema, body);
-    if (!validation.success) {
-      return validationErrorResponse(validation.errors);
+    const { email } = result.data;
+
+    // Find user
+    const user = await prisma.user.findUnique({
+      where: { email },
+      select: { id: true, email: true, full_name: true, email_verified: true },
+    });
+
+    // Always return success to prevent email enumeration
+    if (!user) {
+      return NextResponse.json({
+        message: 'Jika email terdaftar dan belum diverifikasi, Anda akan menerima email verifikasi',
+      });
     }
 
-    // Resend verification email
-    await authService.resendVerificationEmail(validation.data.email);
+    // Check if already verified
+    if (user.email_verified) {
+      return NextResponse.json({
+        message: 'Email sudah diverifikasi',
+      });
+    }
 
-    return successResponse(
-      null,
-      "Verification email has been sent. Please check your inbox."
-    );
+    // Delete existing verification tokens for this user
+    await prisma.verificationToken.deleteMany({
+      where: {
+        user_id: user.id,
+        type: 'EMAIL_VERIFICATION',
+      },
+    });
+
+    // Create new token
+    const token = generateRandomToken();
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
+    await prisma.verificationToken.create({
+      data: {
+        user_id: user.id,
+        token,
+        type: 'EMAIL_VERIFICATION',
+        expires_at: expiresAt,
+      },
+    });
+
+    // Log activity
+    await prisma.activityLog.create({
+      data: {
+        user_id: user.id,
+        action: 'RESEND_VERIFICATION',
+        entity_type: 'user',
+        entity_id: user.id,
+        ip_address: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || null,
+        user_agent: request.headers.get('user-agent') || null,
+      },
+    });
+
+    // Send verification email
+    try {
+      await sendVerificationEmail(user.email, user.full_name, token);
+      console.log(`✅ Resend verification email sent to ${user.email}`);
+    } catch (emailError) {
+      console.error('❌ Failed to send resend verification email:', emailError);
+      // Don't fail the request if email fails
+    }
+
+    return NextResponse.json({
+      message: 'Jika email terdaftar dan belum diverifikasi, Anda akan menerima email verifikasi',
+    });
   } catch (error) {
-    if (error instanceof Error) {
-      return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
-    }
-    return errorResponse(
-      "Failed to send verification email",
-      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    console.error('Resend verification error:', error);
+    return NextResponse.json(
+      { error: 'Terjadi kesalahan server' },
+      { status: 500 }
     );
   }
 }
-
-export const POST = errorHandler(
-  loggingMiddleware(
-    corsMiddleware(
-      rateLimit({
-        windowMs: 15 * 60 * 1000,
-        maxRequests: 10,
-      })(handler)
-    )
-  )
-);

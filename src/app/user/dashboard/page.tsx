@@ -1,491 +1,578 @@
 "use client";
 
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
 import {
   GraduationCap,
   Trophy,
   Clock,
-  BarChart3,
-  Play,
   Star,
-  Bell,
-  X,
+  Play,
+  BookOpen,
+  Heart,
+  Activity,
+  ArrowRight,
+  Loader2,
+  TrendingUp,
+  Calendar,
+  ChevronRight,
+  Award,
+  CreditCard,
+  User,
+  Sparkles,
+  Eye,
+  Search,
+  Settings,
+  MessageSquare,
+  FileText,
+  PlayCircle,
+  Mail,
+  Shield,
+  Zap,
 } from "lucide-react";
-import Link from "next/link";
 import UserLayout from "@/components/user/user-layout";
-import ProtectedRoute from "@/components/ui/protected-route";
-import { useState, useEffect } from "react";
+import ProtectedRoute from "@/components/auth/protected-route";
 
-const enrolledCourses = [
-  {
-    id: 1,
-    title: "Dasar-Dasar Pemrograman Web",
-    instructor: "Dr. Ahmad Fauzi",
-    progress: 65,
-    totalLessons: 12,
-    completedLessons: 8,
-    thumbnail:
-      "https://images.pexels.com/photos/11035380/pexels-photo-11035380.jpeg?auto=compress&cs=tinysrgb&w=800",
-  },
-  {
-    id: 2,
-    title: "Desain Grafis untuk Pemula",
-    instructor: "Sarah Putri",
-    progress: 40,
-    totalLessons: 10,
-    completedLessons: 4,
-    thumbnail:
-      "https://images.pexels.com/photos/196644/pexels-photo-196644.jpeg?auto=compress&cs=tinysrgb&w=800",
-  },
-  {
-    id: 3,
-    title: "Bahasa Inggris Percakapan",
-    instructor: "John Smith",
-    progress: 80,
-    totalLessons: 15,
-    completedLessons: 12,
-    thumbnail:
-      "https://images.pexels.com/photos/256417/pexels-photo-256417.jpeg?auto=compress&cs=tinysrgb&w=800",
-  },
-  {
-    id: 4,
-    title: "Python untuk Pemula",
-    instructor: "Dr. Maria Chen",
-    progress: 30,
-    totalLessons: 20,
-    completedLessons: 6,
-    thumbnail:
-      "https://images.pexels.com/photos/1181671/pexels-photo-1181671.jpeg?auto=compress&cs=tinysrgb&w=800",
-  },
-  {
-    id: 5,
-    title: "Digital Marketing Fundamentals",
-    instructor: "Rina Wijaya",
-    progress: 75,
-    totalLessons: 14,
-    completedLessons: 10,
-    thumbnail:
-      "https://images.pexels.com/photos/265087/pexels-photo-265087.jpeg?auto=compress&cs=tinysrgb&w=800",
-  },
-  {
-    id: 6,
-    title: "UI/UX Design Basics",
-    instructor: "David Lee",
-    progress: 50,
-    totalLessons: 16,
-    completedLessons: 8,
-    thumbnail:
-      "https://images.pexels.com/photos/1144265/pexels-photo-1144265.jpeg?auto=compress&cs=tinysrgb&w=800",
-  },
-];
+const API_BASE_URL = "http://localhost:3000/api";
 
-const initialNotifications = [
-  {
-    id: 1,
-    title: "Materi Baru Tersedia",
-    message:
-      'Materi baru telah ditambahkan di kursus "Dasar-Dasar Pemrograman Web"',
-    time: "2 jam yang lalu",
-  },
-  {
-    id: 2,
-    title: "Selamat!",
-    message:
-      'Anda telah menyelesaikan 80% dari kursus "Bahasa Inggris Percakapan"',
-    time: "1 hari yang lalu",
-  },
-  {
-    id: 3,
-    title: "Pengingat Tugas",
-    message:
-      'Tugas akhir untuk kursus "Desain Grafis untuk Pemula" akan segera berakhir',
-    time: "3 hari yang lalu",
-  },
-  {
-    id: 4,
-    title: "Sertifikat Tersedia",
-    message: 'Sertifikat untuk kursus "Python Dasar" sudah dapat diunduh',
-    time: "5 hari yang lalu",
-  },
-  {
-    id: 5,
-    title: "Live Session Mendatang",
-    message:
-      "Live session Q&A dengan instruktur akan dilaksanakan besok jam 19:00",
-    time: "1 minggu yang lalu",
-  },
-];
+interface Enrollment {
+  id: string;
+  progress: number;
+  status: string;
+  created_at: string;
+  course: {
+    id: string;
+    title: string;
+    slug: string;
+    thumbnail: string | null;
+    total_duration: number;
+    mentor: { user: { full_name: string } };
+  };
+}
 
-const recommendations = [
-  {
-    id: 7,
-    title: "Python untuk Data Science",
-    instructor: "Dr. Maria Chen",
-    rating: 4.8,
-    students: 1250,
-    thumbnail:
-      "https://images.pexels.com/photos/1181671/pexels-photo-1181671.jpeg?auto=compress&cs=tinysrgb&w=800",
-  },
-  {
-    id: 8,
-    title: "Digital Marketing Mastery",
-    instructor: "Rina Wijaya",
-    rating: 4.9,
-    students: 2100,
-    thumbnail:
-      "https://images.pexels.com/photos/265087/pexels-photo-265087.jpeg?auto=compress&cs=tinysrgb&w=800",
-  },
-  {
-    id: 9,
-    title: "UI/UX Design Fundamentals",
-    instructor: "David Lee",
-    rating: 4.7,
-    students: 890,
-    thumbnail:
-      "https://images.pexels.com/photos/1144265/pexels-photo-1144265.jpeg?auto=compress&cs=tinysrgb&w=800",
-  },
-  {
-    id: 10,
-    title: "Machine Learning Basics",
-    instructor: "Prof. Alex Johnson",
-    rating: 4.6,
-    students: 3200,
-    thumbnail:
-      "https://images.pexels.com/photos/8386440/pexels-photo-8386440.jpeg?auto=compress&cs=tinysrgb&w=800",
-  },
-  {
-    id: 11,
-    title: "Mobile App Development",
-    instructor: "Sarah Miller",
-    rating: 4.8,
-    students: 1800,
-    thumbnail:
-      "https://images.pexels.com/photos/1092644/pexels-photo-1092644.jpeg?auto=compress&cs=tinysrgb&w=800",
-  },
-  {
-    id: 12,
-    title: "Cloud Computing Essentials",
-    instructor: "Michael Brown",
-    rating: 4.5,
-    students: 950,
-    thumbnail:
-      "https://images.pexels.com/photos/325229/pexels-photo-325229.jpeg?auto=compress&cs=tinysrgb&w=800",
-  },
-];
+interface WishlistItem {
+  id: string;
+  course: {
+    id: string;
+    title: string;
+    slug: string;
+    thumbnail: string | null;
+    price: number;
+    mentor: { user: { full_name: string } };
+  };
+}
+
+interface ActivityLog {
+  id: string;
+  action: string;
+  entity_type: string | null;
+  created_at: string;
+}
+
+interface UserProfile {
+  full_name: string;
+  avatar_url: string | null;
+  email?: string;
+  role?: string;
+  status?: string;
+}
+
+interface DashboardStats {
+  totalEnrollments: number;
+  activeEnrollments: number;
+  completedEnrollments: number;
+  totalCertificates: number;
+  totalWishlist: number;
+  averageProgress: number;
+}
+
+const formatDate = (dateString: string) => new Date(dateString).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" });
+const formatDuration = (minutes: number) => {
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  return hours > 0 ? `${hours}j ${mins}m` : `${mins}m`;
+};
+const formatCurrency = (amount: number) => new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(amount);
+
+const getActionLabel = (action: string) => {
+  const labels: Record<string, string> = {
+    LOGIN: "Login ke akun",
+    LOGOUT: "Logout dari akun",
+    COURSE_VIEW: "Melihat kursus",
+    COURSE_ENROLL: "Enroll kursus",
+    PAYMENT_SUCCESS: "Pembayaran berhasil",
+    WISHLIST_ADD: "Menambahkan ke wishlist",
+    PROFILE_UPDATE: "Update profil",
+  };
+  return labels[action] || action;
+};
 
 export default function UserDashboard() {
-  const [notifications, setNotifications] = useState(initialNotifications);
-  const [isClient, setIsClient] = useState(false);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
+  const [wishlist, setWishlist] = useState<WishlistItem[]>([]);
+  const [activities, setActivities] = useState<ActivityLog[]>([]);
+  const [stats, setStats] = useState<DashboardStats>({ totalEnrollments: 0, activeEnrollments: 0, completedEnrollments: 0, totalCertificates: 0, totalWishlist: 0, averageProgress: 0 });
+  const [loading, setLoading] = useState(true);
+  const [greeting, setGreeting] = useState("Selamat Datang");
+
+  const getAuthToken = useCallback(() => typeof window !== "undefined" ? localStorage.getItem("token") || localStorage.getItem("accessToken") : null, []);
 
   useEffect(() => {
-    setIsClient(true);
+    const hour = new Date().getHours();
+    if (hour < 12) setGreeting("Selamat Pagi");
+    else if (hour < 15) setGreeting("Selamat Siang");
+    else if (hour < 18) setGreeting("Selamat Sore");
+    else setGreeting("Selamat Malam");
   }, []);
 
-  const handleDeleteNotification = (id: number) => {
-    setNotifications(
-      notifications.filter((notification) => notification.id !== id)
-    );
-  };
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      try {
+        setLoading(true);
+        const token = getAuthToken();
+        if (!token) return;
 
-  // Format number with consistent formatting
-  const formatNumber = (num: number) => {
-    return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
-  };
+        const headers = { Authorization: `Bearer ${token}` };
+
+        // Fetch all data in parallel
+        const [profileRes, enrollmentsRes, wishlistRes, activityRes, certificatesRes] = await Promise.all([
+          fetch(`${API_BASE_URL}/users/profile`, { headers }),
+          fetch(`${API_BASE_URL}/users/enrollments?limit=5`, { headers }),
+          fetch(`${API_BASE_URL}/wishlist?limit=4`, { headers }),
+          fetch(`${API_BASE_URL}/users/activity?limit=5`, { headers }),
+          fetch(`${API_BASE_URL}/users/certificates`, { headers }),
+        ]);
+
+        // Parse responses
+        const profileData = profileRes.ok ? await profileRes.json() : null;
+        const enrollmentsData = enrollmentsRes.ok ? await enrollmentsRes.json() : { enrollments: [], pagination: { total: 0 } };
+        const wishlistData = wishlistRes.ok ? await wishlistRes.json() : { wishlist: [], pagination: { total: 0 } };
+        const activityData = activityRes.ok ? await activityRes.json() : { activities: [] };
+        const certificatesData = certificatesRes.ok ? await certificatesRes.json() : { certificates: [], pagination: { total: 0 } };
+
+        // Set data
+        if (profileData?.user) setProfile(profileData.user);
+        setEnrollments(enrollmentsData.enrollments || []);
+        setWishlist(wishlistData.wishlist || []);
+        setActivities(activityData.activities || []);
+
+        // Calculate stats
+        const allEnrollments = enrollmentsData.enrollments || [];
+        const completed = allEnrollments.filter((e: Enrollment) => e.progress >= 100).length;
+        const active = allEnrollments.filter((e: Enrollment) => e.status === "ACTIVE" && e.progress < 100).length;
+        const avgProgress = allEnrollments.length > 0 ? allEnrollments.reduce((sum: number, e: Enrollment) => sum + e.progress, 0) / allEnrollments.length : 0;
+
+        setStats({
+          totalEnrollments: enrollmentsData.pagination?.total || 0,
+          activeEnrollments: active,
+          completedEnrollments: completed,
+          totalCertificates: certificatesData.pagination?.total || certificatesData.certificates?.length || 0,
+          totalWishlist: wishlistData.pagination?.total || 0,
+          averageProgress: Math.round(avgProgress),
+        });
+      } catch (error) {
+        console.error("Error fetching dashboard data:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchDashboardData();
+  }, [getAuthToken]);
+
+  if (loading) return (
+    <ProtectedRoute allowedRoles={["STUDENT"]}>
+      <UserLayout>
+        <div className="flex items-center justify-center min-h-[400px]">
+          <Loader2 className="h-12 w-12 animate-spin text-[#005EB8]" />
+        </div>
+      </UserLayout>
+    </ProtectedRoute>
+  );
 
   return (
     <ProtectedRoute allowedRoles={["STUDENT"]}>
       <UserLayout>
         <div className="space-y-8">
-          {/* Header Section */}
-          <div className="animate-fadeIn">
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-              Dashboard Pembelajaran
-            </h1>
-            <p className="text-gray-600 dark:text-gray-400">
-              Selamat datang kembali! Lanjutkan perjalanan belajar Anda.
-            </p>
-          </div>
+          {/* Welcome Header */}
+          <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
+            <CardContent className="p-6">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div>
+                  <p className="text-gray-500 text-sm mb-1">{greeting},</p>
+                  <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-2">{profile?.full_name || "Learner"} 👋</h1>
+                  <p className="text-gray-600 dark:text-gray-400">Lanjutkan perjalanan belajar Anda hari ini!</p>
+                </div>
+                <div className="flex gap-3">
+                  <Button asChild className="bg-[#005EB8] hover:bg-[#004A93] text-white">
+                    <Link href="/courses"><Sparkles className="h-4 w-4 mr-2" />Jelajahi Kursus</Link>
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
           {/* Stats Cards */}
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {/* Total Kursus - Primary */}
             <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="h-12 w-12 rounded-full bg-[#005EB8]/10 flex items-center justify-center">
-                    <GraduationCap className="h-6 w-6 text-[#005EB8]" />
+              <CardContent className="p-5">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 rounded-xl bg-[#005EB8]/10">
+                    <BookOpen className="h-6 w-6 text-[#005EB8]" />
                   </div>
-                  <BarChart3 className="h-5 w-5 text-[#008A00]" />
-                </div>
-                <div className="space-y-1">
-                  <p className="text-3xl font-bold text-gray-900 dark:text-white">
-                    6
-                  </p>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                    Kursus Aktif
-                  </p>
+                  <div>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Total Kursus</p>
+                    <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.totalEnrollments}</p>
+                  </div>
                 </div>
               </CardContent>
             </Card>
-
+            
+            {/* Sedang Belajar - Accent */}
             <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="h-12 w-12 rounded-full bg-[#008A00]/10 flex items-center justify-center">
+              <CardContent className="p-5">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 rounded-xl bg-[#F4B400]/10">
+                    <TrendingUp className="h-6 w-6 text-[#F4B400]" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Sedang Belajar</p>
+                    <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.activeEnrollments}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            
+            {/* Selesai - Success */}
+            <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
+              <CardContent className="p-5">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 rounded-xl bg-[#008A00]/10">
                     <Trophy className="h-6 w-6 text-[#008A00]" />
                   </div>
-                  <BarChart3 className="h-5 w-5 text-[#008A00]" />
-                </div>
-                <div className="space-y-1">
-                  <p className="text-3xl font-bold text-gray-900 dark:text-white">
-                    4
-                  </p>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                    Sertifikat
-                  </p>
+                  <div>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Selesai</p>
+                    <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.completedEnrollments}</p>
+                  </div>
                 </div>
               </CardContent>
             </Card>
-
+            
+            {/* Sertifikat - Danger */}
             <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="h-12 w-12 rounded-full bg-[#F4B400]/10 flex items-center justify-center">
-                    <Clock className="h-6 w-6 text-[#F4B400]" />
+              <CardContent className="p-5">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 rounded-xl bg-[#D93025]/10">
+                    <Award className="h-6 w-6 text-[#D93025]" />
                   </div>
-                  <BarChart3 className="h-5 w-5 text-[#008A00]" />
-                </div>
-                <div className="space-y-1">
-                  <p className="text-3xl font-bold text-gray-900 dark:text-white">
-                    42
-                  </p>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                    Jam Belajar
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="h-12 w-12 rounded-full bg-[#005EB8]/10 flex items-center justify-center">
-                    <Star className="h-6 w-6 text-[#005EB8]" />
+                  <div>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Sertifikat</p>
+                    <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.totalCertificates}</p>
                   </div>
-                  <BarChart3 className="h-5 w-5 text-[#008A00]" />
-                </div>
-                <div className="space-y-1">
-                  <p className="text-3xl font-bold text-gray-900 dark:text-white">
-                    57%
-                  </p>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                    Rata-rata Progress
-                  </p>
                 </div>
               </CardContent>
             </Card>
           </div>
 
-          {/* Main Content */}
-          <div className="grid lg:grid-cols-3 gap-8">
-            {/* Left Column - My Courses */}
-            <div className="lg:col-span-2">
-              <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 h-full">
-                <CardHeader>
-                  <CardTitle className="text-xl font-bold">
-                    Kursus Saya
-                  </CardTitle>
-                  <CardDescription>
-                    Lanjutkan pembelajaran dari terakhir kali Anda berhenti
-                  </CardDescription>
+          {/* Main Content Grid - Disesuaikan tinggi */}
+          <div className="grid lg:grid-cols-3 gap-6">
+            {/* Left Column - Lanjutkan Belajar dan Wishlist */}
+            <div className="lg:col-span-2 space-y-6">
+              {/* Continue Learning - Hanya tampilkan 2 course dengan tinggi tetap */}
+              <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 h-[350px] flex flex-col">
+                <CardHeader className="flex flex-row items-center justify-between pb-3">
+                  <div>
+                    <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-white text-xl font-bold">
+                      <Play className="h-5 w-5 text-[#005EB8]" />
+                      Lanjutkan Belajar
+                    </CardTitle>
+                    <CardDescription>Kursus yang sedang Anda ikuti</CardDescription>
+                  </div>
+                  <Button 
+                    variant="outline" 
+                    asChild 
+                    size="sm"
+                    className="border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10 dark:border-[#005EB8] dark:text-[#005EB8]"
+                  >
+                    <Link href="/user/enrollments">
+                      Lihat Semua
+                      <ChevronRight className="h-4 w-4 ml-1" />
+                    </Link>
+                  </Button>
                 </CardHeader>
-                <CardContent className="p-0">
-                  <div className="max-h-[600px] overflow-y-auto p-6 space-y-4">
-                    {enrolledCourses.map((course) => (
-                      <Card
-                        key={course.id}
-                        className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 cursor-pointer"
-                      >
-                        <CardContent className="p-4">
-                          <div className="flex flex-col sm:flex-row gap-4">
-                            <div className="w-full sm:w-32 h-32 sm:h-20 rounded-lg overflow-hidden flex-shrink-0">
+                <CardContent className="flex-1 overflow-y-auto">
+                  {enrollments.length > 0 ? (
+                    <div className="space-y-4">
+                      {/* Hanya menampilkan 2 course pertama */}
+                      {enrollments.slice(0, 2).map((enrollment) => (
+                        <div key={enrollment.id} className="flex gap-4 p-3 rounded-lg bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-750 transition-colors border border-gray-200 dark:border-gray-700">
+                          <div className="relative w-24 h-16 rounded-lg overflow-hidden flex-shrink-0">
+                            {enrollment.course.thumbnail ? (
                               <img
-                                src={course.thumbnail}
-                                alt={course.title}
+                                src={enrollment.course.thumbnail}
+                                alt={enrollment.course.title}
                                 className="w-full h-full object-cover"
                               />
-                            </div>
-                            <div className="flex-1 space-y-2">
-                              <h3 className="font-semibold text-gray-900 dark:text-white">
-                                {course.title}
-                              </h3>
-                              <p className="text-sm text-gray-600 dark:text-gray-400">
-                                {course.instructor}
-                              </p>
-                              <div className="space-y-1">
-                                <div className="flex items-center justify-between text-sm">
-                                  <span className="text-gray-600 dark:text-gray-400">
-                                    {course.completedLessons} dari{" "}
-                                    {course.totalLessons} pelajaran
-                                  </span>
-                                  <span className="font-medium text-[#005EB8]">
-                                    {course.progress}%
-                                  </span>
-                                </div>
-                                <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                                  <div
-                                    className="h-full bg-[#005EB8] rounded-full transition-all"
-                                    style={{ width: `${course.progress}%` }}
-                                  ></div>
-                                </div>
+                            ) : (
+                              <div className="w-full h-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
+                                <BookOpen className="h-6 w-6 text-gray-400" />
                               </div>
-                            </div>
-                            <div className="flex sm:flex-col gap-2 self-center">
-                              <Link
-                                href={`/user/courses/${course.id}/player`}
-                                className="flex-1"
-                              >
-                                <Button className="w-full bg-[#005EB8] hover:bg-[#004A93]">
-                                  <Play className="h-4 w-4 mr-2" />
-                                  Lanjutkan
-                                </Button>
-                              </Link>
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h4 className="font-medium text-gray-900 dark:text-white truncate">{enrollment.course.title}</h4>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">{enrollment.course.mentor.user.full_name}</p>
+                            <div className="flex items-center gap-2 mt-2">
+                              <Progress value={enrollment.progress} className="h-1.5 flex-1" />
+                              <span className="text-xs font-medium text-[#005EB8]">{Math.round(enrollment.progress)}%</span>
                             </div>
                           </div>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
-
-                  <div className="p-6 border-t border-gray-200 dark:border-gray-700">
-                    <Link href="/courses">
-                      <Button
-                        variant="outline"
-                        className="w-full border-gray-300 dark:border-gray-600"
-                      >
-                        Jelajahi Kursus Lainnya
-                      </Button>
-                    </Link>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Right Column - Notifications */}
-            <div>
-              <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 h-full">
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-xl font-bold">
-                      Notifikasi
-                    </CardTitle>
-                    <Bell className="h-5 w-5 text-[#005EB8]" />
-                  </div>
-                </CardHeader>
-                <CardContent className="p-0">
-                  <div className="p-6 space-y-4">
-                    {notifications.length === 0 ? (
-                      <div className="text-center py-8">
-                        <Bell className="h-12 w-12 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
-                        <p className="text-gray-500 dark:text-gray-400">
-                          Tidak ada notifikasi
-                        </p>
-                      </div>
-                    ) : (
-                      notifications.map((notification) => (
-                        <div
-                          key={notification.id}
-                          className="p-4 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-750 transition-colors duration-200 relative group"
-                        >
-                          <button
-                            onClick={() =>
-                              handleDeleteNotification(notification.id)
-                            }
-                            className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700"
+                          {/* Button Lanjut Belajar - Style diubah seperti button Jelajahi Kursus */}
+                          <Button 
+                            asChild
+                            size="sm"
+                            className="bg-[#005EB8] hover:bg-[#004A93] text-white self-center"
                           >
-                            <X className="h-3 w-3 text-gray-500" />
-                          </button>
-                          <p className="font-medium text-gray-900 dark:text-white text-sm mb-1 pr-6">
-                            {notification.title}
-                          </p>
-                          <p className="text-sm text-gray-600 dark:text-gray-400 mb-2 line-clamp-2 pr-6">
-                            {notification.message}
-                          </p>
-                          <p className="text-xs text-gray-500 dark:text-gray-500">
-                            {notification.time}
-                          </p>
+                            <Link href={`/user/courses/${enrollment.course.id}/player`}>
+                              <PlayCircle className="h-4 w-4 mr-1" />
+                              <span className="hidden sm:inline">Lanjut Belajar</span>
+                              <span className="sm:hidden">Lanjut</span>
+                            </Link>
+                          </Button>
                         </div>
-                      ))
-                    )}
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 h-full flex flex-col justify-center">
+                      <GraduationCap className="h-12 w-12 text-gray-300 dark:text-gray-700 mx-auto mb-3" />
+                      <p className="text-gray-500 dark:text-gray-400 mb-4">Belum ada kursus yang diikuti</p>
+                      <Button asChild className="bg-[#005EB8] hover:bg-[#004A93] mx-auto">
+                        <Link href="/courses">Mulai Belajar</Link>
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Wishlist - Diubah tinggi sama dengan Aktivitas Terbaru */}
+              <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 h-[320px] flex flex-col">
+                <CardHeader className="flex flex-row items-center justify-between pb-3">
+                  <div>
+                    <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-white text-xl font-bold">
+                      <Heart className="h-5 w-5 text-[#D93025]" />
+                      Wishlist Saya
+                    </CardTitle>
+                    <CardDescription>Kursus yang Anda simpan</CardDescription>
                   </div>
+                  <Button 
+                    variant="outline" 
+                    asChild 
+                    size="sm"
+                    className="border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10 dark:border-[#005EB8] dark:text-[#005EB8]"
+                  >
+                    <Link href="/user/wishlist">
+                      Lihat Semua
+                      <ChevronRight className="h-4 w-4 ml-1" />
+                    </Link>
+                  </Button>
+                </CardHeader>
+                <CardContent className="flex-1 overflow-y-auto">
+                  {wishlist.length > 0 ? (
+                    <div className="grid grid-cols-2 gap-4">
+                      {wishlist.slice(0, 4).map((item) => (
+                        <Link key={item.id} href={`/courses/${item.course.slug}`} className="group">
+                          <div className="relative aspect-video rounded-lg overflow-hidden mb-2 border border-gray-200 dark:border-gray-700">
+                            {item.course.thumbnail ? (
+                              <img
+                                src={item.course.thumbnail}
+                                alt={item.course.title}
+                                className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                              />
+                            ) : (
+                              <div className="w-full h-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
+                                <BookOpen className="h-8 w-8 text-gray-400" />
+                              </div>
+                            )}
+                          </div>
+                          <h4 className="font-medium text-sm text-gray-900 dark:text-white line-clamp-1 group-hover:text-[#005EB8]">
+                            {item.course.title}
+                          </h4>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">{item.course.mentor.user.full_name}</p>
+                          <p className="text-sm font-semibold text-[#005EB8] mt-1">
+                            {item.course.price > 0 ? formatCurrency(item.course.price) : "Gratis"}
+                          </p>
+                        </Link>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-6 h-full flex flex-col justify-center">
+                      <Heart className="h-12 w-12 text-gray-300 dark:text-gray-700 mx-auto mb-3" />
+                      <p className="text-gray-500 dark:text-gray-400 text-sm">Belum ada kursus di wishlist</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Right Sidebar - Disesuaikan tinggi sama dengan kiri */}
+            <div className="space-y-6">
+              {/* Progress Overview - Tinggi sama dengan Lanjutkan Belajar */}
+              <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 h-[350px] flex flex-col">
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-white text-xl font-bold">
+                    <Star className="h-5 w-5 text-[#F4B400]" />
+                    Overview Progress
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="flex-1 flex flex-col">
+                  <div className="flex flex-col items-center mb-4 flex-1 justify-center">
+                    <div className="relative w-32 h-32">
+                      <svg className="w-32 h-32 transform -rotate-90">
+                        <circle cx="64" cy="64" r="56" stroke="currentColor" strokeWidth="12" fill="none" className="text-gray-200 dark:text-gray-700" />
+                        <circle 
+                          cx="64" 
+                          cy="64" 
+                          r="56" 
+                          stroke="currentColor" 
+                          strokeWidth="12" 
+                          fill="none" 
+                          strokeDasharray={`${(stats.averageProgress / 100) * 352} 352`} 
+                          strokeLinecap="round" 
+                          className="text-[#005EB8]" 
+                        />
+                      </svg>
+                      <div className="absolute inset-0 flex flex-col items-center justify-center">
+                        <span className="text-3xl font-bold text-gray-900 dark:text-white">{stats.averageProgress}%</span>
+                        <span className="text-xs text-gray-500 dark:text-gray-400">Rata-rata</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600 dark:text-gray-400">Aktif</span>
+                      <span className="font-medium text-gray-900 dark:text-white">{stats.activeEnrollments} kursus</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600 dark:text-gray-400">Selesai</span>
+                      <span className="font-medium text-gray-900 dark:text-white">{stats.completedEnrollments} kursus</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600 dark:text-gray-400">Sertifikat</span>
+                      <span className="font-medium text-gray-900 dark:text-white">{stats.totalCertificates} diperoleh</span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Recent Activity - Diubah tinggi sama dengan Wishlist */}
+              <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 h-[320px] flex flex-col">
+                <CardHeader className="flex flex-row items-center justify-between pb-3">
+                  <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-white text-xl font-bold">
+                    <Activity className="h-5 w-5 text-[#008A00]" />
+                    Aktivitas Terbaru
+                  </CardTitle>
+                  <Button 
+                    variant="outline" 
+                    asChild 
+                    size="sm"
+                    className="border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10 dark:border-[#005EB8] dark:text-[#005EB8]"
+                  >
+                    <Link href="/user/activity-logs">
+                      <ChevronRight className="h-4 w-4" />
+                    </Link>
+                  </Button>
+                </CardHeader>
+                <CardContent className="flex-1 overflow-y-auto">
+                  {activities.length > 0 ? (
+                    <div className="space-y-3">
+                      {activities.slice(0, 5).map((activity) => (
+                        <div key={activity.id} className="flex items-start gap-3">
+                          <div className="w-2 h-2 rounded-full bg-[#005EB8] mt-2 flex-shrink-0"></div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm text-gray-900 dark:text-white">{getActionLabel(activity.action)}</p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">{formatDate(activity.created_at)}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-6 h-full flex flex-col justify-center">
+                      <Activity className="h-12 w-12 text-gray-300 dark:text-gray-700 mx-auto mb-3" />
+                      <p className="text-gray-500 dark:text-gray-400 text-sm">Belum ada aktivitas</p>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </div>
           </div>
 
-          {/* Recommendations Section - Full Width */}
-          <div className="mt-8">
-            <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
-              <CardHeader>
-                <CardTitle className="text-xl font-bold">
-                  Rekomendasi Untuk Anda
-                </CardTitle>
-                <CardDescription>
-                  Kursus yang mungkin Anda sukai berdasarkan minat Anda
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {recommendations.map((course) => (
-                    <Card
-                      key={course.id}
-                      className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700"
-                    >
-                      <CardContent className="p-0">
-                        <div className="flex flex-col">
-                          <div className="w-full h-48 rounded-t-lg overflow-hidden">
-                            <img
-                              src={course.thumbnail}
-                              alt={course.title}
-                              className="w-full h-full object-cover"
-                            />
-                          </div>
-                          <div className="p-4 space-y-3">
-                            <h3 className="font-semibold text-gray-900 dark:text-white line-clamp-2">
-                              {course.title}
-                            </h3>
-                            <p className="text-sm text-gray-600 dark:text-gray-400">
-                              {course.instructor}
-                            </p>
-                            <div className="flex items-center justify-between text-sm">
-                              <span className="text-[#F4B400] font-medium flex items-center gap-1">
-                                ⭐ {course.rating}
-                              </span>
-                              <span className="text-gray-600 dark:text-gray-400">
-                                {isClient
-                                  ? formatNumber(course.students)
-                                  : course.students}{" "}
-                                siswa
-                              </span>
-                            </div>
-                            <Button className="w-full bg-[#005EB8] hover:bg-[#004A93] mt-2">
-                              Lihat Kursus
-                            </Button>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+          {/* Aksi Cepat */}
+          <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-xl font-bold text-gray-900 dark:text-white">
+                <Zap className="h-5 w-5 text-[#005EB8]" />
+                Aksi Cepat
+              </CardTitle>
+              <CardDescription>Kelola akun dan pembelajaran Anda</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <Card className="rounded-lg border bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 transition-colors cursor-pointer">
+                  <CardContent className="p-4">
+                    <Link href="/user/enrollments" className="flex flex-col items-center text-center">
+                      <div className="p-3 rounded-xl bg-[#005EB8]/10 mb-3">
+                        <GraduationCap className="h-6 w-6 text-[#005EB8]" />
+                      </div>
+                      <p className="font-medium text-gray-900 dark:text-white">Enrollment</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Lihat semua kursus Anda</p>
+                    </Link>
+                  </CardContent>
+                </Card>
+                
+                <Card className="rounded-lg border bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 transition-colors cursor-pointer">
+                  <CardContent className="p-4">
+                    <Link href="/user/certificates" className="flex flex-col items-center text-center">
+                      <div className="p-3 rounded-xl bg-[#D93025]/10 mb-3">
+                        <Award className="h-6 w-6 text-[#D93025]" />
+                      </div>
+                      <p className="font-medium text-gray-900 dark:text-white">Sertifikat</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Sertifikat Anda</p>
+                    </Link>
+                  </CardContent>
+                </Card>
+                
+                <Card className="rounded-lg border bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 transition-colors cursor-pointer">
+                  <CardContent className="p-4">
+                    <Link href="/user/transaction" className="flex flex-col items-center text-center">
+                      <div className="p-3 rounded-xl bg-[#008A00]/10 mb-3">
+                        <CreditCard className="h-6 w-6 text-[#008A00]" />
+                      </div>
+                      <p className="font-medium text-gray-900 dark:text-white">Transaksi</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Riwayat pembayaran</p>
+                    </Link>
+                  </CardContent>
+                </Card>
+                
+                <Card className="rounded-lg border bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 transition-colors cursor-pointer">
+                  <CardContent className="p-4">
+                    <Link href="/user/profile" className="flex flex-col items-center text-center">
+                      <div className="p-3 rounded-xl bg-[#F4B400]/10 mb-3">
+                        <User className="h-6 w-6 text-[#F4B400]" />
+                      </div>
+                      <p className="font-medium text-gray-900 dark:text-white">Edit Profil</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Kelola akun Anda</p>
+                    </Link>
+                  </CardContent>
+                </Card>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </UserLayout>
     </ProtectedRoute>

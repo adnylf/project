@@ -1,16 +1,13 @@
-// components/navbar/NavbarAdmin.tsx
 "use client";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import {
-  UserCircle,
-  Users,
-  Users2,
-  Settings,
-  LogOut,
-  Search,
-  Menu,
+import { 
+  UserCircle, 
+  Settings, 
+  LogOut, 
+  Menu, 
+  ListTodo
 } from "lucide-react";
 import { AnimatedThemeToggler } from "@/components/ui/animated-theme-toggler";
 import {
@@ -20,8 +17,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useState } from "react";
-import ConfirmationModal from "@/components/ui/confirmation-modal";
+import { useState, useEffect } from "react";
 import SweetAlert, { AlertType } from "@/components/ui/sweet-alert";
 
 interface NavbarAdminProps {
@@ -35,10 +31,24 @@ interface UserData {
   role: string;
 }
 
+// Dropdown menu items - Logs dan Settings saja
+const dropdownMenuItems = [
+  {
+    label: 'Logs',
+    icon: ListTodo,
+    link: '/admin/logs',
+  },
+  {
+    label: 'Settings',
+    icon: Settings,
+    link: '/admin/settings',
+  }
+];
+
 export default function NavbarAdmin({ toggleSidebar }: NavbarAdminProps) {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
-  const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [showAlert, setShowAlert] = useState(false);
+  const [showConfirmAlert, setShowConfirmAlert] = useState(false);
   const [alertConfig, setAlertConfig] = useState<{
     type: AlertType;
     title: string;
@@ -48,7 +58,22 @@ export default function NavbarAdmin({ toggleSidebar }: NavbarAdminProps) {
     title: "",
     message: "",
   });
+  const [userData, setUserData] = useState<UserData | null>(null);
+  const [isMounted, setIsMounted] = useState(false);
   const router = useRouter();
+
+  useEffect(() => {
+    setIsMounted(true);
+    // Get user data from localStorage on client side only
+    try {
+      const userDataString = localStorage.getItem("user");
+      if (userDataString) {
+        setUserData(JSON.parse(userDataString));
+      }
+    } catch (error) {
+      console.error("Error parsing user data:", error);
+    }
+  }, []);
 
   const handleLogout = async () => {
     setIsLoggingOut(true);
@@ -59,7 +84,15 @@ export default function NavbarAdmin({ toggleSidebar }: NavbarAdminProps) {
 
       if (!accessToken) {
         console.warn("No access token found");
-        clearAuthData();
+        showSweetAlert(
+          "info",
+          "Sesi Berakhir",
+          "Sesi Anda telah berakhir. Silakan login kembali."
+        );
+        // Clear auth data immediately for session expired
+        setTimeout(() => {
+          clearAuthData();
+        }, 2000);
         return;
       }
 
@@ -112,10 +145,12 @@ export default function NavbarAdmin({ toggleSidebar }: NavbarAdminProps) {
       showSweetAlert("error", "Logout Gagal", errorMessage);
 
       // Still clear auth data on error to ensure security
-      clearAuthData();
+      setTimeout(() => {
+        clearAuthData();
+      }, 3000);
     } finally {
       setIsLoggingOut(false);
-      setShowConfirmModal(false);
+      setShowConfirmAlert(false);
     }
   };
 
@@ -136,164 +171,177 @@ export default function NavbarAdmin({ toggleSidebar }: NavbarAdminProps) {
     router.push("/login");
   };
 
-  const getUserData = (): UserData | null => {
-    if (typeof window === "undefined") return null;
-
-    try {
-      const userData = localStorage.getItem("user");
-      return userData ? JSON.parse(userData) : null;
-    } catch (error) {
-      console.error("Error parsing user data:", error);
-      return null;
-    }
-  };
-
-  const userData = getUserData();
-
   const showSweetAlert = (type: AlertType, title: string, message: string) => {
     setAlertConfig({ type, title, message });
     setShowAlert(true);
   };
 
   const confirmLogout = () => {
-    setShowConfirmModal(true);
+    setShowConfirmAlert(true);
   };
+
+  // Show loading state during SSR to prevent hydration mismatch
+  if (!isMounted) {
+    return (
+      <header className="bg-transparent">
+        <nav className="container mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex h-16 items-center justify-between">
+            <div className="flex items-center gap-4">
+              {/* Mobile menu button */}
+              <button
+                onClick={toggleSidebar}
+                className="md:hidden p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                aria-label="Toggle sidebar"
+              >
+                <Menu className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <AnimatedThemeToggler />
+              
+              <div className="h-8 w-8 bg-gray-200 dark:bg-gray-700 rounded-full animate-pulse"></div>
+            </div>
+          </div>
+        </nav>
+      </header>
+    );
+  }
 
   return (
     <>
-      {/* SweetAlert Component */}
+      {/* SweetAlert Component untuk notifikasi biasa */}
       <SweetAlert
         type={alertConfig.type}
         title={alertConfig.title}
         message={alertConfig.message}
         show={showAlert}
         onClose={() => setShowAlert(false)}
-        duration={alertConfig.type === "success" ? 2000 : 5000}
+        duration={alertConfig.type === "success" ? 2000 : 3000}
         showCloseButton={true}
       />
 
-      {/* Confirmation Modal */}
-      <ConfirmationModal
-        isOpen={showConfirmModal}
-        onClose={() => setShowConfirmModal(false)}
-        onConfirm={handleLogout}
+      {/* SweetAlert untuk konfirmasi logout (WARNA MERAH) */}
+      <SweetAlert
+        type="error"
         title="Konfirmasi Logout"
         message="Apakah Anda yakin ingin logout dari akun Admin? Anda akan diarahkan ke halaman login."
-        confirmText="Ya, Logout"
-        cancelText="Batal"
-        isLoading={isLoggingOut}
-      />
+        show={showConfirmAlert}
+        onClose={() => setShowConfirmAlert(false)}
+        duration={0} // Tidak auto close untuk konfirmasi
+        showCloseButton={true}
+      >
+        {/* Tambahan tombol konfirmasi khusus untuk alert konfirmasi */}
+        <div className="mt-6 flex gap-3">
+          <button
+            onClick={() => setShowConfirmAlert(false)}
+            disabled={isLoggingOut}
+            className="flex-1 py-2 px-4 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors disabled:opacity-50 font-medium"
+          >
+            Batal
+          </button>
+          <button
+            onClick={handleLogout}
+            disabled={isLoggingOut}
+            className="flex-1 py-2 px-4 bg-[#D93025] hover:bg-[#c41c1c] text-white rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center font-medium"
+          >
+            {isLoggingOut ? (
+              <>
+                <div className="h-5 w-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                Sedang logout...
+              </>
+            ) : (
+              "Ya, Logout"
+            )}
+          </button>
+        </div>
+      </SweetAlert>
 
-      <header className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
+      <header className="bg-transparent">
         <nav className="container mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex h-16 items-center justify-between">
-            {/* Logo */}
             <div className="flex items-center gap-4">
+              {/* Mobile menu button */}
               <button
                 onClick={toggleSidebar}
                 className="md:hidden p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                aria-label="Toggle sidebar"
               >
                 <Menu className="h-5 w-5" />
               </button>
-              <Link
-                href="/admin/dashboard"
-                className="text-xl font-bold text-gray-900 dark:text-white"
-              >
-                AdminPanel
-              </Link>
             </div>
 
-            <div className="flex items-center gap-4">
-              {/* Search Input */}
-              <div className="relative hidden md:block">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Cari data..."
-                  className="pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#005EB8] focus:border-transparent"
-                />
-              </div>
-
+            <div className="flex items-center gap-3">
               <AnimatedThemeToggler />
 
-              {/* Profile Dropdown */}
               <DropdownMenu>
                 <DropdownMenuTrigger
                   disabled={isLoggingOut}
                   className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors focus:outline-none focus:ring-2 focus:ring-[#005EB8] focus:ring-offset-2 dark:focus:ring-offset-gray-900 disabled:opacity-50"
+                  aria-label="Admin menu"
                 >
                   <UserCircle className="h-8 w-8 text-[#005EB8]" />
                 </DropdownMenuTrigger>
                 <DropdownMenuContent
                   align="end"
-                  className="w-56 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700"
+                  className="w-56 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-lg"
                 >
                   {/* User info in dropdown */}
                   {userData && (
-                    <>
-                      <div className="px-2 py-1.5 text-sm border-b border-gray-200 dark:border-gray-700">
-                        <p className="font-medium text-gray-900 dark:text-gray-100">
-                          {userData.name}
-                        </p>
+                    <div className="px-3 py-3 border-b border-gray-200 dark:border-gray-700">
+                      <p className="font-semibold text-gray-900 dark:text-gray-100 text-sm">
+                        {userData.name}
+                      </p>
+                      <div className="mt-1">
                         <p className="text-gray-500 dark:text-gray-400 text-xs">
                           {userData.email}
                         </p>
+                        <p className="text-[#005EB8] dark:text-blue-400 text-xs font-medium mt-1 capitalize">
+                          {userData.role.toLowerCase()}
+                        </p>
                       </div>
-                      <DropdownMenuSeparator className="bg-gray-200 dark:bg-gray-700" />
-                    </>
+                    </div>
                   )}
 
-                  <DropdownMenuItem
-                    asChild
-                    className="focus:bg-gray-100 dark:focus:bg-gray-700"
-                  >
-                    <Link
-                      href="/admin/users"
-                      className="flex items-center gap-2 cursor-pointer text-gray-700 dark:text-gray-300"
-                    >
-                      <Users className="h-4 w-4" />
-                      <span>Users</span>
-                    </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    asChild
-                    className="focus:bg-gray-100 dark:focus:bg-gray-700"
-                  >
-                    <Link
-                      href="/admin/mentors"
-                      className="flex items-center gap-2 cursor-pointer text-gray-700 dark:text-gray-300"
-                    >
-                      <Users2 className="h-4 w-4" />
-                      <span>Mentors</span>
-                    </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    asChild
-                    className="focus:bg-gray-100 dark:focus:bg-gray-700"
-                  >
-                    <Link
-                      href="/admin/settings"
-                      className="flex items-center gap-2 cursor-pointer text-gray-700 dark:text-gray-300"
-                    >
-                      <Settings className="h-4 w-4" />
-                      <span>Settings</span>
-                    </Link>
-                  </DropdownMenuItem>
+                  {/* Logs dan Settings */}
+                  <div className="py-1">
+                    {dropdownMenuItems.map((item) => {
+                      const Icon = item.icon;
+                      return (
+                        <DropdownMenuItem
+                          key={item.label}
+                          asChild
+                          className="focus:bg-gray-100 dark:focus:bg-gray-700 cursor-pointer px-3 py-2 text-sm text-gray-700 dark:text-gray-300"
+                        >
+                          <Link
+                            href={item.link}
+                            className="flex items-center gap-3 w-full"
+                          >
+                            <Icon className="h-4 w-4" />
+                            <span>{item.label}</span>
+                          </Link>
+                        </DropdownMenuItem>
+                      );
+                    })}
+                  </div>
+
                   <DropdownMenuSeparator className="bg-gray-200 dark:bg-gray-700" />
+                  
+                  {/* Logout (WARNA MERAH) */}
                   <DropdownMenuItem
                     onClick={confirmLogout}
                     disabled={isLoggingOut}
-                    className="flex items-center gap-2 cursor-pointer text-red-600 dark:text-red-400 focus:bg-red-50 dark:focus:bg-red-900/20 disabled:opacity-50"
+                    className="flex items-center gap-3 cursor-pointer text-[#D93025] dark:text-red-400 focus:bg-red-50 dark:focus:bg-red-900/20 px-3 py-2"
                   >
                     {isLoggingOut ? (
                       <>
-                        <div className="h-4 w-4 border-2 border-red-600 border-t-transparent rounded-full animate-spin" />
-                        <span>Logging out...</span>
+                        <div className="h-4 w-4 border-2 border-[#D93025] border-t-transparent rounded-full animate-spin" />
+                        <span className="text-sm">Logging out...</span>
                       </>
                     ) : (
                       <>
                         <LogOut className="h-4 w-4" />
-                        <span>Logout</span>
+                        <span className="text-sm">Logout</span>
                       </>
                     )}
                   </DropdownMenuItem>

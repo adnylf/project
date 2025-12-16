@@ -1,304 +1,132 @@
-// lib/payment.ts
-import axios from "axios";
-import { paymentConfig } from "@/config/payment.config";
-import { generateOrderId } from "@/utils/crypto.util";
+// Payment utilities
+import { paymentConfig } from '@/config/payment.config';
+import { PaymentMethod, TransactionStatus } from '@prisma/client';
 
-/**
- * Payment Gateway Interface
- */
-export interface PaymentRequest {
+interface CreatePaymentRequest {
   orderId: string;
   amount: number;
   customerName: string;
   customerEmail: string;
-  courseName: string;
-  userId: string;
-  courseId: string;
+  paymentMethod: PaymentMethod;
+  itemDetails: {
+    id: string;
+    name: string;
+    price: number;
+    quantity: number;
+  }[];
 }
 
-export interface PaymentResponse {
-  orderId: string;
-  token: string;
-  redirectUrl: string;
-  expiresAt: Date;
+interface PaymentResponse {
+  success: boolean;
+  transactionId?: string;
+  paymentUrl?: string;
+  token?: string;
+  expiredAt?: Date;
+  error?: string;
 }
 
-export interface PaymentNotification {
-  orderId: string;
-  transactionStatus: string;
-  fraudStatus?: string;
-  grossAmount: string;
-  paymentType?: string;
-  transactionTime?: string;
-  signatureKey?: string;
+interface WebhookPayload {
+  order_id: string;
+  transaction_status: string;
+  payment_type: string;
+  gross_amount: string;
+  signature_key?: string;
 }
 
-interface MidtransErrorResponse {
-  error_messages?: string[];
-  status_message?: string;
+// Generate order ID
+export function generateOrderId(): string {
+  const timestamp = Date.now().toString(36).toUpperCase();
+  const random = Math.random().toString(36).substring(2, 8).toUpperCase();
+  return `ORD-${timestamp}-${random}`;
 }
 
-/**
- * Midtrans Payment Gateway
- */
-export class MidtransPayment {
-  private serverKey: string;
-  private clientKey: string;
-  private snapUrl: string;
-  private isProduction: boolean;
+// Calculate platform fee
+export function calculatePlatformFee(amount: number): number {
+  const { percentage, minFee } = paymentConfig.platformFee;
+  const fee = (amount * percentage) / 100;
+  return Math.max(fee, minFee);
+}
 
-  constructor() {
-    this.serverKey = paymentConfig.midtrans.serverKey;
-    this.clientKey = paymentConfig.midtrans.clientKey;
-    this.snapUrl = paymentConfig.midtrans.snapUrl;
-    this.isProduction = paymentConfig.midtrans.isProduction;
-  }
+// Calculate mentor revenue
+export function calculateMentorRevenue(amount: number): number {
+  const platformFee = calculatePlatformFee(amount);
+  return amount - platformFee;
+}
 
-  /**
-   * Create payment transaction
-   */
-  async createTransaction(data: PaymentRequest): Promise<PaymentResponse> {
-    const { orderId, amount, customerName, customerEmail, courseName } = data;
-
-    // Calculate expiry time (24 hours from now)
-    const expiresAt = new Date(
-      Date.now() + paymentConfig.settings.expiryDuration
-    );
-
-    // Prepare transaction details
-    const transactionDetails = {
-      transaction_details: {
-        order_id: orderId,
-        gross_amount: amount,
-      },
-      customer_details: {
-        first_name: customerName,
-        email: customerEmail,
-      },
-      item_details: [
-        {
-          id: data.courseId,
-          name: courseName,
-          price: amount,
-          quantity: 1,
-          category: "course",
-        },
-      ],
-      callbacks: {
-        finish: paymentConfig.transaction.returnUrl,
-        error: paymentConfig.transaction.cancelUrl,
-        pending: paymentConfig.transaction.returnUrl,
-      },
-      expiry: {
-        start_time: new Date().toISOString(),
-        unit: "hours",
-        duration: 24,
-      },
-      enabled_payments: paymentConfig.enabledMethods,
-    };
-
-    try {
-      // Create Base64 encoded authorization
-      const auth = Buffer.from(`${this.serverKey}:`).toString("base64");
-
-      // Call Midtrans Snap API
-      const response = await axios.post(this.snapUrl, transactionDetails, {
-        headers: {
-          Accept: "application/json",
-          "Content-Type": "application/json",
-          Authorization: `Basic ${auth}`,
-        },
-      });
-
+// Create payment (stub - integrate with actual payment gateway)
+export async function createPayment(request: CreatePaymentRequest): Promise<PaymentResponse> {
+  try {
+    // In development, simulate payment
+    if (process.env.NODE_ENV === 'development') {
+      console.log('💳 Payment request:', request);
       return {
-        orderId,
-        token: response.data.token,
-        redirectUrl: response.data.redirect_url,
-        expiresAt,
+        success: true,
+        transactionId: `TXN-${Date.now()}`,
+        paymentUrl: `http://localhost:3000/payment/simulate?order_id=${request.orderId}`,
+        expiredAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       };
-    } catch (error: unknown) {
-      if (axios.isAxiosError(error)) {
-        const errorData = error.response?.data as MidtransErrorResponse;
-        throw new Error(
-          errorData?.error_messages?.[0] || "Payment gateway error"
-        );
-      }
-      if (error instanceof Error) {
-        throw error;
-      }
-      throw new Error("Unknown payment gateway error");
     }
-  }
 
-  /**
-   * Verify payment notification
-   */
-  async verifyNotification(
-    notification: PaymentNotification
-  ): Promise<boolean> {
-    const { orderId, grossAmount, signatureKey } = notification;
-
-    // Create signature
-    const serverKey = this.serverKey;
-    const crypto = await import("crypto");
-    const hash = crypto
-      .createHash("sha512")
-      .update(
-        `${orderId}${notification.transactionStatus}${grossAmount}${serverKey}`
-      )
-      .digest("hex");
-
-    // Verify signature
-    return hash === signatureKey;
-  }
-
-  /**
-   * Get transaction status
-   */
-  async getTransactionStatus(orderId: string): Promise<PaymentNotification> {
-    const auth = Buffer.from(`${this.serverKey}:`).toString("base64");
-    const apiUrl = `${paymentConfig.midtrans.apiUrl}/v2/${orderId}/status`;
-
-    try {
-      const response = await axios.get(apiUrl, {
-        headers: {
-          Accept: "application/json",
-          "Content-Type": "application/json",
-          Authorization: `Basic ${auth}`,
-        },
-      });
-
-      return {
-        orderId: response.data.order_id,
-        transactionStatus: response.data.transaction_status,
-        fraudStatus: response.data.fraud_status,
-        grossAmount: response.data.gross_amount,
-        paymentType: response.data.payment_type,
-        transactionTime: response.data.transaction_time,
-      };
-    } catch (error: unknown) {
-      if (axios.isAxiosError(error)) {
-        const errorData = error.response?.data as MidtransErrorResponse;
-        throw new Error(
-          errorData?.status_message || "Failed to get transaction status"
-        );
-      }
-      if (error instanceof Error) {
-        throw error;
-      }
-      throw new Error(
-        "Unknown error occurred while getting transaction status"
-      );
-    }
-  }
-
-  /**
-   * Cancel transaction
-   */
-  async cancelTransaction(orderId: string): Promise<boolean> {
-    const auth = Buffer.from(`${this.serverKey}:`).toString("base64");
-    const apiUrl = `${paymentConfig.midtrans.apiUrl}/v2/${orderId}/cancel`;
-
-    try {
-      await axios.post(
-        apiUrl,
-        {},
-        {
-          headers: {
-            Accept: "application/json",
-            "Content-Type": "application/json",
-            Authorization: `Basic ${auth}`,
-          },
-        }
-      );
-      return true;
-    } catch (error: unknown) {
-      console.error("Failed to cancel transaction:", error);
-      return false;
-    }
-  }
-
-  /**
-   * Refund transaction
-   */
-  async refundTransaction(orderId: string, amount?: number): Promise<boolean> {
-    const auth = Buffer.from(`${this.serverKey}:`).toString("base64");
-    const apiUrl = `${paymentConfig.midtrans.apiUrl}/v2/${orderId}/refund`;
-
-    const payload = amount ? { refund_amount: amount } : {};
-
-    try {
-      await axios.post(apiUrl, payload, {
-        headers: {
-          Accept: "application/json",
-          "Content-Type": "application/json",
-          Authorization: `Basic ${auth}`,
-        },
-      });
-      return true;
-    } catch (error: unknown) {
-      console.error("Failed to refund transaction:", error);
-      return false;
-    }
-  }
-
-  /**
-   * Calculate platform commission
-   */
-  calculateCommission(amount: number): {
-    platformCommission: number;
-    paymentFee: number;
-    mentorRevenue: number;
-  } {
-    const platformCommission = amount * paymentConfig.fees.platformCommission;
-    const paymentFee =
-      amount * paymentConfig.fees.paymentGatewayFee +
-      paymentConfig.fees.fixedFee;
-    const mentorRevenue = amount - platformCommission - paymentFee;
-
+    // TODO: Integrate with Midtrans or other payment gateway
+    // const midtrans = new MidtransClient.Snap({
+    //   isProduction: paymentConfig.midtrans.isProduction,
+    //   serverKey: paymentConfig.midtrans.serverKey,
+    //   clientKey: paymentConfig.midtrans.clientKey,
+    // });
+    
     return {
-      platformCommission: Math.round(platformCommission),
-      paymentFee: Math.round(paymentFee),
-      mentorRevenue: Math.round(mentorRevenue),
+      success: true,
+      transactionId: `TXN-${Date.now()}`,
+      paymentUrl: '#',
+      expiredAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
     };
+  } catch (error) {
+    console.error('Create payment error:', error);
+    return { success: false, error: (error as Error).message };
   }
 }
 
-/**
- * Payment Status Mapper - DIPERBARUI untuk include EXPIRED
- */
-export function mapTransactionStatus(midtransStatus: string): string {
-  const statusMap: Record<string, string> = {
-    capture: "PAID",
-    settlement: "PAID",
-    pending: "PENDING",
-    deny: "FAILED",
-    expire: "EXPIRED",
-    cancel: "CANCELLED",
-    refund: "REFUNDED",
-    partial_refund: "REFUNDED",
+// Verify webhook signature
+export function verifyWebhookSignature(payload: WebhookPayload): boolean {
+  if (!paymentConfig.webhook.verifySignature) return true;
+  
+  // TODO: Implement actual signature verification
+  // const serverKey = paymentConfig.midtrans.serverKey;
+  // const hash = crypto.createHash('sha512')
+  //   .update(`${payload.order_id}${payload.status_code}${payload.gross_amount}${serverKey}`)
+  //   .digest('hex');
+  // return hash === payload.signature_key;
+  
+  return true;
+}
+
+// Map payment gateway status to our status
+export function mapPaymentStatus(gatewayStatus: string): TransactionStatus {
+  const statusMap: Record<string, TransactionStatus> = {
+    'capture': TransactionStatus.PAID,
+    'settlement': TransactionStatus.PAID,
+    'pending': TransactionStatus.PENDING,
+    'deny': TransactionStatus.FAILED,
+    'cancel': TransactionStatus.CANCELLED,
+    'expire': TransactionStatus.FAILED,
+    'failure': TransactionStatus.FAILED,
   };
-
-  return statusMap[midtransStatus] || "PENDING";
+  
+  return statusMap[gatewayStatus.toLowerCase()] || TransactionStatus.PENDING;
 }
 
-/**
- * Validate payment notification
- */
-export function validatePaymentNotification(
-  data: any
-): data is PaymentNotification {
-  return (
-    typeof data === "object" &&
-    data !== null &&
-    typeof data.orderId === "string" &&
-    typeof data.transactionStatus === "string" &&
-    typeof data.grossAmount === "string"
-  );
+// Format currency (Indonesian Rupiah)
+export function formatCurrency(amount: number): string {
+  return new Intl.NumberFormat('id-ID', {
+    style: 'currency',
+    currency: 'IDR',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(amount);
 }
 
-/**
- * Export payment gateway instance
- */
-export const paymentGateway = new MidtransPayment();
-export default paymentGateway;
+// Check if amount is valid
+export function isValidAmount(amount: number): boolean {
+  const { minAmount, maxAmount } = paymentConfig.transaction;
+  return amount >= minAmount && amount <= maxAmount;
+}

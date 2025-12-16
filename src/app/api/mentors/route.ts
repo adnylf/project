@@ -1,51 +1,55 @@
-import { NextRequest } from 'next/server';
-import mentorService from '@/services/mentor.service';
-import { paginatedResponse, errorResponse } from '@/utils/response.util';
-import { validatePagination } from '@/utils/validation.util';
-import { errorHandler } from '@/middlewares/error.middleware';
-import { corsMiddleware } from '@/middlewares/cors.middleware';
-import { loggingMiddleware } from '@/middlewares/logging.middleware';
-import { HTTP_STATUS } from '@/lib/constants';
+import { NextRequest, NextResponse } from 'next/server';
+import prisma from '@/lib/prisma';
 
-/**
- * GET /api/mentors
- * Get all approved mentors with filters
- */
-async function handler(request: NextRequest) {
+// GET /api/mentors - List all approved mentors
+export async function GET(request: NextRequest) {
   try {
-    // Parse query parameters
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '10');
-    const search = searchParams.get('search') || undefined;
-    const expertise = searchParams.get('expertise') || undefined;
-    const minRating = searchParams.get('minRating')
-      ? parseFloat(searchParams.get('minRating')!)
-      : undefined;
-    const sortBy = searchParams.get('sortBy') || 'createdAt';
-    const sortOrder = (searchParams.get('sortOrder') || 'desc') as 'asc' | 'desc';
+    const search = searchParams.get('search');
+    const expertise = searchParams.get('expertise');
 
-    // Validate pagination
-    const validatedPagination = validatePagination(page, limit);
+    const skip = (page - 1) * limit;
 
-    // Get mentors
-    const result = await mentorService.getAllMentors({
-      page: validatedPagination.page,
-      limit: validatedPagination.limit,
-      search,
-      expertise,
-      minRating,
-      sortBy,
-      sortOrder,
-    });
+    const where: Record<string, unknown> = {
+      status: 'APPROVED',
+    };
 
-    return paginatedResponse(result.data, result.meta, 'Mentors retrieved successfully');
-  } catch (error) {
-    if (error instanceof Error) {
-      return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
+    if (search) {
+      where.OR = [
+        { user: { full_name: { contains: search, mode: 'insensitive' } } },
+        { headline: { contains: search, mode: 'insensitive' } },
+        { expertise: { has: search } },
+      ];
     }
-    return errorResponse('Failed to get mentors', HTTP_STATUS.INTERNAL_SERVER_ERROR);
+
+    if (expertise) {
+      where.expertise = { has: expertise };
+    }
+
+    const [mentors, total] = await Promise.all([
+      prisma.mentorProfile.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: [{ average_rating: 'desc' }, { total_students: 'desc' }],
+        include: {
+          user: {
+            select: { id: true, full_name: true, avatar_url: true, bio: true },
+          },
+          _count: { select: { courses: { where: { status: 'PUBLISHED' } } } },
+        },
+      }),
+      prisma.mentorProfile.count({ where }),
+    ]);
+
+    return NextResponse.json({
+      mentors,
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    });
+  } catch (error) {
+    console.error('Get mentors error:', error);
+    return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 });
   }
 }
-
-export const GET = errorHandler(loggingMiddleware(corsMiddleware(handler)));

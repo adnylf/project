@@ -20,7 +20,7 @@ import {
   BarChart3
 } from 'lucide-react';
 import AdminLayout from '@/components/admin/admin-layout';
-import ProtectedRoute from "@/components/ui/protected-route";
+import ProtectedRoute from "@/components/auth/protected-route";
 import {
   Table,
   TableBody,

@@ -1,71 +1,76 @@
-import { NextRequest } from "next/server";
-import { changePasswordSchema } from "@/lib/validation";
-import authService from "@/services/auth.service";
-import {
-  successResponse,
-  validationErrorResponse,
-  errorResponse,
-} from "@/utils/response.util";
-import { validateData } from "@/utils/validation.util";
-import { errorHandler } from "@/middlewares/error.middleware";
-import { requireAuth } from "@/middlewares/auth.middleware";
-import { corsMiddleware } from "@/middlewares/cors.middleware";
-import { loggingMiddleware } from "@/middlewares/logging.middleware";
-import { HTTP_STATUS } from "@/lib/constants";
+import { NextRequest, NextResponse } from 'next/server';
+import prisma from '@/lib/prisma';
+import { getAuthUser, unauthorizedResponse, comparePassword, hashPassword } from '@/lib/auth';
+import { changePasswordSchema } from '@/lib/validation';
 
-async function handler(
-  request: NextRequest,
-  context: { user: { userId: string; email: string; role: string } }
-) {
+export async function POST(request: NextRequest) {
   try {
-    const { user } = context;
-
-    // Parse request body
-    let body;
-    try {
-      body = await request.json();
-    } catch {
-      return errorResponse(
-        "Invalid JSON in request body",
-        HTTP_STATUS.BAD_REQUEST
-      );
+    const authUser = getAuthUser(request);
+    if (!authUser) {
+      return unauthorizedResponse();
     }
 
+    const body = await request.json();
+    
     // Validate input
-    const validation = await validateData(changePasswordSchema, body);
-    if (!validation.success) {
-      return validationErrorResponse(validation.errors);
-    }
-
-    // Check if new password is different from current
-    if (validation.data.currentPassword === validation.data.newPassword) {
-      return errorResponse(
-        "New password must be different from current password",
-        HTTP_STATUS.BAD_REQUEST
+    const result = changePasswordSchema.safeParse(body);
+    if (!result.success) {
+      return NextResponse.json(
+        { error: 'Validasi gagal', details: result.error.flatten().fieldErrors },
+        { status: 400 }
       );
     }
 
-    // Change password
-    await authService.changePassword(
-      user.userId,
-      validation.data.currentPassword,
-      validation.data.newPassword
-    );
+    const { current_password, new_password } = result.data;
 
-    return successResponse(null, "Password changed successfully");
-  } catch (error) {
-    if (error instanceof Error) {
-      return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
+    // Get user with password
+    const user = await prisma.user.findUnique({
+      where: { id: authUser.userId },
+      select: { id: true, password: true },
+    });
+
+    if (!user) {
+      return unauthorizedResponse('User tidak ditemukan');
     }
-    return errorResponse(
-      "Failed to change password",
-      HTTP_STATUS.INTERNAL_SERVER_ERROR
+
+    // Verify current password
+    const isPasswordValid = await comparePassword(current_password, user.password);
+    if (!isPasswordValid) {
+      return NextResponse.json(
+        { error: 'Password lama tidak sesuai' },
+        { status: 400 }
+      );
+    }
+
+    // Hash new password
+    const hashedPassword = await hashPassword(new_password);
+
+    // Update password
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { password: hashedPassword },
+    });
+
+    // Log activity
+    await prisma.activityLog.create({
+      data: {
+        user_id: user.id,
+        action: 'CHANGE_PASSWORD',
+        entity_type: 'user',
+        entity_id: user.id,
+        ip_address: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || null,
+        user_agent: request.headers.get('user-agent') || null,
+      },
+    });
+
+    return NextResponse.json({
+      message: 'Password berhasil diubah',
+    });
+  } catch (error) {
+    console.error('Change password error:', error);
+    return NextResponse.json(
+      { error: 'Terjadi kesalahan server' },
+      { status: 500 }
     );
   }
 }
-
-const authenticatedHandler = requireAuth(handler);
-
-export const POST = errorHandler(
-  loggingMiddleware(corsMiddleware(authenticatedHandler))
-);

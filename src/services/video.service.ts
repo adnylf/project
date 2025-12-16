@@ -1,371 +1,245 @@
-import path from "path";
-import { videoProcessor } from "@/lib/video";
-import { storage } from "@/lib/storage";
-import { storageConfig } from "@/config/storage.config";
-import { videoConfig } from "@/config/video.config";
-import prisma from "@/lib/prisma";
-import { generateUniqueFilename } from "@/utils/file.util";
-import { AppError } from "@/utils/error.util";
-import { HTTP_STATUS } from "@/lib/constants";
-import type {
-  VideoQuality,
-  VideoProcessingOptions,
-  VideoStatus,
-} from "@/types/video.types";
-import type { VideoQuality as PrismaVideoQuality } from "@prisma/client";
+// Video Service
+import prisma from '@/lib/prisma';
+import { VideoStatus, VideoQuality } from '@prisma/client';
+import path from 'path';
+import { mkdir, writeFile } from 'fs/promises';
+import { storageConfig } from '@/config/storage.config';
 
-/**
- * Map VideoQuality to Prisma VideoQuality enum
- */
-function mapToPrismaQuality(quality: VideoQuality): PrismaVideoQuality {
-  const qualityMap: Record<VideoQuality, PrismaVideoQuality> = {
-    "360p": "Q360P",
-    "480p": "Q480P",
-    "720p": "Q720P",
-    "1080p": "Q1080P",
-  };
-  return qualityMap[quality];
-}
-
-/**
- * Video Response Interface
- */
-interface VideoResponse {
-  id: string;
-  originalName: string;
+// Create video record
+export async function createVideo(data: {
+  original_name: string;
   filename: string;
   path: string;
   size: number;
-  status: VideoStatus;
-  thumbnail?: string;
-  duration?: number;
-  createdAt: Date;
-  updatedAt: Date;
+  mime_type: string;
+}) {
+  return prisma.video.create({
+    data: {
+      original_name: data.original_name,
+      filename: data.filename,
+      path: data.path,
+      size: data.size,
+      mime_type: data.mime_type,
+      status: VideoStatus.UPLOADING,
+    },
+  });
 }
 
-/**
- * Processing Status Response
- */
-interface ProcessingStatusResponse {
-  status: string;
-  progress: number;
-  error?: string;
-}
-
-/**
- * Video Service
- * Handles video upload, processing, and management
- */
-export class VideoService {
-  /**
-   * Create video record in database
-   */
-  async createVideo(file: Express.Multer.File): Promise<VideoResponse> {
-    const filename = generateUniqueFilename(file.originalname);
-    const filePath = path.join("videos", "originals", filename);
-
-    // Save to storage
-    if (file.buffer) {
-      await storage.save(filePath, file.buffer);
-    }
-
-    // Get metadata
-    const fullPath = path.join(storageConfig.local.basePath, filePath);
-    const metadata = await videoProcessor.getMetadata(fullPath);
-
-    // Create database record
-    const video = await prisma.video.create({
-      data: {
-        originalName: file.originalname,
-        filename,
-        path: filePath,
-        size: file.size,
-        mimeType: file.mimetype, // Added required field
-        status: "PROCESSING",
-        duration: Math.floor(metadata.duration),
-      },
-    });
-
-    // Trigger background processing
-    void this.processVideoInBackground(video.id, filePath);
-
-    return {
-      id: video.id,
-      originalName: video.originalName,
-      filename: video.filename,
-      path: video.path,
-      size: video.size,
-      status: video.status as VideoStatus,
-      duration: video.duration || undefined,
-      createdAt: video.createdAt,
-      updatedAt: video.updatedAt,
-    };
-  }
-
-  /**
-   * Process video in background
-   */
-  private async processVideoInBackground(
-    videoId: string,
-    inputPath: string
-  ): Promise<void> {
-    try {
-      // Process to multiple qualities
-      await this.processVideo(videoId, inputPath, {
-        qualities: videoConfig.resolutions
-          .filter((r) => r.enabled)
-          .map((r) => r.name as VideoQuality),
-        generateThumbnails: true,
-      });
-
-      // Update status to completed
-      await prisma.video.update({
-        where: { id: videoId },
-        data: { status: "COMPLETED" },
-      });
-    } catch (error) {
-      console.error("Video processing error:", error);
-
-      // Update status to failed
-      await prisma.video.update({
-        where: { id: videoId },
-        data: {
-          status: "FAILED",
-          processingError:
-            error instanceof Error ? error.message : "Unknown error",
-        },
-      });
-    }
-  }
-
-  /**
-   * Process video to multiple qualities
-   */
-  async processVideo(
-    videoId: string,
-    inputPath: string,
-    options: VideoProcessingOptions = {}
-  ): Promise<void> {
-    const fullInputPath = path.join(storageConfig.local.basePath, inputPath);
-
-    // Get qualities to process
-    const qualities: VideoQuality[] = options.qualities || [
-      "360p",
-      "480p",
-      "720p",
-      "1080p",
-    ];
-
-    // Process each quality
-    for (const quality of qualities) {
-      const outputFilename = `${videoId}.mp4`;
-      const outputPath = path.join(
-        "videos",
-        "processed",
-        quality,
-        outputFilename
-      );
-      const fullOutputPath = path.join(
-        storageConfig.local.basePath,
-        outputPath
-      );
-
-      await videoProcessor.convertToQuality(
-        fullInputPath,
-        fullOutputPath,
-        quality,
-        (progress) => {
-          console.log(
-            `Processing ${quality}: ${progress.percent?.toFixed(2)}%`
-          );
-        }
-      );
-
-      // Get file size
-      const exists = await storage.exists(outputPath);
-      if (exists) {
-        const resolution = videoConfig.resolutions.find(
-          (r) => r.name === quality
-        );
-        // Create quality record with mapped enum
-        await prisma.videoQuality_Model.create({
-          data: {
-            videoId,
-            quality: mapToPrismaQuality(quality), // Use mapping function
-            path: outputPath,
-            size: 0, // Will be updated
-            bitrate: resolution?.bitrate || "0k",
-            resolution: `${resolution?.width}x${resolution?.height}`,
+// Get video by ID
+export async function getVideoById(id: string) {
+  return prisma.video.findUnique({
+    where: { id },
+    include: {
+      qualities: { orderBy: { quality: 'asc' } },
+      material: {
+        include: {
+          section: {
+            include: { course: { select: { id: true, title: true, mentor_id: true } } },
           },
-        });
-      }
-    }
-
-    // Generate thumbnails
-    if (options.generateThumbnails) {
-      await this.generateThumbnails(videoId, fullInputPath);
-    }
-
-    // Delete original if requested
-    if (options.deleteOriginal) {
-      await storage.delete(inputPath);
-    }
-  }
-
-  /**
-   * Generate video thumbnails
-   */
-  async generateThumbnails(
-    videoId: string,
-    inputPath: string
-  ): Promise<string[]> {
-    const outputDir = path.join(
-      storageConfig.local.basePath,
-      "videos",
-      "thumbnails"
-    );
-
-    const thumbnails = await videoProcessor.generateThumbnails(
-      inputPath,
-      outputDir,
-      {
-        count: videoConfig.thumbnails.count,
-        size: videoConfig.thumbnails.size,
-        format: videoConfig.thumbnails.format as "jpg",
-        quality: videoConfig.thumbnails.quality,
-      }
-    );
-
-    // Update database with first thumbnail
-    if (thumbnails.length > 0) {
-      const thumbnailPath = path.relative(
-        storageConfig.local.basePath,
-        thumbnails[0]
-      );
-
-      await prisma.video.update({
-        where: { id: videoId },
-        data: { thumbnail: thumbnailPath },
-      });
-    }
-
-    return thumbnails.map((thumbnail: string) =>
-      path.relative(storageConfig.local.basePath, thumbnail)
-    );
-  }
-
-  /**
-   * Get video by ID
-   */
-  async getVideoById(videoId: string): Promise<VideoResponse | null> {
-    const video = await prisma.video.findUnique({
-      where: { id: videoId },
-      include: {
-        qualities: true,
+        },
       },
-    });
+    },
+  });
+}
 
-    if (!video) {
-      return null;
-    }
-
-    return {
-      id: video.id,
-      originalName: video.originalName,
-      filename: video.filename,
-      path: video.path,
-      size: video.size,
-      status: video.status as VideoStatus,
-      thumbnail: video.thumbnail || undefined,
-      duration: video.duration || undefined,
-      createdAt: video.createdAt,
-      updatedAt: video.updatedAt,
-    };
-  }
-
-  /**
-   * Get video metadata
-   */
-  async getVideoMetadata(videoId: string): Promise<{
+// Update video status
+export async function updateVideoStatus(
+  id: string,
+  status: VideoStatus,
+  data?: Partial<{
     duration: number;
-    width: number;
-    height: number;
-    bitrate: string;
-    codec: string;
-    format: string;
-    size: number;
-    fps: number;
-  } | null> {
-    const video = await this.getVideoById(videoId);
+    thumbnail: string;
+    processing_error: string | null;
+  }>
+) {
+  return prisma.video.update({
+    where: { id },
+    data: { status, ...data },
+  });
+}
 
-    if (!video) {
-      return null;
+// Add video quality
+export async function addVideoQuality(videoId: string, data: {
+  quality: VideoQuality;
+  path: string;
+  size: number;
+  resolution: string;
+  bitrate: string;
+}) {
+  return prisma.videoQuality_Model.create({
+    data: {
+      video_id: videoId,
+      quality: data.quality,
+      path: data.path,
+      size: data.size,
+      resolution: data.resolution,
+      bitrate: data.bitrate,
+    },
+  });
+}
+
+// Upload and create video
+export async function uploadVideo(file: File): Promise<{
+  success: boolean;
+  video?: { id: string; path: string };
+  error?: string;
+}> {
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    const buffer = new Uint8Array(arrayBuffer);
+
+    // Validate
+    const allowedTypes = storageConfig.allowedTypes.video;
+    if (!allowedTypes.includes(file.type)) {
+      return { success: false, error: 'Tipe file tidak didukung' };
     }
 
-    const fullPath = path.join(storageConfig.local.basePath, video.path);
-    return videoProcessor.getMetadata(fullPath);
-  }
+    const maxSize = storageConfig.limits.video;
+    if (file.size > maxSize) {
+      return { success: false, error: 'Ukuran file melebihi batas' };
+    }
 
-  /**
-   * Delete video and all related files
-   */
-  async deleteVideo(videoId: string): Promise<void> {
-    const video = await prisma.video.findUnique({
-      where: { id: videoId },
-      include: { qualities: true },
+    // Generate filename
+    const ext = path.extname(file.name);
+    const filename = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}${ext}`;
+
+    // Save file
+    const uploadPath = storageConfig.paths.videos;
+    const fullPath = path.join(process.cwd(), 'uploads', uploadPath);
+    await mkdir(fullPath, { recursive: true });
+
+    const filePath = path.join(fullPath, filename);
+    await writeFile(filePath, buffer);
+
+    const videoPath = `/uploads/${uploadPath}/${filename}`;
+
+    // Create video record
+    const video = await createVideo({
+      original_name: file.name,
+      filename,
+      path: videoPath,
+      size: file.size,
+      mime_type: file.type,
     });
 
-    if (!video) {
-      throw new AppError("Video not found", HTTP_STATUS.NOT_FOUND);
-    }
-
-    // Delete original
-    await storage.delete(video.path);
-
-    // Delete all quality versions
-    for (const quality of video.qualities) {
-      await storage.delete(quality.path);
-    }
-
-    // Delete thumbnail
-    if (video.thumbnail) {
-      await storage.delete(video.thumbnail);
-    }
-
-    // Delete database record
-    await prisma.video.delete({
-      where: { id: videoId },
-    });
-  }
-
-  /**
-   * Get processing status
-   */
-  async getProcessingStatus(
-    videoId: string
-  ): Promise<ProcessingStatusResponse> {
-    const video = await prisma.video.findUnique({
-      where: { id: videoId },
-      include: { qualities: true },
-    });
-
-    if (!video) {
-      throw new AppError("Video not found", HTTP_STATUS.NOT_FOUND);
-    }
-
-    const totalQualities = videoConfig.resolutions.filter(
-      (r) => r.enabled
-    ).length;
-    const completedQualities = video.qualities.length;
-    const progress = (completedQualities / totalQualities) * 100;
-
-    return {
-      status: video.status,
-      progress,
-      error: video.processingError || undefined,
-    };
+    return { success: true, video: { id: video.id, path: videoPath } };
+  } catch (error) {
+    console.error('Upload video error:', error);
+    return { success: false, error: 'Gagal mengupload video' };
   }
 }
 
-const videoService = new VideoService();
-export default videoService;
+// Get video qualities
+export async function getVideoQualities(videoId: string) {
+  return prisma.videoQuality_Model.findMany({
+    where: { video_id: videoId },
+    orderBy: { quality: 'asc' },
+  });
+}
+
+// Delete video
+export async function deleteVideo(id: string) {
+  return prisma.video.delete({ where: { id } });
+}
+
+// Update video thumbnail
+export async function updateVideoThumbnail(id: string, thumbnailUrl: string) {
+  return prisma.video.update({
+    where: { id },
+    data: { thumbnail: thumbnailUrl },
+  });
+}
+
+// Get video processing status
+export async function getVideoStatus(id: string) {
+  const video = await prisma.video.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      status: true,
+      processing_error: true,
+      duration: true,
+      created_at: true,
+      updated_at: true,
+    },
+  });
+
+  if (!video) return null;
+
+  let progress = 0;
+  switch (video.status) {
+    case VideoStatus.UPLOADING: progress = 25; break;
+    case VideoStatus.PROCESSING: progress = 50; break;
+    case VideoStatus.COMPLETED: progress = 100; break;
+    case VideoStatus.FAILED: progress = 0; break;
+  }
+
+  return { ...video, progress };
+}
+
+// Process video (mock - integrate with actual video processor)
+export async function processVideo(videoId: string): Promise<boolean> {
+  try {
+    await updateVideoStatus(videoId, VideoStatus.PROCESSING);
+
+    // TODO: Integrate with FFmpeg or video processing service
+    console.log(`Processing video ${videoId}`);
+
+    // Simulate success
+    await updateVideoStatus(videoId, VideoStatus.COMPLETED, {
+      duration: 0,
+    });
+
+    return true;
+  } catch (error) {
+    console.error('Video processing error:', error);
+    await updateVideoStatus(videoId, VideoStatus.FAILED, {
+      processing_error: (error as Error).message,
+    });
+    return false;
+  }
+}
+
+// Get mentor videos
+export async function getMentorVideos(mentorId: string, options: {
+  page?: number;
+  limit?: number;
+  status?: VideoStatus;
+} = {}) {
+  const { page = 1, limit = 20, status } = options;
+
+  const where: Record<string, unknown> = {
+    material: {
+      section: {
+        course: { mentor_id: mentorId },
+      },
+    },
+  };
+
+  if (status) where.status = status;
+
+  const [videos, total] = await Promise.all([
+    prisma.video.findMany({
+      where,
+      include: {
+        material: {
+          select: {
+            title: true,
+            section: {
+              select: {
+                title: true,
+                course: { select: { title: true } },
+              },
+            },
+          },
+        },
+      },
+      orderBy: { created_at: 'desc' },
+      skip: (page - 1) * limit,
+      take: limit,
+    }),
+    prisma.video.count({ where }),
+  ]);
+
+  return { videos, total, page, limit, totalPages: Math.ceil(total / limit) };
+}

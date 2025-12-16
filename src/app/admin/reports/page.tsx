@@ -1,512 +1,860 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-import {
-  Search,
-  Filter,
-  Download,
-  Calendar,
-  BarChart3,
-  Users,
-  BookOpen,
-  CreditCard,
-  FileText,
-  TrendingUp,
-  TrendingDown,
-  Eye
-} from 'lucide-react';
-import AdminLayout from '@/components/admin/admin-layout';
-import ProtectedRoute from "@/components/ui/protected-route";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+import { useState, useEffect, useCallback } from "react";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import { Label } from '@/components/ui/label';
+} from "@/components/ui/select";
+import {
+  BarChart3,
+  Loader2,
+  Calendar,
+  DollarSign,
+  Users,
+  BookOpen,
+  TrendingUp,
+  TrendingDown,
+  Star,
+  CreditCard,
+  UserPlus,
+  Award,
+  PieChart,
+  Activity,
+  Download,
+  Layers,
+  TrendingUp as TrendingUpIcon,
+  Filter,
+  Eye,
+  CheckCircle,
+} from "lucide-react";
+import AdminLayout from "@/components/admin/admin-layout";
+import ProtectedRoute from "@/components/auth/protected-route";
 
-// Data dummy
-const activityLogs = [
-  {
-    id: 1,
-    user: 'Admin System',
-    action: 'Login ke sistem',
-    target: 'Dashboard',
-    ipAddress: '192.168.1.100',
-    timestamp: '2024-10-20 08:30:15',
-    status: 'success'
-  },
-  {
-    id: 2,
-    user: 'Ahmad Fauzi',
-    action: 'Mendaftar kursus',
-    target: 'Web Development Basics',
-    ipAddress: '192.168.1.101',
-    timestamp: '2024-10-20 09:15:22',
-    status: 'success'
-  },
-  {
-    id: 3,
-    user: 'Sarah Johnson',
-    action: 'Mengupdate kursus',
-    target: 'JavaScript Advanced',
-    ipAddress: '192.168.1.102',
-    timestamp: '2024-10-20 10:05:45',
-    status: 'success'
-  },
-  {
-    id: 4,
-    user: 'Admin System',
-    action: 'Memverifikasi mentor',
-    target: 'David Lee',
-    ipAddress: '192.168.1.100',
-    timestamp: '2024-10-20 11:20:30',
-    status: 'success'
-  },
-  {
-    id: 5,
-    user: 'John Smith',
-    action: 'Gagal login',
-    target: 'Login Page',
-    ipAddress: '192.168.1.103',
-    timestamp: '2024-10-20 12:45:18',
-    status: 'failed'
-  },
-  {
-    id: 6,
-    user: 'Maria Garcia',
-    action: 'Membuat kursus baru',
-    target: 'Mobile Development',
-    ipAddress: '192.168.1.104',
-    timestamp: '2024-10-20 14:30:55',
-    status: 'success'
-  },
-  {
-    id: 7,
-    user: 'Admin System',
-    action: 'Menolak kursus',
-    target: 'Python Basics',
-    ipAddress: '192.168.1.100',
-    timestamp: '2024-10-20 15:20:10',
-    status: 'success'
-  },
-  {
-    id: 8,
-    user: 'Lisa Wang',
-    action: 'Menyelesaikan kursus',
-    target: 'UI/UX Design',
-    ipAddress: '192.168.1.105',
-    timestamp: '2024-10-20 16:45:33',
-    status: 'success'
-  }
-];
+const API_BASE_URL = "http://localhost:3000/api";
 
-const reportStats = {
-  totalUsers: 12580,
-  totalMentors: 245,
-  activeCourses: 189,
-  totalRevenue: 1250000000,
-  userGrowth: 15.2,
-  revenueGrowth: 12.8,
-  completionRate: 78.5,
-  satisfactionRate: 4.7
+interface RevenueReport {
+  period: string;
+  date_range: { from: string; to: string };
+  summary: {
+    total_revenue: number;
+    total_discount: number;
+    total_transactions: number;
+    average_transaction: number;
+  };
+  trend: { date: string; revenue: number; transactions: number }[];
+  by_payment_method: { method: string; amount: number }[];
+  top_courses: { course_id: string; course_title: string; revenue: number; transactions: number }[];
+}
+
+interface UsersReport {
+  period: string;
+  summary: {
+    total: number;
+    active: number;
+    suspended: number;
+    new_in_period: number;
+    active_in_period: number;
+  };
+  by_role: { role: string; count: number }[];
+  registration_trend: { date: string; count: number }[];
+  top_learners: { user: { id: string; full_name: string; email: string; avatar_url: string | null }; enrollments: number }[];
+}
+
+interface CoursesReport {
+  period: string;
+  summary: {
+    total: number;
+    published: number;
+    pending: number;
+    draft: number;
+    new_in_period: number;
+  };
+  top_rated: { id: string; title: string; average_rating: number; total_reviews: number; mentor: { user: { full_name: string } } }[];
+  most_enrolled: { id: string; title: string; total_students: number; price: number; is_free: boolean; mentor: { user: { full_name: string } } }[];
+  by_category: { category: string; count: number }[];
+  by_level: { level: string; count: number }[];
+}
+
+const formatCurrency = (amount: number) => {
+  return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(amount);
 };
 
-export default function AdminReports() {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [reportType, setReportType] = useState('activity');
-  const [dateRange, setDateRange] = useState('7days');
-  const [isClient, setIsClient] = useState(false);
+const formatShortCurrency = (amount: number) => {
+  if (amount >= 1000000000) return `Rp ${(amount / 1000000000).toFixed(1)}M`;
+  if (amount >= 1000000) return `Rp ${(amount / 1000000).toFixed(1)}Jt`;
+  if (amount >= 1000) return `Rp ${(amount / 1000).toFixed(0)}Rb`;
+  return `Rp ${amount}`;
+};
+
+const formatDate = (dateString: string) => {
+  return new Date(dateString).toLocaleDateString("id-ID", { day: "numeric", month: "short" });
+};
+
+const getLevelLabel = (level: string) => {
+  const labels: Record<string, string> = { BEGINNER: "Pemula", INTERMEDIATE: "Menengah", ADVANCED: "Lanjutan", ALL_LEVELS: "Semua Level" };
+  return labels[level] || level;
+};
+
+const getPaymentMethodLabel = (method: string) => {
+  const labels: Record<string, string> = { E_WALLET: "E-Wallet", VIRTUAL_ACCOUNT: "Virtual Account", QRIS: "QRIS" };
+  return labels[method] || method;
+};
+
+export default function AdminReportsPage() {
+  const [activeTab, setActiveTab] = useState<"revenue" | "users" | "courses">("revenue");
+  const [period, setPeriod] = useState("month");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const [revenueReport, setRevenueReport] = useState<RevenueReport | null>(null);
+  const [usersReport, setUsersReport] = useState<UsersReport | null>(null);
+  const [coursesReport, setCoursesReport] = useState<CoursesReport | null>(null);
+
+  const getAuthToken = useCallback(() => typeof window !== "undefined" ? localStorage.getItem("token") || localStorage.getItem("accessToken") : null, []);
+
+  const fetchReports = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const token = getAuthToken();
+      const headers = { Authorization: `Bearer ${token}` };
+
+      const [revenueRes, usersRes, coursesRes] = await Promise.all([
+        fetch(`${API_BASE_URL}/admin/reports/revenue?period=${period}`, { headers }),
+        fetch(`${API_BASE_URL}/admin/reports/users?period=${period}`, { headers }),
+        fetch(`${API_BASE_URL}/admin/reports/courses?period=${period}`, { headers }),
+      ]);
+
+      if (revenueRes.ok) setRevenueReport(await revenueRes.json());
+      if (usersRes.ok) setUsersReport(await usersRes.json());
+      if (coursesRes.ok) setCoursesReport(await coursesRes.json());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Gagal memuat laporan");
+    } finally {
+      setLoading(false);
+    }
+  }, [getAuthToken, period]);
 
   useEffect(() => {
-    setIsClient(true);
-  }, []);
+    fetchReports();
+  }, [fetchReports]);
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('id-ID', {
-      style: 'currency',
-      currency: 'IDR',
-      minimumFractionDigits: 0,
-    }).format(amount);
-  };
-
-  const formatNumber = (num: number) => {
-    if (num >= 1000000) {
-      return (num / 1000000).toFixed(1) + 'jt';
-    } else if (num >= 1000) {
-      return (num / 1000).toFixed(1) + 'k';
-    }
-    return num.toString();
-  };
-
-  const getStatusBadge = (status: string) => {
-    if (status === 'success') {
-      return <Badge className="bg-[#008A00]">Berhasil</Badge>;
-    } else {
-      return <Badge className="bg-[#D93025]">Gagal</Badge>;
-    }
-  };
-
-  const filteredLogs = activityLogs.filter((log) => {
-    const matchesSearch = 
-      log.user.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      log.action.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      log.target.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    return matchesSearch;
-  });
-
-  const handleGenerateReport = () => {
-    console.log(`Generating ${reportType} report for ${dateRange}`);
-    // API call: GET /api/admin/reports/export
-  };
-
-  const handleDownloadReport = (format: string) => {
-    console.log(`Downloading report in ${format} format`);
-    // Implement download functionality
-  };
-
-  const getGrowthIcon = (growth: number) => {
-    if (growth > 0) {
-      return <TrendingUp className="h-4 w-4 text-[#008A00]" />;
-    } else {
-      return <TrendingDown className="h-4 w-4 text-[#D93025]" />;
-    }
-  };
+  const maxRevenue = revenueReport?.trend ? Math.max(...revenueReport.trend.map((t) => t.revenue), 1) : 1;
+  const maxRegistration = usersReport?.registration_trend ? Math.max(...usersReport.registration_trend.map((t) => t.count), 1) : 1;
 
   return (
     <ProtectedRoute allowedRoles={["ADMIN"]}>
-    <AdminLayout>
-      <div className="space-y-8">
-        {/* Header Section */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 animate-fadeIn">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-              Reports & Analytics
-            </h1>
-            <p className="text-gray-600 dark:text-gray-400">
-              Laporan aktivitas user, pendapatan, dan performa kursus
-            </p>
+      <AdminLayout>
+        <div className="space-y-8">
+          {/* Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-3">
+                <BarChart3 className="h-8 w-8 text-[#005EB8]" />
+                Laporan & Analitik
+              </h1>
+              <p className="text-gray-600 dark:text-gray-400">Pantau performa platform secara komprehensif</p>
+            </div>
+            <div className="flex gap-2">
+              <Select value={period} onValueChange={setPeriod}>
+                <SelectTrigger className="w-[180px] border-gray-300 dark:border-gray-600 focus:border-[#005EB8] focus:ring-[#005EB8]">
+                  <Calendar className="h-4 w-4 mr-2 text-gray-500" />
+                  <SelectValue placeholder="Pilih Periode" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="week">7 Hari Terakhir</SelectItem>
+                  <SelectItem value="month">30 Hari Terakhir</SelectItem>
+                  <SelectItem value="quarter">3 Bulan Terakhir</SelectItem>
+                  <SelectItem value="year">1 Tahun Terakhir</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
-          <div className="flex gap-3">
-            <Button 
-              variant="outline" 
-              className="border-gray-300 dark:border-gray-600"
-              onClick={() => handleDownloadReport('PDF')}
+
+          {/* Tabs */}
+          <div className="flex gap-2 border-b border-gray-200 dark:border-gray-700">
+            <button 
+              onClick={() => setActiveTab("revenue")} 
+              className={`px-4 py-2 font-medium flex items-center gap-2 border-b-2 transition-colors ${
+                activeTab === "revenue" 
+                  ? "border-[#005EB8] text-[#005EB8]" 
+                  : "border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+              }`}
             >
-              <FileText className="h-4 w-4 mr-2" />
-              Export PDF
-            </Button>
-            <Button 
-              variant="outline" 
-              className="border-gray-300 dark:border-gray-600"
-              onClick={() => handleDownloadReport('CSV')}
+              <DollarSign className="h-4 w-4" />
+              Pendapatan
+            </button>
+            <button 
+              onClick={() => setActiveTab("users")} 
+              className={`px-4 py-2 font-medium flex items-center gap-2 border-b-2 transition-colors ${
+                activeTab === "users" 
+                  ? "border-[#005EB8] text-[#005EB8]" 
+                  : "border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+              }`}
             >
-              <Download className="h-4 w-4 mr-2" />
-              Export CSV
-            </Button>
+              <Users className="h-4 w-4" />
+              Pengguna
+            </button>
+            <button 
+              onClick={() => setActiveTab("courses")} 
+              className={`px-4 py-2 font-medium flex items-center gap-2 border-b-2 transition-colors ${
+                activeTab === "courses" 
+                  ? "border-[#005EB8] text-[#005EB8]" 
+                  : "border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+              }`}
+            >
+              <BookOpen className="h-4 w-4" />
+              Kursus
+            </button>
           </div>
-        </div>
 
-        {/* Report Configuration */}
-        <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 animate-fadeSlide">
-          <CardHeader>
-            <CardTitle className="text-xl font-bold">Generate Report</CardTitle>
-            <CardDescription>
-              Pilih jenis laporan dan periode waktu
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid md:grid-cols-3 gap-6">
-              <div className="space-y-2">
-                <Label htmlFor="reportType">Jenis Laporan</Label>
-                <Select value={reportType} onValueChange={setReportType}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Pilih jenis laporan" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="activity">Aktivitas User</SelectItem>
-                    <SelectItem value="revenue">Pendapatan</SelectItem>
-                    <SelectItem value="courses">Performa Kursus</SelectItem>
-                    <SelectItem value="mentors">Performa Mentor</SelectItem>
-                    <SelectItem value="system">Sistem & Logs</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="dateRange">Periode Waktu</Label>
-                <Select value={dateRange} onValueChange={setDateRange}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Pilih periode" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="today">Hari Ini</SelectItem>
-                    <SelectItem value="7days">7 Hari Terakhir</SelectItem>
-                    <SelectItem value="30days">30 Hari Terakhir</SelectItem>
-                    <SelectItem value="90days">90 Hari Terakhir</SelectItem>
-                    <SelectItem value="custom">Custom Range</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="generate">&nbsp;</Label>
-                <Button 
-                  className="w-full bg-[#005EB8] hover:bg-[#004A93]"
-                  onClick={handleGenerateReport}
-                >
-                  <BarChart3 className="h-4 w-4 mr-2" />
-                  Generate Report
-                </Button>
-              </div>
+          {loading ? (
+            <div className="flex items-center justify-center py-20">
+              <Loader2 className="h-12 w-12 animate-spin text-[#005EB8]" />
             </div>
-          </CardContent>
-        </Card>
-
-        {/* Key Metrics */}
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 animate-scaleIn">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="h-12 w-12 rounded-full bg-[#005EB8]/10 flex items-center justify-center">
-                  <Users className="h-6 w-6 text-[#005EB8]" />
-                </div>
-                {getGrowthIcon(reportStats.userGrowth)}
-              </div>
-              <div className="space-y-1">
-                <p className="text-3xl font-bold text-gray-900 dark:text-white">
-                  {isClient ? formatNumber(reportStats.totalUsers) : reportStats.totalUsers.toLocaleString()}
-                </p>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Total Users</p>
-              </div>
-              <div className="mt-2 flex items-center gap-1">
-                <span className={`text-xs ${reportStats.userGrowth > 0 ? 'text-[#008A00]' : 'text-[#D93025]'}`}>
-                  {reportStats.userGrowth > 0 ? '+' : ''}{reportStats.userGrowth}%
-                </span>
-                <span className="text-xs text-gray-500">dari bulan lalu</span>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 animate-scaleIn delay-100">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="h-12 w-12 rounded-full bg-[#008A00]/10 flex items-center justify-center">
-                  <BookOpen className="h-6 w-6 text-[#008A00]" />
-                </div>
-                {getGrowthIcon(5.2)}
-              </div>
-              <div className="space-y-1">
-                <p className="text-3xl font-bold text-gray-900 dark:text-white">
-                  {reportStats.activeCourses}
-                </p>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Active Courses</p>
-              </div>
-              <div className="mt-2 flex items-center gap-1">
-                <span className="text-xs text-[#008A00]">+5.2%</span>
-                <span className="text-xs text-gray-500">dari bulan lalu</span>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 animate-scaleIn delay-200">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="h-12 w-12 rounded-full bg-[#F4B400]/10 flex items-center justify-center">
-                  <CreditCard className="h-6 w-6 text-[#F4B400]" />
-                </div>
-                {getGrowthIcon(reportStats.revenueGrowth)}
-              </div>
-              <div className="space-y-1">
-                <p className="text-3xl font-bold text-gray-900 dark:text-white">
-                  {isClient ? formatNumber(reportStats.totalRevenue) : formatCurrency(reportStats.totalRevenue)}
-                </p>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Total Revenue</p>
-              </div>
-              <div className="mt-2 flex items-center gap-1">
-                <span className={`text-xs ${reportStats.revenueGrowth > 0 ? 'text-[#008A00]' : 'text-[#D93025]'}`}>
-                  {reportStats.revenueGrowth > 0 ? '+' : ''}{reportStats.revenueGrowth}%
-                </span>
-                <span className="text-xs text-gray-500">dari bulan lalu</span>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 animate-scaleIn delay-300">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="h-12 w-12 rounded-full bg-[#008A00]/10 flex items-center justify-center">
-                  <BarChart3 className="h-6 w-6 text-[#008A00]" />
-                </div>
-                {getGrowthIcon(2.1)}
-              </div>
-              <div className="space-y-1">
-                <p className="text-3xl font-bold text-gray-900 dark:text-white">
-                  {reportStats.completionRate}%
-                </p>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Completion Rate</p>
-              </div>
-              <div className="mt-2 flex items-center gap-1">
-                <span className="text-xs text-[#008A00]">+2.1%</span>
-                <span className="text-xs text-gray-500">dari bulan lalu</span>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Charts Section */}
-        <div className="grid lg:grid-cols-2 gap-8">
-          {/* Revenue Chart */}
-          <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 animate-fadeSlide delay-200">
-            <CardHeader>
-              <CardTitle className="text-xl font-bold">Revenue Trend</CardTitle>
-              <CardDescription>
-                Perkembangan pendapatan 6 bulan terakhir
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="h-80 flex items-center justify-center bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-                <div className="text-center">
-                  <BarChart3 className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-600 dark:text-gray-400 mb-2">
-                    Revenue Chart akan ditampilkan di sini
-                  </p>
-                  <p className="text-sm text-gray-500 dark:text-gray-500">
-                    Integrasi dengan chart library (Chart.js/Recharts)
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* User Activity Chart */}
-          <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 animate-fadeSlide delay-300">
-            <CardHeader>
-              <CardTitle className="text-xl font-bold">User Activity</CardTitle>
-              <CardDescription>
-                Aktivitas user dalam 30 hari terakhir
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="h-80 flex items-center justify-center bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-                <div className="text-center">
-                  <Users className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-600 dark:text-gray-400 mb-2">
-                    Activity Chart akan ditampilkan di sini
-                  </p>
-                  <p className="text-sm text-gray-500 dark:text-gray-500">
-                    Integrasi dengan chart library (Chart.js/Recharts)
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Activity Logs */}
-        <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 animate-fadeSlide delay-400">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="text-xl font-bold">Activity Logs</CardTitle>
-                <CardDescription>
-                  Log aktivitas sistem dan user terbaru
-                </CardDescription>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                  <Input
-                    placeholder="Cari aktivitas..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10 w-[200px]"
-                  />
-                </div>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>User</TableHead>
-                    <TableHead>Aksi</TableHead>
-                    <TableHead>Target</TableHead>
-                    <TableHead>IP Address</TableHead>
-                    <TableHead>Waktu</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Aksi</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredLogs.map((log) => (
-                    <TableRow key={log.id} className="table-row">
-                      <TableCell>
-                        <p className="font-medium text-gray-900 dark:text-white">
-                          {log.user}
-                        </p>
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        {log.action}
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        {log.target}
-                      </TableCell>
-                      <TableCell className="font-mono text-sm">
-                        {log.ipAddress}
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        {new Date(log.timestamp).toLocaleString('id-ID')}
-                      </TableCell>
-                      <TableCell>{getStatusBadge(log.status)}</TableCell>
-                      <TableCell className="text-right">
-                        <Button variant="ghost" size="sm">
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-
-            {filteredLogs.length === 0 && (
-              <div className="text-center py-12">
-                <div className="flex flex-col items-center gap-4">
-                  <div className="h-20 w-20 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
-                    <BarChart3 className="h-10 w-10 text-gray-400" />
+          ) : error ? (
+            <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
+              <CardContent className="p-6">
+                <div className="flex items-center gap-3 text-red-600 dark:text-red-400">
+                  <div className="p-2 bg-red-100 dark:bg-red-900/20 rounded-full">
+                    <Activity className="h-5 w-5" />
                   </div>
-                  <div>
-                    <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-                      Tidak ada aktivitas ditemukan
-                    </h3>
-                    <p className="text-gray-600 dark:text-gray-400">
-                      Coba ubah kata kunci pencarian
-                    </p>
+                  <p>{error}</p>
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+              {/* Revenue Tab */}
+              {activeTab === "revenue" && revenueReport && (
+                <div className="space-y-6">
+                  {/* Stats Cards */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 border-gray-200 dark:border-gray-700">
+                      <CardContent className="p-5">
+                        <div className="flex items-center gap-3">
+                          <div className="p-3 rounded-xl bg-[#008A00]/10">
+                            <DollarSign className="h-6 w-6 text-[#008A00]" />
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">Total Revenue</p>
+                            <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                              {formatShortCurrency(revenueReport.summary.total_revenue)}
+                            </p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 border-gray-200 dark:border-gray-700">
+                      <CardContent className="p-5">
+                        <div className="flex items-center gap-3">
+                          <div className="p-3 rounded-xl bg-[#005EB8]/10">
+                            <CreditCard className="h-6 w-6 text-[#005EB8]" />
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">Total Transaksi</p>
+                            <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                              {revenueReport.summary.total_transactions}
+                            </p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 border-gray-200 dark:border-gray-700">
+                      <CardContent className="p-5">
+                        <div className="flex items-center gap-3">
+                          <div className="p-3 rounded-xl bg-[#F4B400]/10">
+                            <TrendingUpIcon className="h-6 w-6 text-[#F4B400]" />
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">Rata-rata</p>
+                            <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                              {formatShortCurrency(revenueReport.summary.average_transaction)}
+                            </p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 border-gray-200 dark:border-gray-700">
+                      <CardContent className="p-5">
+                        <div className="flex items-center gap-3">
+                          <div className="p-3 rounded-xl bg-[#D93025]/10">
+                            <TrendingDown className="h-6 w-6 text-[#D93025]" />
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">Total Diskon</p>
+                            <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                              {formatShortCurrency(revenueReport.summary.total_discount)}
+                            </p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Charts and Data */}
+                  <div className="grid lg:grid-cols-2 gap-6">
+                    {/* Revenue Trend */}
+                    <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
+                      <CardHeader>
+                        <CardTitle className="text-base text-gray-900 dark:text-white">Trend Pendapatan</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        {revenueReport.trend.length === 0 ? (
+                          <div className="text-center py-8">
+                            <BarChart3 className="h-12 w-12 text-gray-300 dark:text-gray-700 mx-auto mb-3" />
+                            <p className="text-gray-500 dark:text-gray-400">Tidak ada data pendapatan</p>
+                          </div>
+                        ) : (
+                          <div className="space-y-4">
+                            <div className="flex items-end gap-2 h-48">
+                              {revenueReport.trend.slice(-14).map((day, i) => (
+                                <div key={i} className="flex-1 flex flex-col items-center justify-end">
+                                  <div 
+                                    className="w-full bg-[#005EB8] rounded-t transition-all hover:bg-[#004A93] cursor-pointer" 
+                                    style={{ 
+                                      height: `${(day.revenue / maxRevenue) * 100}%`, 
+                                      minHeight: day.revenue > 0 ? "4px" : "2px" 
+                                    }} 
+                                    title={`${formatDate(day.date)}: ${formatCurrency(day.revenue)}`}
+                                  />
+                                  <span className="text-xs text-gray-500 dark:text-gray-400 mt-1">{formatDate(day.date)}</span>
+                                </div>
+                              ))}
+                            </div>
+                            <div className="flex items-center justify-between text-sm text-gray-600 dark:text-gray-400">
+                              <span>{formatDate(revenueReport.trend[0]?.date)}</span>
+                              <span>{formatDate(revenueReport.trend[revenueReport.trend.length - 1]?.date)}</span>
+                            </div>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+
+                    {/* Payment Methods */}
+                    <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
+                      <CardHeader>
+                        <CardTitle className="text-base text-gray-900 dark:text-white">Metode Pembayaran</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        {revenueReport.by_payment_method.length === 0 ? (
+                          <div className="text-center py-8">
+                            <CreditCard className="h-12 w-12 text-gray-300 dark:text-gray-700 mx-auto mb-3" />
+                            <p className="text-gray-500 dark:text-gray-400">Tidak ada data pembayaran</p>
+                          </div>
+                        ) : (
+                          <div className="space-y-4">
+                            {revenueReport.by_payment_method.map((pm, i) => {
+                              const total = revenueReport.by_payment_method.reduce((s, p) => s + p.amount, 0);
+                              const pct = total > 0 ? (pm.amount / total) * 100 : 0;
+                              return (
+                                <div key={i}>
+                                  <div className="flex justify-between mb-2">
+                                    <span className="text-sm font-medium text-gray-900 dark:text-white">
+                                      {getPaymentMethodLabel(pm.method)}
+                                    </span>
+                                    <span className="text-sm text-gray-600 dark:text-gray-400">{formatCurrency(pm.amount)}</span>
+                                  </div>
+                                  <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                                    <div className="h-full bg-[#005EB8] rounded-full" style={{ width: `${pct}%` }} />
+                                  </div>
+                                  <div className="flex justify-between mt-1">
+                                    <span className="text-xs text-gray-500 dark:text-gray-400">{pct.toFixed(1)}%</span>
+                                    <span className="text-xs text-gray-500 dark:text-gray-400">{pm.amount > 0 ? formatShortCurrency(pm.amount) : 'Rp 0'}</span>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Top Courses by Revenue */}
+                  <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
+                    <CardHeader className="flex flex-row items-center justify-between">
+                      <CardTitle className="text-base text-gray-900 dark:text-white">Kursus dengan Pendapatan Tertinggi</CardTitle>
+                      {/* Button Export - Style diubah seperti button Lihat Semua di dashboard */}
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10 dark:border-[#005EB8] dark:text-[#005EB8]"
+                      >
+                        <Download className="h-4 w-4 mr-1" />
+                        Export
+                      </Button>
+                    </CardHeader>
+                    <CardContent>
+                      {revenueReport.top_courses.length === 0 ? (
+                        <div className="text-center py-8">
+                          <BookOpen className="h-12 w-12 text-gray-300 dark:text-gray-700 mx-auto mb-3" />
+                          <p className="text-gray-500 dark:text-gray-400">Tidak ada data kursus</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          {revenueReport.top_courses.slice(0, 5).map((course, i) => (
+                            <div key={course.course_id} className="flex items-center gap-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-750 transition-colors">
+                              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-sm ${
+                                i === 0 ? "bg-[#F4B400]" : 
+                                i === 1 ? "bg-gray-500" : 
+                                i === 2 ? "bg-[#D93025]" : "bg-gray-400"
+                              }`}>
+                                {i + 1}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="font-medium text-gray-900 dark:text-white truncate">{course.course_title}</p>
+                                <p className="text-sm text-gray-500 dark:text-gray-400">{course.transactions} transaksi</p>
+                              </div>
+                              <p className="font-bold text-[#008A00]">{formatCurrency(course.revenue)}</p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+
+              {/* Users Tab */}
+              {activeTab === "users" && usersReport && (
+                <div className="space-y-6">
+                  {/* Stats Cards */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 border-gray-200 dark:border-gray-700">
+                      <CardContent className="p-5">
+                        <div className="flex items-center gap-3">
+                          <div className="p-3 rounded-xl bg-[#005EB8]/10">
+                            <Users className="h-6 w-6 text-[#005EB8]" />
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">Total User</p>
+                            <p className="text-2xl font-bold text-gray-900 dark:text-white">{usersReport.summary.total}</p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 border-gray-200 dark:border-gray-700">
+                      <CardContent className="p-5">
+                        <div className="flex items-center gap-3">
+                          <div className="p-3 rounded-xl bg-[#008A00]/10">
+                            <Activity className="h-6 w-6 text-[#008A00]" />
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">Aktif</p>
+                            <p className="text-2xl font-bold text-[#008A00] dark:text-[#008A00]">{usersReport.summary.active}</p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 border-gray-200 dark:border-gray-700">
+                      <CardContent className="p-5">
+                        <div className="flex items-center gap-3">
+                          <div className="p-3 rounded-xl bg-[#F4B400]/10">
+                            <UserPlus className="h-6 w-6 text-[#F4B400]" />
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">Baru (Periode)</p>
+                            <p className="text-2xl font-bold text-gray-900 dark:text-white">{usersReport.summary.new_in_period}</p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 border-gray-200 dark:border-gray-700">
+                      <CardContent className="p-5">
+                        <div className="flex items-center gap-3">
+                          <div className="p-3 rounded-xl bg-[#D93025]/10">
+                            <TrendingDown className="h-6 w-6 text-[#D93025]" />
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">Suspended</p>
+                            <p className="text-2xl font-bold text-[#D93025] dark:text-[#D93025]">{usersReport.summary.suspended}</p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  <div className="grid lg:grid-cols-2 gap-6">
+                    {/* Registration Trend */}
+                    <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
+                      <CardHeader>
+                        <CardTitle className="text-base text-gray-900 dark:text-white">Trend Registrasi</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        {usersReport.registration_trend.length === 0 ? (
+                          <div className="text-center py-8">
+                            <TrendingUpIcon className="h-12 w-12 text-gray-300 dark:text-gray-700 mx-auto mb-3" />
+                            <p className="text-gray-500 dark:text-gray-400">Tidak ada data registrasi</p>
+                          </div>
+                        ) : (
+                          <div className="space-y-4">
+                            <div className="flex items-end gap-2 h-48">
+                              {usersReport.registration_trend.slice(-14).map((day, i) => (
+                                <div key={i} className="flex-1 flex flex-col items-center justify-end">
+                                  <div 
+                                    className="w-full bg-[#005EB8] rounded-t transition-all hover:bg-[#004A93] cursor-pointer" 
+                                    style={{ 
+                                      height: `${(day.count / maxRegistration) * 100}%`, 
+                                      minHeight: day.count > 0 ? "4px" : "2px" 
+                                    }} 
+                                    title={`${formatDate(day.date)}: ${day.count} user`}
+                                  />
+                                  <span className="text-xs text-gray-500 dark:text-gray-400 mt-1">{formatDate(day.date)}</span>
+                                </div>
+                              ))}
+                            </div>
+                            <div className="flex items-center justify-between text-sm text-gray-600 dark:text-gray-400">
+                              <span>{formatDate(usersReport.registration_trend[0]?.date)}</span>
+                              <span>{formatDate(usersReport.registration_trend[usersReport.registration_trend.length - 1]?.date)}</span>
+                            </div>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+
+                    {/* Users by Role */}
+                    <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
+                      <CardHeader>
+                        <CardTitle className="text-base text-gray-900 dark:text-white">Distribusi Role</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        {usersReport.by_role.length === 0 ? (
+                          <div className="text-center py-8">
+                            <Filter className="h-12 w-12 text-gray-300 dark:text-gray-700 mx-auto mb-3" />
+                            <p className="text-gray-500 dark:text-gray-400">Tidak ada data role</p>
+                          </div>
+                        ) : (
+                          <div className="space-y-4">
+                            {usersReport.by_role.map((role) => {
+                              const total = usersReport.by_role.reduce((s, r) => s + r.count, 0);
+                              const pct = total > 0 ? (role.count / total) * 100 : 0;
+                              const colors: Record<string, string> = { 
+                                ADMIN: "bg-[#D93025]", 
+                                MENTOR: "bg-[#005EB8]", 
+                                STUDENT: "bg-[#008A00]" 
+                              };
+                              return (
+                                <div key={role.role}>
+                                  <div className="flex justify-between mb-2">
+                                    <span className="text-sm font-medium text-gray-900 dark:text-white flex items-center gap-2">
+                                      <span className={`w-3 h-3 rounded-full ${colors[role.role] || "bg-gray-500"}`} />
+                                      {role.role}
+                                    </span>
+                                    <span className="text-sm text-gray-600 dark:text-gray-400">{role.count} user</span>
+                                  </div>
+                                  <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                                    <div className={`h-full ${colors[role.role] || "bg-gray-500"} rounded-full`} style={{ width: `${pct}%` }} />
+                                  </div>
+                                  <div className="flex justify-between mt-1">
+                                    <span className="text-xs text-gray-500 dark:text-gray-400">{pct.toFixed(1)}%</span>
+                                    <span className="text-xs text-gray-500 dark:text-gray-400">{role.count} dari {total}</span>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Top Learners */}
+                  <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
+                    <CardHeader className="flex flex-row items-center justify-between">
+                      <CardTitle className="text-base text-gray-900 dark:text-white flex items-center gap-2">
+                        <Award className="h-5 w-5 text-[#F4B400]" />
+                        Top Learners
+                      </CardTitle>
+                      {/* Button Lihat Semua - Style diubah seperti button Lihat Semua di dashboard */}
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10 dark:border-[#005EB8] dark:text-[#005EB8]"
+                      >
+                        <Eye className="h-4 w-4 mr-1" />
+                        Lihat Semua
+                      </Button>
+                    </CardHeader>
+                    <CardContent>
+                      {usersReport.top_learners.length === 0 ? (
+                        <div className="text-center py-8">
+                          <Users className="h-12 w-12 text-gray-300 dark:text-gray-700 mx-auto mb-3" />
+                          <p className="text-gray-500 dark:text-gray-400">Tidak ada data learners</p>
+                        </div>
+                      ) : (
+                        <div className="grid md:grid-cols-2 gap-3">
+                          {usersReport.top_learners.slice(0, 10).map((learner, i) => (
+                            <div key={learner.user?.id || i} className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-750 transition-colors">
+                              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-sm ${
+                                i === 0 ? "bg-[#F4B400]" : 
+                                i === 1 ? "bg-gray-500" : 
+                                i === 2 ? "bg-[#D93025]" : "bg-gray-400"
+                              }`}>
+                                {i + 1}
+                              </div>
+                              {learner.user?.avatar_url ? (
+                                <img 
+                                  src={learner.user.avatar_url} 
+                                  alt={learner.user?.full_name || "User"} 
+                                  className="w-10 h-10 rounded-full object-cover"
+                                />
+                              ) : (
+                                <div className="w-10 h-10 rounded-full bg-[#005EB8] flex items-center justify-center text-white font-medium">
+                                  {learner.user?.full_name?.charAt(0) || "?"}
+                                </div>
+                              )}
+                              <div className="flex-1 min-w-0">
+                                <p className="font-medium text-gray-900 dark:text-white truncate">{learner.user?.full_name || "Unknown"}</p>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{learner.user?.email}</p>
+                              </div>
+                              <Badge className="bg-[#005EB8] text-white border border-[#005EB8] pointer-events-none">{learner.enrollments} kursus</Badge>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+
+              {/* Courses Tab */}
+              {activeTab === "courses" && coursesReport && (
+                <div className="space-y-6">
+                  {/* Stats Cards */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 border-gray-200 dark:border-gray-700">
+                      <CardContent className="p-5">
+                        <div className="flex items-center gap-3">
+                          <div className="p-3 rounded-xl bg-[#005EB8]/10">
+                            <BookOpen className="h-6 w-6 text-[#005EB8]" />
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">Total Kursus</p>
+                            <p className="text-2xl font-bold text-gray-900 dark:text-white">{coursesReport.summary.total}</p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 border-gray-200 dark:border-gray-700">
+                      <CardContent className="p-5">
+                        <div className="flex items-center gap-3">
+                          <div className="p-3 rounded-xl bg-[#008A00]/10">
+                            <CheckCircle className="h-6 w-6 text-[#008A00]" />
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">Published</p>
+                            <p className="text-2xl font-bold text-gray-900 dark:text-white">{coursesReport.summary.published}</p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 border-gray-200 dark:border-gray-700">
+                      <CardContent className="p-5">
+                        <div className="flex items-center gap-3">
+                          <div className="p-3 rounded-xl bg-[#F4B400]/10">
+                            <Layers className="h-6 w-6 text-[#F4B400]" />
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">Pending</p>
+                            <p className="text-2xl font-bold text-gray-900 dark:text-white">{coursesReport.summary.pending}</p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 border-gray-200 dark:border-gray-700">
+                      <CardContent className="p-5">
+                        <div className="flex items-center gap-3">
+                          <div className="p-3 rounded-xl bg-[#D93025]/10">
+                            <PieChart className="h-6 w-6 text-[#D93025]" />
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">Draft</p>
+                            <p className="text-2xl font-bold text-gray-900 dark:text-white">{coursesReport.summary.draft}</p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  <div className="grid lg:grid-cols-2 gap-6">
+                    {/* Top Rated */}
+                    <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
+                      <CardHeader>
+                        <CardTitle className="text-base text-gray-900 dark:text-white flex items-center gap-2">
+                          <Star className="h-5 w-5 text-[#F4B400]" />
+                          Rating Tertinggi
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        {coursesReport.top_rated.length === 0 ? (
+                          <div className="text-center py-8">
+                            <Star className="h-12 w-12 text-gray-300 dark:text-gray-700 mx-auto mb-3" />
+                            <p className="text-gray-500 dark:text-gray-400">Tidak ada data rating</p>
+                          </div>
+                        ) : (
+                          <div className="space-y-3">
+                            {coursesReport.top_rated.slice(0, 5).map((course, i) => (
+                              <div key={course.id} className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-750 transition-colors">
+                                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-sm ${
+                                  i === 0 ? "bg-[#F4B400]" : 
+                                  i === 1 ? "bg-gray-500" : 
+                                  i === 2 ? "bg-[#D93025]" : "bg-gray-400"
+                                }`}>
+                                  {i + 1}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="font-medium text-gray-900 dark:text-white truncate">{course.title}</p>
+                                  <p className="text-sm text-gray-500 dark:text-gray-400">Oleh {course.mentor?.user?.full_name}</p>
+                                </div>
+                                <div className="text-right">
+                                  <div className="flex items-center gap-1 justify-end">
+                                    <Star className="h-4 w-4 text-[#F4B400] fill-[#F4B400]" />
+                                    <p className="font-bold text-gray-900 dark:text-white">{course.average_rating.toFixed(1)}</p>
+                                  </div>
+                                  <p className="text-xs text-gray-500 dark:text-gray-400">{course.total_reviews} review</p>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+
+                    {/* Most Enrolled */}
+                    <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
+                      <CardHeader>
+                        <CardTitle className="text-base text-gray-900 dark:text-white flex items-center gap-2">
+                          <Users className="h-5 w-5 text-[#005EB8]" />
+                          Paling Populer
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        {coursesReport.most_enrolled.length === 0 ? (
+                          <div className="text-center py-8">
+                            <Users className="h-12 w-12 text-gray-300 dark:text-gray-700 mx-auto mb-3" />
+                            <p className="text-gray-500 dark:text-gray-400">Tidak ada data enroll</p>
+                          </div>
+                        ) : (
+                          <div className="space-y-3">
+                            {coursesReport.most_enrolled.slice(0, 5).map((course, i) => (
+                              <div key={course.id} className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-750 transition-colors">
+                                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-sm ${
+                                  i === 0 ? "bg-[#F4B400]" : 
+                                  i === 1 ? "bg-gray-500" : 
+                                  i === 2 ? "bg-[#D93025]" : "bg-gray-400"
+                                }`}>
+                                  {i + 1}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="font-medium text-gray-900 dark:text-white truncate">{course.title}</p>
+                                  <p className="text-sm text-gray-500 dark:text-gray-400">Oleh {course.mentor?.user?.full_name}</p>
+                                </div>
+                                <div className="text-right">
+                                  <p className="font-bold text-gray-900 dark:text-white">{course.total_students}</p>
+                                  <p className="text-xs text-gray-500 dark:text-gray-400">siswa</p>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  <div className="grid lg:grid-cols-2 gap-6">
+                    {/* By Category */}
+                    <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
+                      <CardHeader>
+                        <CardTitle className="text-base text-gray-900 dark:text-white">Per Kategori</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        {coursesReport.by_category.length === 0 ? (
+                          <div className="text-center py-8">
+                            <Filter className="h-12 w-12 text-gray-300 dark:text-gray-700 mx-auto mb-3" />
+                            <p className="text-gray-500 dark:text-gray-400">Tidak ada data kategori</p>
+                          </div>
+                        ) : (
+                          <div className="space-y-3">
+                            {coursesReport.by_category.map((cat) => {
+                              const total = coursesReport.by_category.reduce((s, c) => s + c.count, 0);
+                              const pct = total > 0 ? (cat.count / total) * 100 : 0;
+                              return (
+                                <div key={cat.category}>
+                                  <div className="flex justify-between mb-2">
+                                    <span className="text-sm font-medium text-gray-900 dark:text-white">{cat.category}</span>
+                                    <span className="text-sm text-gray-600 dark:text-gray-400">{cat.count} kursus</span>
+                                  </div>
+                                  <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                                    <div className="h-full bg-[#005EB8] rounded-full" style={{ width: `${pct}%` }} />
+                                  </div>
+                                  <div className="flex justify-between mt-1">
+                                    <span className="text-xs text-gray-500 dark:text-gray-400">{pct.toFixed(1)}%</span>
+                                    <span className="text-xs text-gray-500 dark:text-gray-400">{cat.count} dari {total}</span>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+
+                    {/* By Level */}
+                    <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
+                      <CardHeader>
+                        <CardTitle className="text-base text-gray-900 dark:text-white">Per Level</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        {coursesReport.by_level.length === 0 ? (
+                          <div className="text-center py-8">
+                            <Layers className="h-12 w-12 text-gray-300 dark:text-gray-700 mx-auto mb-3" />
+                            <p className="text-gray-500 dark:text-gray-400">Tidak ada data level</p>
+                          </div>
+                        ) : (
+                          <div className="space-y-3">
+                            {coursesReport.by_level.map((level) => {
+                              const total = coursesReport.by_level.reduce((s, l) => s + l.count, 0);
+                              const pct = total > 0 ? (level.count / total) * 100 : 0;
+                              const colors: Record<string, string> = { 
+                                BEGINNER: "bg-[#008A00]", 
+                                INTERMEDIATE: "bg-[#005EB8]", 
+                                ADVANCED: "bg-[#D93025]", 
+                                ALL_LEVELS: "bg-gray-500" 
+                              };
+                              return (
+                                <div key={level.level}>
+                                  <div className="flex justify-between mb-2">
+                                    <span className="text-sm font-medium text-gray-900 dark:text-white">{getLevelLabel(level.level)}</span>
+                                    <span className="text-sm text-gray-600 dark:text-gray-400">{level.count} kursus</span>
+                                  </div>
+                                  <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                                    <div className={`h-full ${colors[level.level] || "bg-gray-500"} rounded-full`} style={{ width: `${pct}%` }} />
+                                  </div>
+                                  <div className="flex justify-between mt-1">
+                                    <span className="text-xs text-gray-500 dark:text-gray-400">{pct.toFixed(1)}%</span>
+                                    <span className="text-xs text-gray-500 dark:text-gray-400">{level.count} dari {total}</span>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
                   </div>
                 </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-    </AdminLayout>
+              )}
+            </>
+          )}
+        </div>
+      </AdminLayout>
     </ProtectedRoute>
   );
 }

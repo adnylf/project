@@ -1,120 +1,52 @@
 import path from 'path';
 
-/**
- * Storage Configuration
- * File upload and storage settings
- */
-
+// Storage Configuration
 export const storageConfig = {
-  // Storage Type (local, s3, cloudinary)
-  type: (process.env.STORAGE_TYPE || 'local') as 'local' | 's3' | 'cloudinary',
-
-  // Local Storage Settings
-  local: {
-    basePath: path.join(process.cwd(), 'uploads'),
-    publicPath: '/uploads',
-
-    // Directory Structure
-    directories: {
-      videos: {
-        originals: 'videos/originals',
-        processed: 'videos/processed',
-        thumbnails: 'videos/thumbnails',
-        temp: 'videos/temp',
-      },
-      images: {
-        profiles: 'images/profiles',
-        courses: 'images/courses',
-        certificates: 'images/certificates',
-      },
-      documents: {
-        pdfs: 'documents/pdfs',
-        presentations: 'documents/presentations',
-        others: 'documents/others',
-      },
+  // Base upload directory
+  uploadDir: process.env.UPLOAD_DIR || path.join(process.cwd(), 'uploads'),
+  
+  // Storage paths
+  paths: {
+    images: {
+      profiles: 'images/profiles',
+      courses: 'images/courses',
+      categories: 'images/categories',
+      thumbnails: 'images/thumbnails',
     },
+    videos: 'videos',
+    documents: 'documents',
+    certificates: 'certificates',
+    temp: 'temp',
   },
-
-  // AWS S3 Settings
-  s3: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID || '',
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || '',
-    region: process.env.AWS_REGION || 'ap-southeast-1',
-    bucket: process.env.AWS_BUCKET_NAME || '',
-
-    // S3 Options
-    options: {
-      signatureVersion: 'v4',
-      s3ForcePathStyle: false,
-      accelerateEndpoint: false,
-    },
-
-    // CDN URL (CloudFront)
-    cdnUrl: process.env.AWS_CDN_URL || '',
-  },
-
-  // Cloudinary Settings (alternative)
-  cloudinary: {
-    cloudName: process.env.CLOUDINARY_CLOUD_NAME || '',
-    apiKey: process.env.CLOUDINARY_API_KEY || '',
-    apiSecret: process.env.CLOUDINARY_API_SECRET || '',
-  },
-
-  // Upload Limits
+  
+  // File size limits (in bytes)
   limits: {
-    // File Size Limits (in bytes)
-    maxVideoSize: parseInt(process.env.UPLOAD_MAX_SIZE || '52428800', 10), // 50MB
-    maxImageSize: 5 * 1024 * 1024, // 5MB
-    maxDocumentSize: 10 * 1024 * 1024, // 10MB
-
-    // Allowed File Types
-    allowedVideoTypes: ['video/mp4', 'video/webm', 'video/ogg'],
-    allowedImageTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'],
-    allowedDocumentTypes: [
-      'application/pdf',
-      'application/msword',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      'application/vnd.ms-powerpoint',
-      'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-      'application/vnd.ms-excel',
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    ],
+    image: 5 * 1024 * 1024, // 5MB
+    video: 500 * 1024 * 1024, // 500MB
+    document: 50 * 1024 * 1024, // 50MB
+    certificate: 10 * 1024 * 1024, // 10MB
   },
-
-  // Image Processing
-  image: {
-    quality: 85,
-    maxWidth: 1920,
-    maxHeight: 1080,
-
-    // Thumbnail Sizes
-    thumbnails: {
-      small: { width: 150, height: 150 },
-      medium: { width: 300, height: 300 },
-      large: { width: 600, height: 600 },
-    },
-
-    // Formats
-    formats: ['jpeg', 'png', 'webp'],
+  
+  // Allowed file types
+  allowedTypes: {
+    image: ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
+    video: ['video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo'],
+    document: ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
   },
-
-  // Cleanup Settings
-  cleanup: {
-    enabled: true,
-    tempFileMaxAge: 24 * 60 * 60 * 1000, // 24 hours
-    deletedFileRetention: 7 * 24 * 60 * 60 * 1000, // 7 days
-    autoCleanup: true,
-    cleanupInterval: 24 * 60 * 60 * 1000, // Daily
+  
+  // CDN Configuration (optional)
+  cdn: {
+    enabled: process.env.CDN_ENABLED === 'true',
+    baseUrl: process.env.CDN_BASE_URL || '',
   },
-
-  // Security
-  security: {
-    enableVirusScan: false,
-    allowedOrigins: ['*'],
-    csrfProtection: true,
+  
+  // Cloud storage (optional - S3/GCS)
+  cloud: {
+    provider: process.env.CLOUD_STORAGE_PROVIDER || 'local', // local, s3, gcs
+    bucket: process.env.CLOUD_STORAGE_BUCKET || '',
+    region: process.env.CLOUD_STORAGE_REGION || '',
   },
-} as const;
+};
 
 export type StorageConfig = typeof storageConfig;
-
 export default storageConfig;

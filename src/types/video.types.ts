@@ -1,90 +1,132 @@
-export type VideoStatus = 'UPLOADING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
+// Video Types
+import { VideoStatus, VideoQuality } from '@prisma/client';
 
-export type VideoQuality = '360p' | '480p' | '720p' | '1080p';
-
-export interface VideoMetadata {
-  duration: number; // in seconds
-  width: number;
-  height: number;
-  bitrate: string;
-  codec: string;
-  format: string;
-  size: number; // in bytes
-  fps: number;
-}
-
-export interface VideoFile {
+// Video data
+export interface VideoData {
   id: string;
-  originalName: string;
+  original_name: string;
   filename: string;
   path: string;
   size: number;
-  mimetype: string;
+  mime_type: string;
+  duration: number;
+  thumbnail: string | null;
   status: VideoStatus;
-  metadata?: VideoMetadata;
-  thumbnail?: string;
-  createdAt: Date;
-  updatedAt: Date;
+  processing_error: string | null;
+  created_at: Date;
+  updated_at: Date;
 }
 
-export interface VideoQualityVersion {
+// Video with qualities
+export interface VideoWithQualities extends VideoData {
+  qualities: VideoQualityData[];
+}
+
+// Video quality data
+export interface VideoQualityData {
+  id: string;
+  video_id: string;
   quality: VideoQuality;
   path: string;
   size: number;
   bitrate: string;
   resolution: string;
-  status: VideoStatus;
+  created_at: Date;
 }
 
-export interface VideoProcessingJob {
-  videoId: string;
-  inputPath: string;
-  outputPath: string;
-  quality: VideoQuality;
+// Video upload result
+export interface VideoUploadResult {
+  success: boolean;
+  video_id?: string;
+  filename?: string;
+  path?: string;
+  error?: string;
+}
+
+// Video processing status
+export interface VideoProcessingStatus {
+  video_id: string;
   status: VideoStatus;
   progress: number;
+  current_quality?: VideoQuality;
   error?: string;
-  startedAt?: Date;
-  completedAt?: Date;
 }
 
+// Video stream options
 export interface VideoStreamOptions {
   quality?: VideoQuality;
   start?: number;
   end?: number;
 }
 
-export interface FFmpegProgress {
-  frames: number;
-  currentFps: number;
-  currentKbps: number;
-  targetSize: number;
-  timemark: string;
-  percent: number;
+// Video playback info
+export interface VideoPlaybackInfo {
+  id: string;
+  url: string;
+  duration: number;
+  thumbnail: string | null;
+  available_qualities: VideoQuality[];
+  current_quality: VideoQuality;
 }
 
-export interface ThumbnailOptions {
-  count: number;
-  size: string;
-  format: 'jpg' | 'png';
-  quality: number;
-  timestamps?: string[];
+// Watch progress
+export interface WatchProgress {
+  video_id: string;
+  material_id: string;
+  position: number;
+  duration: number;
+  completed: boolean;
+  last_watched_at: Date;
 }
 
-export interface VideoProcessingOptions {
-  qualities?: VideoQuality[];
-  generateThumbnails?: boolean;
-  thumbnailOptions?: ThumbnailOptions;
-  deleteOriginal?: boolean;
+// Watch progress update
+export interface WatchProgressUpdate {
+  position: number;
+  duration: number;
 }
 
-export interface VideoStreamInfo {
-  path: string;
-  size: number;
-  mimetype: string;
-  range?: {
-    start: number;
-    end: number;
-    total: number;
-  };
+// Video metadata
+export interface VideoMetadata {
+  duration: number;
+  width: number;
+  height: number;
+  codec: string;
+  bitrate: number;
+  fps: number;
+}
+
+// Video quality config
+export interface VideoQualityConfig {
+  quality: VideoQuality;
+  width: number;
+  height: number;
+  bitrate: string;
+  label: string;
+}
+
+// Video thumbnail
+export interface VideoThumbnail {
+  url: string;
+  width: number;
+  height: number;
+  position: number; // seconds into the video
+}
+
+// Video list item
+export interface VideoListItem {
+  id: string;
+  original_name: string;
+  duration: number;
+  thumbnail: string | null;
+  status: VideoStatus;
+  created_at: Date;
+}
+
+// Video statistics
+export interface VideoStatistics {
+  total_videos: number;
+  total_size: number; // bytes
+  total_duration: number; // seconds
+  by_status: Record<VideoStatus, number>;
+  processing_queue: number;
 }

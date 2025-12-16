@@ -1,120 +1,63 @@
-import { NextRequest, NextResponse } from "next/server";
-import searchService from "@/services/search.service";
-import {
-  paginatedResponse,
-  successResponse,
-  errorResponse,
-} from "@/utils/response.util";
-import {
-  validatePagination,
-  parseBoolean,
-  parseInteger,
-} from "@/utils/validation.util";
-import { errorHandler } from "@/middlewares/error.middleware";
-import { corsMiddleware } from "@/middlewares/cors.middleware";
-import { loggingMiddleware } from "@/middlewares/logging.middleware";
-import { HTTP_STATUS } from "@/lib/constants";
-import type { CourseLevel } from "@prisma/client";
+import { NextRequest, NextResponse } from 'next/server';
+import prisma from '@/lib/prisma';
 
-/**
- * GET /api/search/courses
- * Advanced course search with filters and facets
- */
-async function handler(request: NextRequest): Promise<NextResponse> {
+// GET /api/search/courses - Search courses
+export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
+    const q = searchParams.get('q') || '';
+    const category = searchParams.get('category');
+    const level = searchParams.get('level');
+    const is_free = searchParams.get('is_free');
+    const price_min = searchParams.get('price_min');
+    const price_max = searchParams.get('price_max');
+    const rating_min = searchParams.get('rating_min');
+    const sort = searchParams.get('sort') || 'relevance';
+    const page = parseInt(searchParams.get('page') || '1');
+    const limit = parseInt(searchParams.get('limit') || '10');
 
-    // Extract search parameters
-    const query = searchParams.get("q") || searchParams.get("query") || "";
-    const categoryId = searchParams.get("categoryId") || undefined;
-    const level = searchParams.get("level") as CourseLevel | undefined;
-    const minPrice = searchParams.get("minPrice")
-      ? parseFloat(searchParams.get("minPrice")!)
-      : undefined;
-    const maxPrice = searchParams.get("maxPrice")
-      ? parseFloat(searchParams.get("maxPrice")!)
-      : undefined;
-    const minRating = searchParams.get("minRating")
-      ? parseFloat(searchParams.get("minRating")!)
-      : undefined;
-    const isFree = searchParams.get("isFree")
-      ? parseBoolean(searchParams.get("isFree"))
-      : undefined;
-    const isPremium = searchParams.get("isPremium")
-      ? parseBoolean(searchParams.get("isPremium"))
-      : undefined;
-    const tags = searchParams.get("tags")?.split(",").filter(Boolean);
-    const language = searchParams.get("language") || "id";
-    const page = parseInteger(searchParams.get("page") || "1", 1);
-    const limit = parseInteger(searchParams.get("limit") || "12", 12);
-    const sortBy =
-      (searchParams.get("sortBy") as
-        | "relevance"
-        | "rating"
-        | "students"
-        | "price"
-        | "newest"
-        | undefined) || "relevance";
-    const sortOrder =
-      (searchParams.get("sortOrder") as "asc" | "desc" | undefined) || "desc";
+    const skip = (page - 1) * limit;
+    const where: Record<string, unknown> = { status: 'PUBLISHED' };
 
-    // Validate pagination
-    const validatedPagination = validatePagination(page, limit);
-
-    // Search courses
-    const result = await searchService.searchCourses({
-      query,
-      categoryId,
-      level,
-      minPrice,
-      maxPrice,
-      minRating,
-      isFree,
-      isPremium,
-      tags,
-      language,
-      page: validatedPagination.page,
-      limit: validatedPagination.limit,
-      sortBy,
-      sortOrder,
-    });
-
-    // Build metadata with filters applied
-    const metadata = {
-      page: validatedPagination.page,
-      limit: validatedPagination.limit,
-      total: result.total,
-      query,
-      filters: {
-        categoryId,
-        level,
-        minPrice,
-        maxPrice,
-        minRating,
-        isFree,
-        isPremium,
-        tags,
-        language,
-      },
-      sortBy,
-      sortOrder,
-      facets: result.facets,
-    };
-
-    return paginatedResponse(
-      result.courses,
-      metadata,
-      "Courses found successfully"
-    );
-  } catch (error) {
-    if (error instanceof Error) {
-      return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
+    if (q) {
+      where.OR = [
+        { title: { contains: q, mode: 'insensitive' } },
+        { description: { contains: q, mode: 'insensitive' } },
+        { tags: { has: q.toLowerCase() } },
+      ];
     }
-    return errorResponse(
-      "Course search failed",
-      HTTP_STATUS.INTERNAL_SERVER_ERROR
-    );
+
+    if (category) where.category = { slug: category };
+    if (level) where.level = level;
+    if (is_free !== null) where.is_free = is_free === 'true';
+    if (price_min) where.price = { ...((where.price as Record<string, unknown>) || {}), gte: parseFloat(price_min) };
+    if (price_max) where.price = { ...((where.price as Record<string, unknown>) || {}), lte: parseFloat(price_max) };
+    if (rating_min) where.average_rating = { gte: parseFloat(rating_min) };
+
+    let orderBy: Record<string, string> = { created_at: 'desc' };
+    if (sort === 'popular') orderBy = { total_students: 'desc' };
+    else if (sort === 'rating') orderBy = { average_rating: 'desc' };
+    else if (sort === 'price_low') orderBy = { price: 'asc' };
+    else if (sort === 'price_high') orderBy = { price: 'desc' };
+    else if (sort === 'newest') orderBy = { created_at: 'desc' };
+
+    const [courses, total] = await Promise.all([
+      prisma.course.findMany({
+        where, skip, take: limit, orderBy,
+        include: {
+          category: { select: { name: true, slug: true } },
+          mentor: { select: { user: { select: { full_name: true, avatar_url: true } } } },
+        },
+      }),
+      prisma.course.count({ where }),
+    ]);
+
+    return NextResponse.json({
+      courses,
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    });
+  } catch (error) {
+    console.error('Search courses error:', error);
+    return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 });
   }
 }
-
-export const GET = errorHandler(loggingMiddleware(corsMiddleware(handler)));

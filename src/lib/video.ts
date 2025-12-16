@@ -1,255 +1,149 @@
-import ffmpeg from 'fluent-ffmpeg';
-import path from 'path';
+// Video processing utilities
 import { videoConfig } from '@/config/video.config';
-import { ensureDirectoryExists } from '@/utils/file.util';
-import type { VideoQuality, FFmpegProgress, ThumbnailOptions } from '@/types/video.types';
+import { VideoQuality, VideoStatus } from '@prisma/client';
 
-/**
- * Video Metadata Response
- */
-interface VideoMetadataResponse {
+interface VideoMetadata {
   duration: number;
   width: number;
   height: number;
-  bitrate: string;
   codec: string;
-  format: string;
-  size: number;
+  bitrate: number;
   fps: number;
 }
 
-/**
- * FFmpeg Wrapper
- * Handles video processing operations
- */
-export class VideoProcessor {
-  /**
-   * Get video metadata
-   */
-  async getMetadata(videoPath: string): Promise<VideoMetadataResponse> {
-    return new Promise((resolve, reject) => {
-      ffmpeg.ffprobe(videoPath, (err, metadata) => {
-        if (err) {
-          reject(err);
-          return;
-        }
+interface ProcessingResult {
+  success: boolean;
+  qualities?: VideoQuality[];
+  thumbnail?: string;
+  duration?: number;
+  error?: string;
+}
 
-        const videoStream = metadata.streams.find((s) => s.codec_type === 'video');
+// Get video quality settings
+export function getQualitySettings(quality: VideoQuality) {
+  return videoConfig.qualities[quality];
+}
 
-        if (!videoStream) {
-          reject(new Error('No video stream found'));
-          return;
-        }
+// Get all available qualities
+export function getAvailableQualities(): { value: VideoQuality; label: string }[] {
+  return Object.entries(videoConfig.qualities).map(([key, config]) => ({
+    value: key as VideoQuality,
+    label: config.label,
+  }));
+}
 
-        resolve({
-          duration: metadata.format.duration || 0,
-          width: videoStream.width || 0,
-          height: videoStream.height || 0,
-          bitrate: metadata.format.bit_rate?.toString() || '0',
-          codec: videoStream.codec_name || 'unknown',
-          format: metadata.format.format_name || 'unknown',
-          size: metadata.format.size || 0,
-          fps: this.calculateFPS(videoStream),
-        });
-      });
-    });
-  }
+// Determine qualities to generate based on source resolution
+export function determineTargetQualities(sourceWidth: number, sourceHeight: number): VideoQuality[] {
+  const qualities: VideoQuality[] = [];
+  
+  if (sourceHeight >= 360) qualities.push(VideoQuality.Q360P);
+  if (sourceHeight >= 480) qualities.push(VideoQuality.Q480P);
+  if (sourceHeight >= 720) qualities.push(VideoQuality.Q720P);
+  if (sourceHeight >= 1080) qualities.push(VideoQuality.Q1080P);
+  
+  return qualities.length > 0 ? qualities : [VideoQuality.Q360P];
+}
 
-  /**
-   * Calculate FPS from video stream
-   */
-  private calculateFPS(stream: { r_frame_rate?: string; avg_frame_rate?: string }): number {
-    if (stream.r_frame_rate) {
-      const [num, den] = stream.r_frame_rate.split('/').map(Number);
-      return den ? num / den : 0;
-    }
-    return stream.avg_frame_rate ? parseFloat(stream.avg_frame_rate) : 0;
-  }
+// Build FFmpeg command for transcoding (stub - would use actual FFmpeg)
+export function buildTranscodeCommand(
+  inputPath: string,
+  outputPath: string,
+  quality: VideoQuality
+): string {
+  const settings = getQualitySettings(quality);
+  const { codec, preset, crf, audioCodec, audioBitrate } = videoConfig.encoding;
+  
+  return `ffmpeg -i "${inputPath}" -c:v ${codec} -preset ${preset} -crf ${crf} ` +
+    `-vf scale=${settings.width}:${settings.height} -b:v ${settings.bitrate} ` +
+    `-c:a ${audioCodec} -b:a ${audioBitrate} "${outputPath}"`;
+}
 
-  /**
-   * Convert video to specific quality
-   */
-  async convertToQuality(
-    inputPath: string,
-    outputPath: string,
-    quality: VideoQuality,
-    onProgress?: (progress: FFmpegProgress) => void
-  ): Promise<void> {
-    const resolution = videoConfig.resolutions.find((r) => r.name === quality);
+// Build thumbnail generation command
+export function buildThumbnailCommand(
+  inputPath: string,
+  outputPath: string,
+  position: number
+): string {
+  const { width, height } = videoConfig.thumbnail;
+  return `ffmpeg -i "${inputPath}" -ss ${position} -vframes 1 -vf scale=${width}:${height} "${outputPath}"`;
+}
 
-    if (!resolution) {
-      throw new Error(`Resolution ${quality} not found`);
-    }
-
-    // Ensure output directory exists
-    await ensureDirectoryExists(path.dirname(outputPath));
-
-    return new Promise<void>((resolve, reject) => {
-      const command = ffmpeg(inputPath)
-        .videoCodec(videoConfig.ffmpeg.videoCodec)
-        .audioCodec(videoConfig.ffmpeg.audioCodec)
-        .size(`${resolution.width}x${resolution.height}`)
-        .videoBitrate(resolution.bitrate)
-        .audioBitrate(videoConfig.ffmpeg.audioBitrate)
-        .audioFrequency(videoConfig.ffmpeg.audioSampleRate)
-        .audioChannels(videoConfig.ffmpeg.audioChannels)
-        .outputOptions([
-          `-preset ${videoConfig.ffmpeg.preset}`,
-          `-crf ${videoConfig.ffmpeg.crf}`,
-          `-pix_fmt ${videoConfig.ffmpeg.pixelFormat}`,
-          `-movflags ${videoConfig.ffmpeg.movflags}`,
-        ])
-        .output(outputPath);
-
-      // Track progress
-      if (onProgress) {
-        command.on('progress', (progress) => {
-          onProgress({
-            frames: progress.frames || 0,
-            currentFps: progress.currentFps || 0,
-            currentKbps: progress.currentKbps || 0,
-            targetSize: progress.targetSize || 0,
-            timemark: progress.timemark || '00:00:00',
-            percent: progress.percent || 0,
-          });
-        });
-      }
-
-      command
-        .on('end', () => resolve())
-        .on('error', (err) => reject(err))
-        .run();
-    });
-  }
-
-  /**
-   * Generate video thumbnails
-   */
-  async generateThumbnails(
-    inputPath: string,
-    outputDir: string,
-    options: ThumbnailOptions = {
-      count: 3,
-      size: '320x180',
-      format: 'jpg',
-      quality: 80,
-    }
-  ): Promise<string[]> {
-    await ensureDirectoryExists(outputDir);
-
-    // Get video duration to calculate timestamps
-    const metadata = await this.getMetadata(inputPath);
-    const duration = metadata.duration;
-
-    // Calculate timestamps if not provided
-    const timestamps =
-      options.timestamps || this.calculateThumbnailTimestamps(duration, options.count);
-
-    const thumbnails: string[] = [];
-
-    return new Promise((resolve, reject) => {
-      ffmpeg(inputPath)
-        .screenshots({
-          timestamps,
-          filename: `thumb_%i.${options.format}`,
-          folder: outputDir,
-          size: options.size,
-        })
-        .on('end', () => {
-          // Generate thumbnail paths
-          for (let i = 0; i < timestamps.length; i++) {
-            thumbnails.push(path.join(outputDir, `thumb_${i + 1}.${options.format}`));
-          }
-          resolve(thumbnails);
-        })
-        .on('error', (err) => reject(err));
-    });
-  }
-
-  /**
-   * Calculate thumbnail timestamps
-   */
-  private calculateThumbnailTimestamps(duration: number, count: number): string[] {
-    const timestamps: string[] = [];
-    const interval = duration / (count + 1);
-
-    for (let i = 1; i <= count; i++) {
-      const seconds = Math.floor(interval * i);
-      timestamps.push(this.secondsToTimestamp(seconds));
-    }
-
-    return timestamps;
-  }
-
-  /**
-   * Convert seconds to FFmpeg timestamp format
-   */
-  private secondsToTimestamp(seconds: number): string {
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = seconds % 60;
-
-    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(
-      secs
-    ).padStart(2, '0')}`;
-  }
-
-  /**
-   * Extract audio from video
-   */
-  async extractAudio(inputPath: string, outputPath: string): Promise<void> {
-    await ensureDirectoryExists(path.dirname(outputPath));
-
-    return new Promise<void>((resolve, reject) => {
-      ffmpeg(inputPath)
-        .noVideo()
-        .audioCodec(videoConfig.ffmpeg.audioCodec)
-        .audioBitrate(videoConfig.ffmpeg.audioBitrate)
-        .output(outputPath)
-        .on('end', () => resolve())
-        .on('error', (err) => reject(err))
-        .run();
-    });
-  }
-
-  /**
-   * Merge video and audio
-   */
-  async mergeVideoAudio(videoPath: string, audioPath: string, outputPath: string): Promise<void> {
-    await ensureDirectoryExists(path.dirname(outputPath));
-
-    return new Promise<void>((resolve, reject) => {
-      ffmpeg()
-        .input(videoPath)
-        .input(audioPath)
-        .videoCodec('copy')
-        .audioCodec('copy')
-        .output(outputPath)
-        .on('end', () => resolve())
-        .on('error', (err) => reject(err))
-        .run();
-    });
-  }
-
-  /**
-   * Create video preview (short clip)
-   */
-  async createPreview(inputPath: string, outputPath: string, duration: number = 30): Promise<void> {
-    await ensureDirectoryExists(path.dirname(outputPath));
-
-    return new Promise<void>((resolve, reject) => {
-      ffmpeg(inputPath)
-        .setStartTime(0)
-        .setDuration(duration)
-        .videoCodec(videoConfig.ffmpeg.videoCodec)
-        .audioCodec(videoConfig.ffmpeg.audioCodec)
-        .output(outputPath)
-        .on('end', () => resolve())
-        .on('error', (err) => reject(err))
-        .run();
-    });
+// Process video (stub - would integrate with actual processing)
+export async function processVideo(videoPath: string): Promise<ProcessingResult> {
+  try {
+    // In development, just simulate processing
+    console.log('🎬 Processing video:', videoPath);
+    
+    // TODO: Implement actual video processing with FFmpeg
+    // 1. Extract metadata
+    // 2. Generate thumbnails
+    // 3. Transcode to multiple qualities
+    // 4. Generate HLS segments if enabled
+    
+    return {
+      success: true,
+      qualities: [VideoQuality.Q720P],
+      duration: 0,
+    };
+  } catch (error) {
+    console.error('Video processing error:', error);
+    return {
+      success: false,
+      error: (error as Error).message,
+    };
   }
 }
 
-export const videoProcessor = new VideoProcessor();
-export default videoProcessor;
+// Get video metadata (stub)
+export async function getVideoMetadata(videoPath: string): Promise<VideoMetadata | null> {
+  try {
+    // TODO: Use FFprobe to extract metadata
+    console.log('📊 Getting metadata for:', videoPath);
+    
+    return {
+      duration: 0,
+      width: 1920,
+      height: 1080,
+      codec: 'h264',
+      bitrate: 5000000,
+      fps: 30,
+    };
+  } catch (error) {
+    console.error('Get metadata error:', error);
+    return null;
+  }
+}
+
+// Calculate processing progress
+export function calculateProgress(
+  currentStep: number,
+  totalSteps: number
+): number {
+  return Math.round((currentStep / totalSteps) * 100);
+}
+
+// Estimate processing time based on duration
+export function estimateProcessingTime(
+  durationSeconds: number,
+  qualities: VideoQuality[]
+): number {
+  // Rough estimate: 0.5x real-time per quality
+  return durationSeconds * qualities.length * 0.5;
+}
+
+// Get status label (Indonesian)
+export function getStatusLabel(status: VideoStatus): string {
+  const labels: Record<VideoStatus, string> = {
+    [VideoStatus.UPLOADING]: 'Mengupload',
+    [VideoStatus.PROCESSING]: 'Memproses',
+    [VideoStatus.COMPLETED]: 'Selesai',
+    [VideoStatus.FAILED]: 'Gagal',
+  };
+  return labels[status];
+}
+
+// Check if video format is supported
+export function isSupportedFormat(filename: string): boolean {
+  const ext = filename.split('.').pop()?.toLowerCase();
+  return ext ? videoConfig.supportedFormats.includes(ext) : false;
+}

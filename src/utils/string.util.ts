@@ -1,47 +1,43 @@
-export function generateSlug(text: string): string {
+// String utilities
+
+// Generate slug from text
+export function slugify(text: string): string {
   return text
     .toLowerCase()
-    .trim()
-    .replace(/[^\w\s-]/g, '')
-    .replace(/[\s_-]+/g, '-')
-    .replace(/^-+|-+$/g, '');
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // Remove accents
+    .replace(/[^a-z0-9\s-]/g, '') // Remove special chars
+    .replace(/\s+/g, '-') // Replace spaces with hyphens
+    .replace(/-+/g, '-') // Remove consecutive hyphens
+    .replace(/^-|-$/g, ''); // Remove leading/trailing hyphens
 }
 
-/**
- * Capitalize first letter
- */
+// Capitalize first letter
 export function capitalize(text: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1).toLowerCase();
 }
 
-/**
- * Capitalize each word
- */
-export function capitalizeWords(text: string): string {
+// Title case
+export function titleCase(text: string): string {
   return text
+    .toLowerCase()
     .split(' ')
-    .map((word) => capitalize(word))
+    .map(word => capitalize(word))
     .join(' ');
 }
 
-/**
- * Truncate text with ellipsis
- */
+// Truncate text
 export function truncate(text: string, length: number, suffix: string = '...'): string {
   if (text.length <= length) return text;
-  return text.substring(0, length).trim() + suffix;
+  return text.substring(0, length - suffix.length).trim() + suffix;
 }
 
-/**
- * Remove HTML tags
- */
+// Strip HTML tags
 export function stripHtml(html: string): string {
   return html.replace(/<[^>]*>/g, '');
 }
 
-/**
- * Escape HTML special characters
- */
+// Escape HTML
 export function escapeHtml(text: string): string {
   const map: Record<string, string> = {
     '&': '&amp;',
@@ -50,13 +46,11 @@ export function escapeHtml(text: string): string {
     '"': '&quot;',
     "'": '&#039;',
   };
-  return text.replace(/[&<>"']/g, (char) => map[char]);
+  return text.replace(/[&<>"']/g, char => map[char]);
 }
 
-/**
- * Generate random string
- */
-export function generateRandomString(length: number): string {
+// Generate random string
+export function randomString(length: number = 16): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
   let result = '';
   for (let i = 0; i < length; i++) {
@@ -65,127 +59,88 @@ export function generateRandomString(length: number): string {
   return result;
 }
 
-/**
- * Generate random alphanumeric code
- */
-export function generateCode(length: number = 6): string {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  let code = '';
-  for (let i = 0; i < length; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return code;
+// Generate random ID
+export function randomId(prefix: string = ''): string {
+  const timestamp = Date.now().toString(36);
+  const random = randomString(6);
+  return prefix ? `${prefix}_${timestamp}${random}` : `${timestamp}${random}`;
 }
 
-/**
- * Mask email (e.g., "t***@example.com")
- */
-export function maskEmail(email: string): string {
-  const [name, domain] = email.split('@');
-  const maskedName = name.charAt(0) + '***' + name.charAt(name.length - 1);
-  return `${maskedName}@${domain}`;
-}
-
-/**
- * Mask phone number (e.g., "****1234")
- */
-export function maskPhone(phone: string): string {
-  return '****' + phone.slice(-4);
-}
-
-/**
- * Format currency (IDR)
- */
-export function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('id-ID', {
-    style: 'currency',
-    currency: 'IDR',
-    minimumFractionDigits: 0,
-  }).format(amount);
-}
-
-/**
- * Format number with thousand separator
- */
-export function formatNumber(num: number): string {
-  return new Intl.NumberFormat('id-ID').format(num);
-}
-
-/**
- * Parse query string to object
- */
-export function parseQueryString(query: string): Record<string, string> {
-  const params = new URLSearchParams(query);
-  const result: Record<string, string> = {};
-  params.forEach((value, key) => {
-    result[key] = value;
-  });
-  return result;
-}
-
-/**
- * Object to query string
- */
-export function objectToQueryString(obj: Record<string, unknown>): string {
-  return Object.keys(obj)
-    .filter((key) => obj[key] !== undefined && obj[key] !== null)
-    .map((key) => `${encodeURIComponent(key)}=${encodeURIComponent(String(obj[key]))}`)
-    .join('&');
-}
-
-/**
- * Check if string is valid email
- */
-export function isValidEmail(email: string): boolean {
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return emailRegex.test(email);
-}
-
-/**
- * Check if string is valid URL
- */
-export function isValidUrl(url: string): boolean {
-  try {
-    new URL(url);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Extract domain from URL
- */
-export function extractDomain(url: string): string | null {
-  try {
-    return new URL(url).hostname;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Generate initials from name
- */
-export function getInitials(name: string): string {
+// Get initials from name
+export function getInitials(name: string, count: number = 2): string {
   return name
     .split(' ')
-    .map((word) => word.charAt(0).toUpperCase())
-    .join('')
-    .substring(0, 2);
+    .map(word => word.charAt(0).toUpperCase())
+    .slice(0, count)
+    .join('');
 }
 
-/**
- * Count words in text
- */
+// Mask email
+export function maskEmail(email: string): string {
+  const [local, domain] = email.split('@');
+  if (!local || !domain) return email;
+  
+  const maskedLocal = local.charAt(0) + '*'.repeat(Math.min(local.length - 2, 5)) + local.charAt(local.length - 1);
+  return `${maskedLocal}@${domain}`;
+}
+
+// Mask phone
+export function maskPhone(phone: string): string {
+  if (phone.length < 4) return phone;
+  const visible = 4;
+  return '*'.repeat(phone.length - visible) + phone.slice(-visible);
+}
+
+// Format phone number (Indonesian)
+export function formatPhone(phone: string): string {
+  // Remove non-digits
+  const digits = phone.replace(/\D/g, '');
+  
+  // Format as 08XX-XXXX-XXXX
+  if (digits.length === 11) {
+    return `${digits.slice(0, 4)}-${digits.slice(4, 8)}-${digits.slice(8)}`;
+  }
+  if (digits.length === 12) {
+    return `${digits.slice(0, 4)}-${digits.slice(4, 8)}-${digits.slice(8)}`;
+  }
+  
+  return phone;
+}
+
+// Normalize phone number to E.164
+export function normalizePhone(phone: string): string {
+  let digits = phone.replace(/\D/g, '');
+  
+  // Handle Indonesian format
+  if (digits.startsWith('0')) {
+    digits = '62' + digits.slice(1);
+  }
+  
+  return '+' + digits;
+}
+
+// Check if string is empty or whitespace
+export function isBlank(text: string | null | undefined): boolean {
+  return !text || text.trim().length === 0;
+}
+
+// Remove extra whitespace
+export function normalizeWhitespace(text: string): string {
+  return text.replace(/\s+/g, ' ').trim();
+}
+
+// Count words
 export function countWords(text: string): number {
-  return text.trim().split(/\s+/).length;
+  return text.trim().split(/\s+/).filter(Boolean).length;
 }
 
-/**
- * Estimate reading time (words per minute)
- */
-export function estimateReadingTime(text: string, wordsPerMinute: number = 200): number {
-  const wordCount = countWords(text);
-  return Math.ceil(wordCount / wordsPerMinute);
+// Pluralize (Indonesian - simple)
+export function pluralize(count: number, singular: string, plural?: string): string {
+  // Indonesian doesn't have grammatical plural, but we can add "2 kursus" style
+  return `${count} ${singular}`;
+}
+
+// Ordinal number (Indonesian)
+export function ordinal(n: number): string {
+  return `ke-${n}`;
 }

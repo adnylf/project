@@ -1,147 +1,173 @@
-import type { BaseEntity } from './common.types';
+// User Types
+import { UserRole, UserStatus, MentorStatus, DisabilityType } from '@prisma/client';
 
-/**
- * User Types
- */
-
-/**
- * User Role
- */
-export type UserRole = 'ADMIN' | 'MENTOR' | 'STUDENT';
-
-/**
- * User Status
- */
-export type UserStatus = 'ACTIVE' | 'SUSPENDED' | 'INACTIVE';
-
-/**
- * User
- */
-export interface User extends BaseEntity {
+// User data
+export interface UserData {
+  id: string;
   email: string;
-  name: string;
+  full_name: string;
+  avatar_url: string | null;
+  phone: string | null;
+  bio: string | null;
+  date_of_birth: Date | null;
+  address: string | null;
+  city: string | null;
+  disability_type: DisabilityType | null;
   role: UserRole;
   status: UserStatus;
-  profilePicture?: string;
-  bio?: string;
-  phoneNumber?: string;
-  dateOfBirth?: Date;
-  address?: string;
-  city?: string;
-  country?: string;
-  emailVerified: boolean;
-  emailVerifiedAt?: Date;
-  lastLoginAt?: Date;
+  email_verified_at: Date | null;
+  last_login_at: Date | null;
+  created_at: Date;
+  updated_at: Date;
 }
 
-/**
- * User Profile
- */
+// User profile (public)
 export interface UserProfile {
   id: string;
-  name: string;
-  email: string;
+  full_name: string;
+  avatar_url: string | null;
+  bio: string | null;
   role: UserRole;
-  profilePicture?: string;
-  bio?: string;
-  phoneNumber?: string;
-  dateOfBirth?: Date;
-  address?: string;
-  city?: string;
-  country?: string;
-  emailVerified: boolean;
-  createdAt: Date;
 }
 
-/**
- * Update Profile Data
- */
-export interface UpdateProfileData {
-  name?: string;
-  bio?: string;
-  phoneNumber?: string;
-  dateOfBirth?: Date;
-  address?: string;
-  city?: string;
-  country?: string;
+// User with mentor
+export interface UserWithMentor extends UserData {
+  mentor?: MentorData;
 }
 
-/**
- * Mentor Profile
- */
-export interface MentorProfile extends BaseEntity {
-  userId: string;
+// Mentor data
+export interface MentorData {
+  id: string;
+  user_id: string;
   expertise: string[];
-  experience: number;
-  education?: string;
-  bio?: string;
-  headline?: string;
-  website?: string;
-  linkedin?: string;
-  twitter?: string;
-  portfolio?: string;
-  status: 'PENDING' | 'APPROVED' | 'REJECTED';
-  totalStudents: number;
-  totalCourses: number;
-  averageRating: number;
-  totalReviews: number;
-  totalRevenue: number;
+  experience: string | null;
+  education: string | null;
+  certificates: string[];
+  portfolio_url: string | null;
+  linkedin_url: string | null;
+  status: MentorStatus;
+  approved_at: Date | null;
+  rejection_reason: string | null;
+  total_students: number;
+  total_courses: number;
+  total_revenue: number;
+  average_rating: number;
+  created_at: Date;
+  updated_at: Date;
 }
 
-/**
- * Mentor Application
- */
-export interface MentorApplication {
+// Mentor with user
+export interface MentorWithUser extends MentorData {
+  user: UserProfile;
+}
+
+// Mentor profile (public)
+export interface MentorProfile {
+  id: string;
+  user: UserProfile;
   expertise: string[];
-  experience: number;
-  education?: string;
-  bio: string;
-  headline: string;
-  website?: string;
-  linkedin?: string;
-  twitter?: string;
-  portfolio?: string;
+  experience: string | null;
+  education: string | null;
+  total_students: number;
+  total_courses: number;
+  average_rating: number;
 }
 
-/**
- * Wishlist Item
- */
+// User list item
+export interface UserListItem {
+  id: string;
+  email: string;
+  full_name: string;
+  avatar_url: string | null;
+  role: UserRole;
+  status: UserStatus;
+  created_at: Date;
+}
+
+// Mentor list item
+export interface MentorListItem {
+  id: string;
+  user: UserProfile;
+  expertise: string[];
+  total_courses: number;
+  total_students: number;
+  average_rating: number;
+  status: MentorStatus;
+}
+
+// Profile update input
+export interface ProfileUpdateInput {
+  full_name?: string;
+  phone?: string | null;
+  bio?: string | null;
+  date_of_birth?: string | null;
+  address?: string | null;
+  city?: string | null;
+  disability_type?: DisabilityType | null;
+}
+
+// Admin user update input
+export interface AdminUserUpdateInput extends ProfileUpdateInput {
+  email?: string;
+  role?: UserRole;
+  status?: UserStatus;
+}
+
+// Mentor application input
+export interface MentorApplicationInput {
+  expertise: string[];
+  experience?: string;
+  education?: string;
+  certificates?: string[];
+  portfolio_url?: string;
+  linkedin_url?: string;
+}
+
+// Mentor profile update input
+export interface MentorProfileUpdateInput extends MentorApplicationInput {
+  // Same fields, for update
+}
+
+// User statistics
+export interface UserStatistics {
+  total_users: number;
+  active_users: number;
+  new_users_this_month: number;
+  by_role: Record<UserRole, number>;
+  by_status: Record<UserStatus, number>;
+}
+
+// Mentor statistics
+export interface MentorStatistics {
+  total_mentors: number;
+  approved_mentors: number;
+  pending_mentors: number;
+  by_status: Record<MentorStatus, number>;
+}
+
+// Activity log entry
+export interface ActivityLogEntry {
+  id: string;
+  user_id: string;
+  action: string;
+  entity_type: string | null;
+  entity_id: string | null;
+  metadata: Record<string, unknown> | null;
+  ip_address: string | null;
+  user_agent: string | null;
+  created_at: Date;
+}
+
+// Wishlist item
 export interface WishlistItem {
   id: string;
-  userId: string;
-  courseId: string;
+  course_id: string;
   course: {
-    id: string;
     title: string;
-    thumbnail?: string;
+    slug: string;
+    thumbnail: string | null;
     price: number;
+    is_free: boolean;
   };
-  createdAt: Date;
-}
-
-/**
- * User Activity
- */
-export interface UserActivity {
-  id: string;
-  userId: string;
-  action: string;
-  entityType?: string;
-  entityId?: string;
-  metadata?: Record<string, unknown>;
-  ipAddress?: string;
-  userAgent?: string;
-  createdAt: Date;
-}
-
-/**
- * User Statistics
- */
-export interface UserStatistics {
-  totalUsers: number;
-  activeUsers: number;
-  suspendedUsers: number;
-  newUsersThisMonth: number;
-  mentors: number;
-  students: number;
+  created_at: Date;
 }

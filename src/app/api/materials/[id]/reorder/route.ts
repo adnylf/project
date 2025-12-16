@@ -1,73 +1,54 @@
-import { NextRequest, NextResponse } from "next/server";
-import materialService from "@/services/material.service";
-import { reorderMaterialsSchema } from "@/lib/validation";
-import {
-  successResponse,
-  validationErrorResponse,
-  errorResponse,
-} from "@/utils/response.util";
-import { validateData } from "@/utils/validation.util";
-import { errorHandler } from "@/middlewares/error.middleware";
-import { authMiddleware } from "@/middlewares/auth.middleware";
-import { corsMiddleware } from "@/middlewares/cors.middleware";
-import { loggingMiddleware } from "@/middlewares/logging.middleware";
-import { HTTP_STATUS } from "@/lib/constants";
+import { NextRequest, NextResponse } from 'next/server';
+import prisma from '@/lib/prisma';
+import { getAuthUser, hasRole, unauthorizedResponse } from '@/lib/auth';
+import { UserRole } from '@prisma/client';
 
-async function handler(
-  request: NextRequest,
-  user: any,
-  context: { params: Promise<{ id: string }> }
-) {
-  try {
-    const { id: sectionId } = await context.params;
-
-    const body = await request.json();
-
-    const validation = await validateData(reorderMaterialsSchema, body);
-
-    if (!validation.success) {
-      return validationErrorResponse(validation.errors);
-    }
-
-    const materials = await materialService.reorderMaterials(
-      sectionId,
-      user.userId,
-      user.role,
-      validation.data.materials
-    );
-
-    return successResponse(materials, "Materials reordered successfully");
-  } catch (error) {
-    if (error instanceof Error) {
-      return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
-    }
-    return errorResponse(
-      "Failed to reorder materials",
-      HTTP_STATUS.INTERNAL_SERVER_ERROR
-    );
-  }
+interface RouteParams {
+  params: { id: string };
 }
 
-const authenticatedHandler = async (
-  request: NextRequest,
-  context: { params: Promise<{ id: string }> }
-): Promise<NextResponse> => {
-  const authResult = await authMiddleware(request);
-  if (authResult instanceof NextResponse) {
-    return authResult;
-  }
-  return handler(request, authResult, context);
-};
+// PUT /api/materials/[id]/reorder - Reorder materials
+export async function PUT(request: NextRequest, { params }: RouteParams) {
+  try {
+    const authUser = getAuthUser(request);
+    if (!authUser) return unauthorizedResponse();
 
-export async function PUT(
-  req: NextRequest,
-  context: { params: Promise<{ id: string }> }
-): Promise<NextResponse> {
-  return errorHandler(async (request: NextRequest) => {
-    return loggingMiddleware(async (r: NextRequest) => {
-      return corsMiddleware(async (rq: NextRequest) => {
-        return authenticatedHandler(rq, context);
-      })(r);
-    })(request);
-  })(req);
+    const { id } = params; // section ID
+
+    const section = await prisma.section.findUnique({
+      where: { id },
+      include: { course: { include: { mentor: true } } },
+    });
+
+    if (!section) {
+      return NextResponse.json({ error: 'Section tidak ditemukan' }, { status: 404 });
+    }
+
+    const isMentor = section.course.mentor.user_id === authUser.userId;
+    const isAdmin = hasRole(authUser, [UserRole.ADMIN]);
+    if (!isMentor && !isAdmin) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    const body = await request.json();
+    const { materials } = body as { materials: { id: string; order: number }[] };
+
+    if (!materials || !Array.isArray(materials)) {
+      return NextResponse.json({ error: 'Data materials wajib diisi' }, { status: 400 });
+    }
+
+    await prisma.$transaction(
+      materials.map(m =>
+        prisma.material.update({
+          where: { id: m.id },
+          data: { order: m.order },
+        })
+      )
+    );
+
+    return NextResponse.json({ message: 'Urutan materi berhasil diperbarui' });
+  } catch (error) {
+    console.error('Reorder materials error:', error);
+    return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 });
+  }
 }

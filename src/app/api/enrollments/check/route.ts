@@ -1,59 +1,33 @@
-import { NextRequest, NextResponse } from "next/server";
-import enrollmentService from "@/services/enrollment.service";
-import { successResponse, errorResponse } from "@/utils/response.util";
-import { errorHandler } from "@/middlewares/error.middleware";
-import { authMiddleware } from "@/middlewares/auth.middleware";
-import { corsMiddleware } from "@/middlewares/cors.middleware";
-import { loggingMiddleware } from "@/middlewares/logging.middleware";
-import { HTTP_STATUS } from "@/lib/constants";
+import { NextRequest, NextResponse } from 'next/server';
+import prisma from '@/lib/prisma';
+import { getAuthUser, unauthorizedResponse } from '@/lib/auth';
 
-/**
- * POST /api/enrollments/check
- * Check enrollment status for a course
- */
-async function handler(
-  request: NextRequest,
-  user: { userId: string; email: string; role: string }
-) {
+// GET /api/enrollments/check - Check enrollment status
+export async function GET(request: NextRequest) {
   try {
-    // Parse request body
-    const body = await request.json();
-    const { courseId } = body;
+    const authUser = getAuthUser(request);
+    if (!authUser) return unauthorizedResponse();
+
+    const { searchParams } = new URL(request.url);
+    const courseId = searchParams.get('course_id');
 
     if (!courseId) {
-      return errorResponse("Course ID is required", HTTP_STATUS.BAD_REQUEST);
+      return NextResponse.json({ error: 'Course ID wajib diisi' }, { status: 400 });
     }
 
-    // Check enrollment status
-    const status = await enrollmentService.checkEnrollmentStatus(
-      user.userId,
-      courseId
-    );
+    const enrollment = await prisma.enrollment.findUnique({
+      where: {
+        user_id_course_id: { user_id: authUser.userId, course_id: courseId },
+      },
+      include: { certificate: true },
+    });
 
-    return successResponse(status, "Enrollment status retrieved successfully");
+    return NextResponse.json({
+      isEnrolled: !!enrollment,
+      enrollment,
+    });
   } catch (error) {
-    if (error instanceof Error) {
-      return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
-    }
-    return errorResponse(
-      "Failed to check enrollment status",
-      HTTP_STATUS.INTERNAL_SERVER_ERROR
-    );
+    console.error('Check enrollment error:', error);
+    return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 });
   }
 }
-
-// Apply middlewares and export
-async function authenticatedHandler(
-  request: NextRequest
-): Promise<NextResponse> {
-  const authResult = await authMiddleware(request);
-  if (authResult instanceof NextResponse) {
-    return authResult;
-  }
-  // PERBAIKAN: Langsung gunakan authResult sebagai user
-  return handler(request, authResult);
-}
-
-export const POST = errorHandler(
-  loggingMiddleware(corsMiddleware(authenticatedHandler))
-);

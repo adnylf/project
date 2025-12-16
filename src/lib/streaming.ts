@@ -1,133 +1,140 @@
-import fs from 'fs';
+// Video streaming utilities
+import { videoConfig } from '@/config/video.config';
+import { NextRequest, NextResponse } from 'next/server';
+import { readFile, stat } from 'fs/promises';
 import path from 'path';
-import { storageConfig } from '@/config/storage.config';
-import type { VideoStreamInfo, VideoQuality } from '@/types/video.types';
 
-/**
- * Video Stream Response
- */
-interface VideoStreamResponse extends VideoStreamInfo {
-  stream: fs.ReadStream;
+interface StreamRange {
+  start: number;
+  end: number;
 }
 
-/**
- * Video Streaming
- * Handles video streaming with range request support
- */
-export class VideoStreaming {
-  /**
-   * Get video stream with range support
-   */
-  async getVideoStream(videoPath: string, range?: string): Promise<VideoStreamResponse> {
-    const fullPath = path.join(storageConfig.local.basePath, videoPath);
-
-    // Get file stats
-    const stat = await fs.promises.stat(fullPath);
-    const fileSize = stat.size;
-
-    // Parse range header
-    if (range) {
-      const parts = range.replace(/bytes=/, '').split('-');
-      const start = parseInt(parts[0], 10);
-      const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
-      const chunkSize = end - start + 1;
-
-      // Create read stream with range
-      const stream = fs.createReadStream(fullPath, { start, end });
-
-      return {
-        path: videoPath,
-        size: chunkSize,
-        mimetype: 'video/mp4',
-        range: {
-          start,
-          end,
-          total: fileSize,
-        },
-        stream,
-      };
-    }
-
-    // No range, stream entire file
-    const stream = fs.createReadStream(fullPath);
-
-    return {
-      path: videoPath,
-      size: fileSize,
-      mimetype: 'video/mp4',
-      stream,
-    };
+// Parse Range header
+export function parseRangeHeader(rangeHeader: string, fileSize: number): StreamRange | null {
+  const match = rangeHeader.match(/bytes=(\d*)-(\d*)/);
+  if (!match) return null;
+  
+  const start = match[1] ? parseInt(match[1], 10) : 0;
+  const end = match[2] ? parseInt(match[2], 10) : fileSize - 1;
+  
+  if (start >= fileSize || end >= fileSize || start > end) {
+    return null;
   }
+  
+  return { start, end };
+}
 
-  /**
-   * Get available qualities for video
-   */
-  async getAvailableQualities(videoId: string): Promise<VideoQuality[]> {
-    const qualities: VideoQuality[] = [];
-    const processedDir = path.join(storageConfig.local.basePath, 'videos', 'processed');
-
-    // Check each quality directory
-    for (const quality of ['360p', '480p', '720p', '1080p'] as VideoQuality[]) {
-      const qualityPath = path.join(processedDir, quality, `${videoId}.mp4`);
-
-      try {
-        await fs.promises.access(qualityPath);
-        qualities.push(quality);
-      } catch {
-        // Quality not available
+// Create video stream response
+export async function createVideoStreamResponse(
+  videoPath: string,
+  request: NextRequest
+): Promise<NextResponse | null> {
+  try {
+    const absolutePath = path.join(process.cwd(), videoPath.replace(/^\//, ''));
+    const stats = await stat(absolutePath);
+    const fileSize = stats.size;
+    
+    const rangeHeader = request.headers.get('range');
+    
+    if (rangeHeader) {
+      // Partial content (streaming)
+      const range = parseRangeHeader(rangeHeader, fileSize);
+      
+      if (!range) {
+        return new NextResponse(null, {
+          status: 416,
+          headers: { 'Content-Range': `bytes */${fileSize}` },
+        });
       }
-    }
-
-    return qualities;
-  }
-
-  /**
-   * Get video path for specific quality
-   */
-  getVideoPath(videoId: string, quality?: VideoQuality): string {
-    if (quality) {
-      return path.join('videos', 'processed', quality, `${videoId}.mp4`);
-    }
-    return path.join('videos', 'originals', `${videoId}.mp4`);
-  }
-
-  /**
-   * Calculate buffer size based on bitrate
-   */
-  calculateBufferSize(bitrate: string): number {
-    // Parse bitrate (e.g., "2500k" -> 2500000)
-    const bitrateNum = parseInt(bitrate.replace('k', '000'));
-
-    // Buffer size = 5 seconds of video
-    return Math.floor((bitrateNum / 8) * 5);
-  }
-
-  /**
-   * Get stream headers for range request
-   */
-  getStreamHeaders(info: VideoStreamInfo): Record<string, string | number> {
-    const headers: Record<string, string | number> = {
-      'Content-Type': info.mimetype,
-      'Accept-Ranges': 'bytes',
-    };
-
-    if (info.range) {
-      headers['Content-Range'] = `bytes ${info.range.start}-${info.range.end}/${info.range.total}`;
-      headers['Content-Length'] = info.size.toString();
+      
+      const { start, end } = range;
+      const chunkSize = end - start + 1;
+      
+      // Read the specific range from file
+      const fileBuffer = await readFile(absolutePath);
+      const chunk = new Uint8Array(fileBuffer.subarray(start, end + 1));
+      
+      return new NextResponse(chunk, {
+        status: 206,
+        headers: {
+          'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+          'Accept-Ranges': 'bytes',
+          'Content-Length': chunkSize.toString(),
+          'Content-Type': 'video/mp4',
+          'Cache-Control': 'no-cache',
+        },
+      });
     } else {
-      headers['Content-Length'] = info.size.toString();
+      // Full content
+      const fileBuffer = await readFile(absolutePath);
+      const data = new Uint8Array(fileBuffer);
+      
+      return new NextResponse(data, {
+        status: 200,
+        headers: {
+          'Content-Length': fileSize.toString(),
+          'Content-Type': 'video/mp4',
+          'Accept-Ranges': 'bytes',
+          'Cache-Control': 'public, max-age=31536000',
+        },
+      });
     }
-
-    return headers;
-  }
-
-  /**
-   * Get HTTP status code for response
-   */
-  getStatusCode(hasRange: boolean): number {
-    return hasRange ? 206 : 200; // 206 = Partial Content
+  } catch (error) {
+    console.error('Video stream error:', error);
+    return null;
   }
 }
 
-export const videoStreaming = new VideoStreaming();
-export default videoStreaming;
+// Get optimal quality based on connection
+export function getOptimalQuality(connectionSpeed?: string): keyof typeof videoConfig.qualities {
+  if (!connectionSpeed) return videoConfig.defaultQuality as keyof typeof videoConfig.qualities;
+  
+  // Map connection types to quality
+  const qualityMap: Record<string, keyof typeof videoConfig.qualities> = {
+    '4g': 'Q720P',
+    '3g': 'Q480P',
+    '2g': 'Q360P',
+    'slow-2g': 'Q360P',
+    'wifi': 'Q1080P',
+  };
+  
+  return qualityMap[connectionSpeed] || 'Q720P';
+}
+
+// Format video duration
+export function formatDuration(seconds: number): string {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = Math.floor(seconds % 60);
+  
+  if (hours > 0) {
+    return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  }
+  return `${minutes}:${secs.toString().padStart(2, '0')}`;
+}
+
+// Format duration in words (Indonesian)
+export function formatDurationWords(seconds: number): string {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  
+  if (hours > 0 && minutes > 0) {
+    return `${hours} jam ${minutes} menit`;
+  } else if (hours > 0) {
+    return `${hours} jam`;
+  } else if (minutes > 0) {
+    return `${minutes} menit`;
+  }
+  return `${seconds} detik`;
+}
+
+// Calculate estimated watch time remaining
+export function calculateRemainingTime(totalDuration: number, watchedDuration: number): number {
+  return Math.max(0, totalDuration - watchedDuration);
+}
+
+// Check if video is completed (90% threshold)
+export function isVideoCompleted(watchedDuration: number, totalDuration: number): boolean {
+  if (totalDuration <= 0) return false;
+  return (watchedDuration / totalDuration) >= 0.9;
+}

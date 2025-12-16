@@ -17,7 +17,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       <NavbarAdmin toggleSidebar={toggleSidebar} />
       <SidebarAdmin isOpen={isSidebarOpen} toggleSidebar={toggleSidebar} />
       <main className={`
-        transition-all duration-300 ease-in-out pt-16
+        transition-all duration-300 ease-in-out
         ${isSidebarOpen ? 'md:ml-64' : 'md:ml-16'}
       `}>
         <div className="p-8">

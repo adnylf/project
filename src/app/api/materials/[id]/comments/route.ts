@@ -1,142 +1,67 @@
-import { NextRequest, NextResponse } from "next/server";
-import commentService from "@/services/comment.service";
-import { createCommentSchema } from "@/lib/validation";
-import {
-  paginatedResponse,
-  successResponse,
-  validationErrorResponse,
-  errorResponse,
-} from "@/utils/response.util";
-import { validateData, validatePagination } from "@/utils/validation.util";
-import { errorHandler } from "@/middlewares/error.middleware";
-import { authMiddleware } from "@/middlewares/auth.middleware";
-import { corsMiddleware } from "@/middlewares/cors.middleware";
-import { loggingMiddleware } from "@/middlewares/logging.middleware";
-import { HTTP_STATUS } from "@/lib/constants";
+import { NextRequest, NextResponse } from 'next/server';
+import prisma from '@/lib/prisma';
+import { getAuthUser, unauthorizedResponse } from '@/lib/auth';
+import { createCommentSchema } from '@/lib/validation';
 
-/**
- * GET /api/materials/:id/comments
- * Get all comments for a material
- */
-async function getHandler(
-  request: NextRequest,
-  context: { params: Promise<{ id: string }> }
-) {
+interface RouteParams {
+  params: { id: string };
+}
+
+// GET /api/materials/[id]/comments - Get material comments
+export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
-    const { id: materialId } = await context.params;
+    const { id } = params;
 
-    const { searchParams } = new URL(request.url);
-    const page = parseInt(searchParams.get("page") || "1");
-    const limit = parseInt(searchParams.get("limit") || "20");
-    const sortBy = searchParams.get("sortBy") || "createdAt";
-    const sortOrder = (searchParams.get("sortOrder") || "desc") as
-      | "asc"
-      | "desc";
-
-    const validatedPagination = validatePagination(page, limit);
-
-    const result = await commentService.getMaterialComments(materialId, {
-      page: validatedPagination.page,
-      limit: validatedPagination.limit,
-      sortBy,
-      sortOrder,
+    const comments = await prisma.comment.findMany({
+      where: { material_id: id, parent_id: null },
+      orderBy: { created_at: 'desc' },
+      include: {
+        user: { select: { id: true, full_name: true, avatar_url: true } },
+        replies: {
+          include: {
+            user: { select: { id: true, full_name: true, avatar_url: true } },
+          },
+          orderBy: { created_at: 'asc' },
+        },
+      },
     });
 
-    return paginatedResponse(
-      result.data,
-      result.meta,
-      "Comments retrieved successfully"
-    );
+    return NextResponse.json({ comments });
   } catch (error) {
-    if (error instanceof Error) {
-      return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
-    }
-    return errorResponse(
-      "Failed to get comments",
-      HTTP_STATUS.INTERNAL_SERVER_ERROR
-    );
+    console.error('Get comments error:', error);
+    return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 });
   }
 }
 
-/**
- * POST /api/materials/:id/comments
- * Create new comment
- */
-async function postHandler(
-  request: NextRequest,
-  user: any,
-  context: { params: Promise<{ id: string }> }
-) {
+// POST /api/materials/[id]/comments - Create comment
+export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
-    const { id: materialId } = await context.params;
+    const authUser = getAuthUser(request);
+    if (!authUser) return unauthorizedResponse();
+
+    const { id } = params;
     const body = await request.json();
 
-    const dataWithMaterialId = { ...body, materialId };
-
-    const validation = await validateData(
-      createCommentSchema,
-      dataWithMaterialId
-    );
-
-    if (!validation.success) {
-      return validationErrorResponse(validation.errors);
+    const result = createCommentSchema.safeParse(body);
+    if (!result.success) {
+      return NextResponse.json({ error: 'Validasi gagal', details: result.error.flatten().fieldErrors }, { status: 400 });
     }
 
-    const comment = await commentService.createComment(
-      user.userId,
-      validation.data
-    );
+    const comment = await prisma.comment.create({
+      data: {
+        user_id: authUser.userId,
+        material_id: id,
+        content: result.data.content,
+        parent_id: result.data.parent_id,
+      },
+      include: {
+        user: { select: { id: true, full_name: true, avatar_url: true } },
+      },
+    });
 
-    return successResponse(
-      comment,
-      "Comment added successfully",
-      HTTP_STATUS.CREATED
-    );
+    return NextResponse.json({ message: 'Komentar berhasil ditambahkan', comment }, { status: 201 });
   } catch (error) {
-    if (error instanceof Error) {
-      return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
-    }
-    return errorResponse(
-      "Failed to add comment",
-      HTTP_STATUS.INTERNAL_SERVER_ERROR
-    );
+    console.error('Create comment error:', error);
+    return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 });
   }
-}
-
-// Apply middlewares dengan requireAuth
-const authenticatedPostHandler = async (
-  request: NextRequest,
-  context: { params: Promise<{ id: string }> }
-): Promise<NextResponse> => {
-  const authResult = await authMiddleware(request);
-  if (authResult instanceof NextResponse) {
-    return authResult;
-  }
-  return postHandler(request, authResult, context);
-};
-
-export async function GET(
-  req: NextRequest,
-  context: { params: Promise<{ id: string }> }
-): Promise<NextResponse> {
-  return errorHandler(async (request: NextRequest) => {
-    return loggingMiddleware(async (r: NextRequest) => {
-      return corsMiddleware(async (rq: NextRequest) => {
-        return getHandler(rq, context);
-      })(r);
-    })(request);
-  })(req);
-}
-
-export async function POST(
-  req: NextRequest,
-  context: { params: Promise<{ id: string }> }
-): Promise<NextResponse> {
-  return errorHandler(async (request: NextRequest) => {
-    return loggingMiddleware(async (r: NextRequest) => {
-      return corsMiddleware(async (rq: NextRequest) => {
-        return authenticatedPostHandler(rq, context);
-      })(r);
-    })(request);
-  })(req);
 }

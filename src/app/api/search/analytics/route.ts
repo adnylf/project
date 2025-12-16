@@ -1,77 +1,33 @@
-import { NextRequest, NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
-import { successResponse, errorResponse } from "@/utils/response.util";
-import { errorHandler } from "@/middlewares/error.middleware";
-import { authMiddleware } from "@/middlewares/auth.middleware";
-import { corsMiddleware } from "@/middlewares/cors.middleware";
-import { loggingMiddleware } from "@/middlewares/logging.middleware";
-import { HTTP_STATUS, USER_ROLES } from "@/lib/constants";
+import { NextRequest, NextResponse } from 'next/server';
+import prisma from '@/lib/prisma';
+import { getAuthUser, hasRole, unauthorizedResponse, forbiddenResponse } from '@/lib/auth';
+import { UserRole } from '@prisma/client';
 
-async function handler(request: NextRequest, user: any) {
+// GET /api/search/analytics - Search analytics (admin)
+export async function GET(request: NextRequest) {
   try {
-    if (user.role !== USER_ROLES.ADMIN) {
-      return errorResponse("Insufficient permissions", HTTP_STATUS.FORBIDDEN);
-    }
+    const authUser = getAuthUser(request);
+    if (!authUser) return unauthorizedResponse();
+    if (!hasRole(authUser, [UserRole.ADMIN])) return forbiddenResponse();
 
-    const [totalCourses, totalMentors, avgRating, mostPopularCategory] =
-      await Promise.all([
-        prisma.course.count({ where: { status: "PUBLISHED" } }),
-        prisma.mentorProfile.count({ where: { status: "APPROVED" } }),
-        prisma.course.aggregate({
-          where: { status: "PUBLISHED" },
-          _avg: { averageRating: true },
-        }),
-        prisma.course.groupBy({
-          by: ["categoryId"],
-          where: { status: "PUBLISHED" },
-          _count: { categoryId: true },
-          orderBy: { _count: { categoryId: "desc" } },
-          take: 1,
-        }),
-      ]);
+    const [topCourses, topCategories] = await Promise.all([
+      prisma.course.findMany({
+        where: { status: 'PUBLISHED' },
+        take: 10,
+        orderBy: { total_views: 'desc' },
+        select: { id: true, title: true, total_views: true, total_students: true },
+      }),
+      prisma.category.findMany({
+        where: { is_active: true },
+        orderBy: { courses: { _count: 'desc' } },
+        take: 5,
+        include: { _count: { select: { courses: { where: { status: 'PUBLISHED' } } } } },
+      }),
+    ]);
 
-    const categoryId = mostPopularCategory[0]?.categoryId;
-    const category = categoryId
-      ? await prisma.category.findUnique({
-          where: { id: categoryId },
-          select: { name: true },
-        })
-      : null;
-
-    return successResponse(
-      {
-        overview: {
-          totalPublishedCourses: totalCourses,
-          totalActiveMentors: totalMentors,
-          averageCourseRating:
-            Math.round((avgRating._avg.averageRating || 0) * 10) / 10,
-          mostPopularCategory: category?.name || "Unknown",
-        },
-        message: "Full analytics require search logging implementation",
-      },
-      "Search analytics retrieved successfully"
-    );
+    return NextResponse.json({ top_courses: topCourses, top_categories: topCategories });
   } catch (error) {
-    if (error instanceof Error) {
-      return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
-    }
-    return errorResponse(
-      "Failed to get analytics",
-      HTTP_STATUS.INTERNAL_SERVER_ERROR
-    );
+    console.error('Search analytics error:', error);
+    return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 });
   }
 }
-
-async function authenticatedHandler(
-  request: NextRequest
-): Promise<NextResponse> {
-  const authResult = await authMiddleware(request);
-  if (authResult instanceof NextResponse) {
-    return authResult;
-  }
-  return handler(request, authResult);
-}
-
-export const GET = errorHandler(
-  loggingMiddleware(corsMiddleware(authenticatedHandler))
-);

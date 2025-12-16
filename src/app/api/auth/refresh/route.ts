@@ -1,64 +1,69 @@
-import { NextRequest } from "next/server";
-import authService from "@/services/auth.service";
-import { successResponse, errorResponse } from "@/utils/response.util";
-import { errorHandler } from "@/middlewares/error.middleware";
-import { corsMiddleware } from "@/middlewares/cors.middleware";
-import { loggingMiddleware } from "@/middlewares/logging.middleware";
-import { rateLimit } from "@/middlewares/ratelimit.middleware";
-import { HTTP_STATUS } from "@/lib/constants";
+import { NextRequest, NextResponse } from 'next/server';
+import prisma from '@/lib/prisma';
+import { verifyRefreshToken, generateTokens } from '@/lib/auth';
 
-async function handler(request: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
-    // Parse request body
-    let body;
-    try {
-      body = await request.json();
-    } catch {
-      return errorResponse(
-        "Invalid JSON in request body",
-        HTTP_STATUS.BAD_REQUEST
-      );
-    }
-
+    const body = await request.json();
     const { refreshToken } = body;
 
-    // Validate refresh token
     if (!refreshToken) {
-      return errorResponse(
-        "Refresh token is required",
-        HTTP_STATUS.BAD_REQUEST
+      return NextResponse.json(
+        { error: 'Refresh token wajib diisi' },
+        { status: 400 }
       );
     }
 
-    if (typeof refreshToken !== "string" || refreshToken.length < 20) {
-      return errorResponse(
-        "Invalid refresh token format",
-        HTTP_STATUS.BAD_REQUEST
+    // Verify refresh token
+    const payload = verifyRefreshToken(refreshToken);
+    if (!payload) {
+      return NextResponse.json(
+        { error: 'Refresh token tidak valid atau sudah kadaluarsa' },
+        { status: 401 }
       );
     }
 
-    // Refresh tokens
-    const tokens = await authService.refreshToken(refreshToken);
+    // Check if user still exists and is active
+    const user = await prisma.user.findUnique({
+      where: { id: payload.userId },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        status: true,
+      },
+    });
 
-    return successResponse(tokens, "Token refreshed successfully");
+    if (!user) {
+      return NextResponse.json(
+        { error: 'User tidak ditemukan' },
+        { status: 401 }
+      );
+    }
+
+    if (user.status === 'SUSPENDED') {
+      return NextResponse.json(
+        { error: 'Akun Anda telah dinonaktifkan' },
+        { status: 403 }
+      );
+    }
+
+    // Generate new tokens
+    const tokens = generateTokens({
+      userId: user.id,
+      email: user.email,
+      role: user.role,
+    });
+
+    return NextResponse.json({
+      message: 'Token berhasil diperbarui',
+      ...tokens,
+    });
   } catch (error) {
-    if (error instanceof Error) {
-      return errorResponse(error.message, HTTP_STATUS.UNAUTHORIZED);
-    }
-    return errorResponse(
-      "Token refresh failed",
-      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    console.error('Refresh token error:', error);
+    return NextResponse.json(
+      { error: 'Terjadi kesalahan server' },
+      { status: 500 }
     );
   }
 }
-
-export const POST = errorHandler(
-  loggingMiddleware(
-    corsMiddleware(
-      rateLimit({
-        windowMs: 15 * 60 * 1000,
-        maxRequests: 20,
-      })(handler)
-    )
-  )
-);

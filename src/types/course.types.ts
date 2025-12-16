@@ -1,196 +1,189 @@
-import type { BaseEntity } from './common.types';
+// Course Types
+import { CourseStatus, CourseLevel, MaterialType } from '@prisma/client';
 
-/**
- * Course Types
- */
-
-/**
- * Course Status
- */
-export type CourseStatus = 'DRAFT' | 'PENDING_REVIEW' | 'PUBLISHED' | 'ARCHIVED';
-
-/**
- * Course Level
- */
-export type CourseLevel = 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED' | 'ALL_LEVELS';
-
-/**
- * Material Type
- */
-export type MaterialType = 'VIDEO' | 'DOCUMENT' | 'QUIZ' | 'ASSIGNMENT';
-
-/**
- * Course
- */
-export interface Course extends BaseEntity {
-  mentorId: string;
+// Course data
+export interface CourseData {
+  id: string;
+  mentor_id: string;
+  category_id: string;
   title: string;
   slug: string;
   description: string;
-  shortDescription?: string;
-  thumbnail?: string;
-  coverImage?: string;
-  categoryId: string;
+  short_description: string | null;
+  thumbnail: string | null;
+  preview_video_url: string | null;
   level: CourseLevel;
   language: string;
   price: number;
-  discountPrice?: number;
-  isFree: boolean;
-  isPremium: boolean;
-  isFeatured: boolean;
+  discount_price: number | null;
+  is_free: boolean;
+  is_featured: boolean;
+  is_premium: boolean;
   status: CourseStatus;
-  publishedAt?: Date;
   requirements: string[];
-  whatYouWillLearn: string[];
-  targetAudience: string[];
-  totalDuration: number;
-  totalLectures: number;
-  totalStudents: number;
-  averageRating: number;
-  totalReviews: number;
-  totalViews: number;
+  what_you_will_learn: string[];
+  target_audience: string[];
   tags: string[];
+  total_duration: number;
+  total_lessons: number;
+  total_students: number;
+  average_rating: number;
+  total_reviews: number;
+  published_at: Date | null;
+  created_at: Date;
+  updated_at: Date;
 }
 
-/**
- * Course Detail
- */
-export interface CourseDetail extends Course {
+// Course with mentor
+export interface CourseWithMentor extends CourseData {
   mentor: {
     id: string;
-    name: string;
-    profilePicture?: string;
-    expertise: string[];
-    averageRating: number;
+    user: {
+      full_name: string;
+      avatar_url: string | null;
+    };
   };
+}
+
+// Course with full relations
+export interface CourseWithRelations extends CourseWithMentor {
   category: {
     id: string;
     name: string;
     slug: string;
   };
-  sections: Section[];
-  reviews?: Review[];
+  sections: SectionData[];
 }
 
-/**
- * Create Course Data
- */
-export interface CreateCourseData {
+// Section data
+export interface SectionData {
+  id: string;
+  course_id: string;
+  title: string;
+  description: string | null;
+  order: number;
+  duration: number;
+  materials: MaterialData[];
+}
+
+// Material data
+export interface MaterialData {
+  id: string;
+  section_id: string;
+  title: string;
+  type: MaterialType;
+  content: string | null;
+  duration: number;
+  order: number;
+  is_free: boolean;
+  video_id: string | null;
+}
+
+// Course list item
+export interface CourseListItem {
+  id: string;
+  title: string;
+  slug: string;
+  thumbnail: string | null;
+  price: number;
+  discount_price: number | null;
+  is_free: boolean;
+  level: CourseLevel;
+  average_rating: number;
+  total_students: number;
+  mentor_name: string;
+  category_name: string;
+}
+
+// Course create/update input
+export interface CourseInput {
   title: string;
   description: string;
-  shortDescription?: string;
-  categoryId: string;
+  short_description?: string;
+  category_id: string;
   level: CourseLevel;
-  language: string;
-  price: number;
-  discountPrice?: number;
-  isFree: boolean;
-  isPremium: boolean;
+  language?: string;
+  price?: number;
+  discount_price?: number | null;
+  is_free?: boolean;
+  is_premium?: boolean;
   requirements?: string[];
-  whatYouWillLearn: string[];
-  targetAudience?: string[];
+  what_you_will_learn?: string[];
+  target_audience?: string[];
   tags?: string[];
 }
 
-/**
- * Update Course Data
- */
-export type UpdateCourseData = Partial<CreateCourseData>;
-
-/**
- * Section
- */
-export interface Section extends BaseEntity {
-  courseId: string;
+// Section input
+export interface SectionInput {
   title: string;
   description?: string;
-  order: number;
-  duration: number;
-  materials?: Material[];
+  order?: number;
 }
 
-/**
- * Material
- */
-export interface Material extends BaseEntity {
-  sectionId: string;
+// Material input
+export interface MaterialInput {
   title: string;
-  description?: string;
   type: MaterialType;
   content?: string;
-  videoId?: string;
-  documentUrl?: string;
-  duration: number;
-  order: number;
-  isFree: boolean;
-  resources?: Resource[];
+  duration?: number;
+  order?: number;
+  is_free?: boolean;
 }
 
-/**
- * Resource
- */
-export interface Resource extends BaseEntity {
-  materialId: string;
-  title: string;
-  description?: string;
-  fileUrl: string;
-  fileType: string;
-  fileSize: number;
+// Course filter
+export interface CourseFilter {
+  category?: string;
+  level?: CourseLevel;
+  is_free?: boolean;
+  price_min?: number;
+  price_max?: number;
+  rating_min?: number;
+  mentor_id?: string;
+  status?: CourseStatus;
 }
 
-/**
- * Category
- */
-export interface Category extends BaseEntity {
+// Course statistics
+export interface CourseStatistics {
+  total_students: number;
+  total_reviews: number;
+  average_rating: number;
+  completion_rate: number;
+  revenue: number;
+}
+
+// Course progress
+export interface CourseProgress {
+  course_id: string;
+  total_materials: number;
+  completed_materials: number;
+  progress_percentage: number;
+  last_accessed_material_id: string | null;
+}
+
+// Category data
+export interface CategoryData {
+  id: string;
   name: string;
   slug: string;
-  description?: string;
-  icon?: string;
-  parentId?: string;
+  description: string | null;
+  icon: string | null;
+  parent_id: string | null;
   order: number;
-  isActive: boolean;
+  is_active: boolean;
+  course_count?: number;
 }
 
-/**
- * Review
- */
-export interface Review extends BaseEntity {
-  userId: string;
-  courseId: string;
+// Review data
+export interface ReviewData {
+  id: string;
+  user_id: string;
+  course_id: string;
   rating: number;
-  comment?: string;
-  isAnonymous: boolean;
-  helpfulCount: number;
-  user?: {
-    name: string;
-    profilePicture?: string;
+  comment: string | null;
+  is_helpful: number;
+  created_at: Date;
+  user: {
+    full_name: string;
+    avatar_url: string | null;
   };
-}
-
-/**
- * Comment
- */
-export interface Comment extends BaseEntity {
-  userId: string;
-  materialId: string;
-  parentId?: string;
-  content: string;
-  isEdited: boolean;
-  user?: {
-    name: string;
-    profilePicture?: string;
-  };
-  replies?: Comment[];
-}
-
-/**
- * Course Statistics
- */
-export interface CourseStatistics {
-  totalCourses: number;
-  publishedCourses: number;
-  draftCourses: number;
-  totalEnrollments: number;
-  averageRating: number;
-  totalRevenue: number;
 }

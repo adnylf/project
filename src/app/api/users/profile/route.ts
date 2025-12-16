@@ -1,99 +1,92 @@
-import { NextRequest } from "next/server";
-import { updateProfileSchema } from "@/lib/validation";
-import authService from "@/services/auth.service";
-import userService from "@/services/user.service";
-import {
-  successResponse,
-  validationErrorResponse,
-  errorResponse,
-} from "@/utils/response.util";
-import { validateData } from "@/utils/validation.util";
-import { errorHandler } from "@/middlewares/error.middleware";
-import { requireAuth } from "@/middlewares/auth.middleware";
-import { corsMiddleware } from "@/middlewares/cors.middleware";
-import { loggingMiddleware } from "@/middlewares/logging.middleware";
-import { HTTP_STATUS } from "@/lib/constants";
+import { NextRequest, NextResponse } from 'next/server';
+import prisma from '@/lib/prisma';
+import { getAuthUser, unauthorizedResponse } from '@/lib/auth';
+import { updateProfileSchema } from '@/lib/validation';
 
-/**
- * GET /api/users/profile
- * Get current user profile
- */
-async function getHandler(
-  request: NextRequest,
-  context: { user: { userId: string; email: string; role: string } }
-) {
-  const { user } = context;
-
+// GET /api/users/profile - Get current user profile
+export async function GET(request: NextRequest) {
   try {
-    // Get full user profile
-    const profile = await authService.getCurrentUser(user.userId);
+    const authUser = getAuthUser(request);
+    if (!authUser) return unauthorizedResponse();
 
-    return successResponse(profile, "Profile retrieved successfully");
-  } catch (error) {
-    if (error instanceof Error) {
-      return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
+    const user = await prisma.user.findUnique({
+      where: { id: authUser.userId },
+      select: {
+        id: true,
+        email: true,
+        full_name: true,
+        role: true,
+        status: true,
+        disability_type: true,
+        avatar_url: true,
+        bio: true,
+        phone: true,
+        date_of_birth: true,
+        address: true,
+        city: true,
+        email_verified: true,
+        last_login: true,
+        created_at: true,
+        updated_at: true,
+      },
+    });
+
+    if (!user) {
+      return NextResponse.json({ error: 'User tidak ditemukan' }, { status: 404 });
     }
-    return errorResponse(
-      "Failed to get profile",
-      HTTP_STATUS.INTERNAL_SERVER_ERROR
-    );
+
+    return NextResponse.json({ user });
+  } catch (error) {
+    console.error('Get profile error:', error);
+    return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 });
   }
 }
 
-/**
- * PUT /api/users/profile
- * Update current user profile
- */
-async function putHandler(
-  request: NextRequest,
-  context: { user: { userId: string; email: string; role: string } }
-) {
-  const { user } = context;
-
+// PUT /api/users/profile - Update current user profile
+export async function PUT(request: NextRequest) {
   try {
-    // Parse request body
-    let body;
-    try {
-      body = await request.json();
-    } catch {
-      return errorResponse(
-        "Invalid JSON in request body",
-        HTTP_STATUS.BAD_REQUEST
+    const authUser = getAuthUser(request);
+    if (!authUser) return unauthorizedResponse();
+
+    const body = await request.json();
+
+    const result = updateProfileSchema.safeParse(body);
+    if (!result.success) {
+      return NextResponse.json(
+        { error: 'Validasi gagal', details: result.error.flatten().fieldErrors },
+        { status: 400 }
       );
     }
 
-    // Validate input
-    const validation = await validateData(updateProfileSchema, body);
+    const data = result.data;
 
-    if (!validation.success) {
-      return validationErrorResponse(validation.errors);
+    // Convert date_of_birth string to Date if provided
+    const updateData: Record<string, unknown> = { ...data };
+    if (data.date_of_birth) {
+      updateData.date_of_birth = new Date(data.date_of_birth);
     }
 
-    // Update profile
-    const updatedProfile = await userService.updateUser(
-      user.userId,
-      validation.data
-    );
+    const user = await prisma.user.update({
+      where: { id: authUser.userId },
+      data: updateData,
+      select: {
+        id: true,
+        email: true,
+        full_name: true,
+        disability_type: true,
+        avatar_url: true,
+        bio: true,
+        phone: true,
+        date_of_birth: true,
+        address: true,
+        city: true,
+        updated_at: true,
+      },
+    });
 
-    return successResponse(updatedProfile, "Profile updated successfully");
+    return NextResponse.json({ message: 'Profil berhasil diperbarui', user });
   } catch (error) {
-    if (error instanceof Error) {
-      return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
-    }
-    return errorResponse(
-      "Failed to update profile",
-      HTTP_STATUS.INTERNAL_SERVER_ERROR
-    );
+    console.error('Update profile error:', error);
+    return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 });
   }
 }
-
-// Apply authentication
-const authenticatedGetHandler = requireAuth(getHandler);
-const authenticatedPutHandler = requireAuth(putHandler);
-
-export const GET = errorHandler(
-  loggingMiddleware(corsMiddleware(authenticatedGetHandler))
-);
-export const PUT = errorHandler(
-  loggingMiddleware(corsMiddleware(authenticatedPutHandler))
-);

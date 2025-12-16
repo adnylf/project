@@ -1,183 +1,46 @@
-import { NextRequest } from "next/server";
-import analyticsService from "@/services/analytics.service";
-import { successResponse, errorResponse } from "@/utils/response.util";
-import { errorHandler } from "@/middlewares/error.middleware";
-import { requireAuth } from "@/middlewares/auth.middleware";
-import { corsMiddleware } from "@/middlewares/cors.middleware";
-import { loggingMiddleware } from "@/middlewares/logging.middleware";
-import { HTTP_STATUS } from "@/lib/constants";
+import { NextRequest, NextResponse } from 'next/server';
+import prisma from '@/lib/prisma';
+import { getAuthUser } from '@/lib/auth';
 
-interface EventData {
-  url?: string;
-  courseId?: string;
-  videoId?: string;
-  materialId?: string;
-  watchDuration?: number;
-  totalDuration?: number;
-  query?: string;
-  resultsCount?: number;
-  sessionId?: string;
-  [key: string]: unknown;
-}
-
-async function handler(
-  request: NextRequest,
-  { user }: { user: { userId: string; email: string; role: string } }
-) {
+// POST /api/analytics/track - Track user analytics event
+export async function POST(request: NextRequest) {
   try {
+    const authUser = getAuthUser(request);
+    
     const body = await request.json();
-    const { eventType, eventData, sessionId } = body as {
-      eventType: string;
-      eventData: EventData;
-      sessionId?: string;
-    };
+    const { event, properties, page_url, referrer } = body;
 
-    if (!eventType) {
-      return errorResponse("Event type is required", HTTP_STATUS.BAD_REQUEST);
+    if (!event) {
+      return NextResponse.json({ error: 'Event name wajib diisi' }, { status: 400 });
     }
 
-    if (!eventData || typeof eventData !== "object") {
-      return errorResponse(
-        "Event data must be an object",
-        HTTP_STATUS.BAD_REQUEST
-      );
-    }
+    // Get user agent and IP
+    const userAgent = request.headers.get('user-agent') || null;
+    const forwarded = request.headers.get('x-forwarded-for');
+    const ip = forwarded ? forwarded.split(',')[0].trim() : null;
 
-    const ipAddress =
-      request.headers.get("x-forwarded-for") ||
-      request.headers.get("x-real-ip") ||
-      "unknown";
-    const userAgent = request.headers.get("user-agent") || undefined;
-    const referrer = request.headers.get("referer") || undefined;
-
-    switch (eventType) {
-      case "page_view":
-        if (!eventData.url) {
-          return errorResponse(
-            "URL is required for page_view event",
-            HTTP_STATUS.BAD_REQUEST
-          );
-        }
-        await analyticsService.trackPageView(user?.userId, eventData.url, {
-          ...eventData,
-          sessionId,
-        });
-        break;
-
-      case "course_view":
-        if (!eventData.courseId) {
-          return errorResponse(
-            "Course ID is required for course_view event",
-            HTTP_STATUS.BAD_REQUEST
-          );
-        }
-        await analyticsService.trackCourseView(
-          user?.userId,
-          eventData.courseId,
-          {
-            ...eventData,
-            sessionId,
-          }
-        );
-        break;
-
-      case "video_watch":
-        if (!user) {
-          return errorResponse(
-            "Authentication required for video tracking",
-            HTTP_STATUS.UNAUTHORIZED
-          );
-        }
-        if (!eventData.videoId || !eventData.materialId) {
-          return errorResponse(
-            "Video ID and Material ID are required",
-            HTTP_STATUS.BAD_REQUEST
-          );
-        }
-        // Perbaikan: tambahkan courseId yang diperlukan
-        await analyticsService.trackVideoWatch(
-          user.userId,
-          eventData.videoId,
-          eventData.materialId,
-          eventData.courseId || "", // Default ke string kosong jika tidak ada
-          eventData.watchDuration || 0,
-          eventData.totalDuration || 0,
-          { ...eventData, sessionId }
-        );
-        break;
-
-      case "search":
-        if (!eventData.query) {
-          return errorResponse(
-            "Search query is required",
-            HTTP_STATUS.BAD_REQUEST
-          );
-        }
-        await analyticsService.trackSearch(
-          user?.userId,
-          eventData.query,
-          eventData.resultsCount || 0,
-          { ...eventData, sessionId }
-        );
-        break;
-
-      case "enrollment":
-        if (!user) {
-          return errorResponse(
-            "Authentication required for enrollment tracking",
-            HTTP_STATUS.UNAUTHORIZED
-          );
-        }
-        if (!eventData.courseId) {
-          return errorResponse(
-            "Course ID is required",
-            HTTP_STATUS.BAD_REQUEST
-          );
-        }
-        await analyticsService.trackEnrollment(
-          user.userId,
-          eventData.courseId,
-          {
-            ...eventData,
-            sessionId,
-          }
-        );
-        break;
-
-      default:
-        await analyticsService.trackEvent({
-          userId: user?.userId,
-          eventType: eventType as any,
-          eventData,
-          sessionId,
-          ipAddress,
-          userAgent,
+    // Store as activity log
+    await prisma.activityLog.create({
+      data: {
+        user_id: authUser?.userId || 'anonymous',
+        action: event,
+        entity_type: properties?.entity_type || null,
+        entity_id: properties?.entity_id || null,
+        metadata: {
+          properties: properties || {},
+          page_url,
           referrer,
-          timestamp: new Date(),
-        });
-    }
-
-    return successResponse(
-      {
-        tracked: true,
-        eventType,
-        timestamp: new Date().toISOString(),
+          timestamp: new Date().toISOString(),
+        },
+        ip_address: ip,
+        user_agent: userAgent,
       },
-      "Event tracked successfully"
-    );
+    });
+
+    return NextResponse.json({ success: true });
   } catch (error) {
-    if (error instanceof Error) {
-      return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
-    }
-    return errorResponse(
-      "Failed to track event",
-      HTTP_STATUS.INTERNAL_SERVER_ERROR
-    );
+    console.error('Track analytics error:', error);
+    // Don't fail silently for analytics
+    return NextResponse.json({ success: false });
   }
 }
-
-const authenticatedHandler = requireAuth(handler);
-
-export const POST = errorHandler(
-  loggingMiddleware(corsMiddleware(authenticatedHandler))
-);

@@ -1,1098 +1,438 @@
-// services/email.service.ts
-import nodemailer from "nodemailer";
-import { createTransport, Transporter, SendMailOptions } from "nodemailer";
+// services/emailService.ts
+import nodemailer from 'nodemailer';
 
-// Konfigurasi Email - Enhanced with environment detection
-const emailConfig = {
-  host: process.env.SMTP_HOST || "smtp.gmail.com",
-  port: parseInt(process.env.SMTP_PORT || "587"),
-  secure: process.env.SMTP_SECURE === "true",
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASSWORD,
-  },
-  from: {
-    name: process.env.APP_NAME || "Course Online Disabilitas",
-    address: process.env.EMAIL_FROM || "noreply@example.com",
-  },
-  // Environment-specific settings
-  isDevelopment: process.env.NODE_ENV === "development",
-  debug:
-    process.env.EMAIL_DEBUG === "true" ||
-    process.env.NODE_ENV === "development",
-};
+// Hanya eksekusi di lingkungan Node.js
+if (typeof window !== 'undefined') {
+  throw new Error('Email service can only be used on the server side');
+}
 
-// Interface untuk Email Options
-interface EmailOptions {
+const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+
+// Konfigurasi SMTP dari environment variables
+const SMTP_USER = process.env.SMTP_USER || '';
+const SMTP_PASSWORD = process.env.SMTP_PASSWORD || '';
+const EMAIL_FROM = process.env.EMAIL_FROM || SMTP_USER;
+
+// Log konfigurasi saat startup (tanpa password)
+console.log('📧 Email Service Configuration:', {
+  SMTP_USER: SMTP_USER ? `${SMTP_USER.substring(0, 5)}...` : 'NOT SET',
+  EMAIL_FROM: EMAIL_FROM ? `${EMAIL_FROM.substring(0, 5)}...` : 'NOT SET',
+  BASE_URL,
+});
+
+// Fungsi untuk membuat transporter secara lazy
+function createTransporter(): nodemailer.Transporter {
+  if (!SMTP_USER || !SMTP_PASSWORD) {
+    console.error('❌ SMTP_USER atau SMTP_PASSWORD tidak dikonfigurasi!');
+    console.error('📝 Tambahkan ke file .env:');
+    console.error('   SMTP_USER=emailanda@gmail.com');
+    console.error('   SMTP_PASSWORD=xxxx xxxx xxxx xxxx (App Password dari Google)');
+    throw new Error('SMTP credentials not configured');
+  }
+
+  // Gunakan konfigurasi SMTP langsung dengan opsi TLS yang lebih permissive
+  return nodemailer.createTransport({
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true, // use SSL
+    auth: {
+      user: SMTP_USER,
+      pass: SMTP_PASSWORD,
+    },
+    tls: {
+      // Abaikan validasi sertifikat (untuk mengatasi proxy/antivirus)
+      rejectUnauthorized: false
+    }
+  });
+}
+
+export interface EmailOptions {
   to: string;
   subject: string;
   html: string;
   text?: string;
 }
 
-// Email Result Interface
-export interface EmailResult {
-  success: boolean;
-  message?: string;
-  error?: string;
-  messageId?: string;
-}
+// Helper untuk membuat ikon Lucide React dalam email
+const lucideIcon = (name: string, color = '#4a5568', size = 16) => `
+<img 
+  src="${BASE_URL}/icons/${name}.svg" 
+  alt="${name}" 
+  width="${size}" 
+  height="${size}" 
+  style="display: inline-block; vertical-align: middle; margin-right: 6px; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.1));"
+/>
+`;
 
-/**
- * Email Service Class
- * Menangani pengiriman email menggunakan Nodemailer dengan connection pooling
- * dan penanganan sertifikat yang lebih baik untuk development
- */
-export class EmailService {
-  private transporter: Transporter;
-  private isConnected: boolean = false;
-  private connectionPromise: Promise<boolean> | null = null;
-  private maxRetries: number = 3;
-  private retryDelay: number = 2000; // 2 detik
+export async function sendEmail(options: EmailOptions): Promise<boolean> {
+  try {
+    // Validasi email address
+    if (!options.to || !/^\S+@\S+\.\S+$/.test(options.to)) {
+      throw new Error(`Invalid email address: ${options.to}`);
+    }
 
-  constructor() {
-    console.log("📧 Initializing Email Service...");
-    console.log("🔧 SMTP Config:", {
-      host: emailConfig.host,
-      port: emailConfig.port,
-      secure: emailConfig.secure,
-      user: emailConfig.auth.user,
-      env: process.env.NODE_ENV,
-      debug: emailConfig.debug,
-    });
+    // Buat transporter
+    const transporter = createTransporter();
 
-    // Create transporter with proper TLS configuration
-    this.transporter = this.createTransporter();
-
-    // Handle transporter events
-    this.setupTransporterEvents();
-
-    // Initialize connection (async, tidak blocking)
-    this.initializeConnection();
-  }
-
-  /**
-   * Create transporter dengan konfigurasi TLS yang tepat
-   */
-  private createTransporter(): Transporter {
-    const transporterConfig: any = {
-      host: emailConfig.host,
-      port: emailConfig.port,
-      secure: emailConfig.secure,
-      auth: {
-        user: emailConfig.auth.user,
-        pass: emailConfig.auth.pass,
-      },
-      connectionTimeout: 15000, // 15 detik
-      greetingTimeout: 15000,
-      socketTimeout: 30000,
-      // Pooling configuration untuk koneksi yang lebih stabil
-      pool: true,
-      maxConnections: 5,
-      maxMessages: 100,
-      debug: emailConfig.debug,
-      logger: emailConfig.debug,
+    const mailOptions = {
+      from: `"E-Learning Platform" <${EMAIL_FROM}>`,
+      to: options.to,
+      subject: options.subject,
+      html: options.html,
+      text: options.text || options.html.replace(/<[^>]*>/g, ''),
     };
 
-    // Konfigurasi khusus untuk development environment
-    if (emailConfig.isDevelopment) {
-      console.log("🔧 Applying development-specific email configurations...");
-
-      // Nonaktifkan verifikasi sertifikat untuk development
-      // Ini aman untuk development, TAPI JANGAN DIGUNAKAN DI PRODUCTION
-      transporterConfig.tls = {
-        rejectUnauthorized: false,
-      };
-
-      // Jika menggunakan Gmail, pastikan konfigurasi sesuai
-      if (emailConfig.host.includes("gmail.com")) {
-        console.log("🔧 Gmail detected, applying Gmail-specific settings...");
-        transporterConfig.service = "gmail";
-
-        // Check if OAuth is configured
-        if (
-          process.env.GMAIL_CLIENT_ID &&
-          process.env.GMAIL_CLIENT_SECRET &&
-          process.env.GMAIL_REFRESH_TOKEN
-        ) {
-          transporterConfig.auth = {
-            type: "OAuth2",
-            user: emailConfig.auth.user,
-            clientId: process.env.GMAIL_CLIENT_ID,
-            clientSecret: process.env.GMAIL_CLIENT_SECRET,
-            refreshToken: process.env.GMAIL_REFRESH_TOKEN,
-            accessToken: process.env.GMAIL_ACCESS_TOKEN,
-          };
-        } else {
-          console.warn(
-            "⚠️ Gmail OAuth not configured, falling back to password authentication"
-          );
-          transporterConfig.auth = {
-            user: emailConfig.auth.user,
-            pass: emailConfig.auth.pass,
-          };
-
-          // Untuk Gmail dengan password, perlu konfigurasi tambahan
-          transporterConfig.tls = {
-            rejectUnauthorized: false,
-          };
-        }
-      }
-    }
-
-    return createTransport(transporterConfig);
-  }
-
-  /**
-   * Setup event handlers untuk transporter
-   */
-  private setupTransporterEvents(): void {
-    this.transporter.on("idle", () => {
-      console.log("📧 Email transporter is idle");
+    console.log(`📧 Attempting to send email to ${options.to}...`);
+    const info = await transporter.sendMail(mailOptions);
+    console.log(`✅ Email sent successfully to ${options.to} (Message ID: ${info.messageId})`);
+    return true;
+  } catch (error: any) {
+    console.error('❌ Email sending failed:', {
+      to: options.to,
+      subject: options.subject,
+      error: error.message || 'Unknown error',
     });
-
-    this.transporter.on("error", (error: Error) => {
-      console.error("❌ Email transporter connection error:", error.message);
-      this.isConnected = false;
-    });
-
-    // Remove the 'close' event handler since it's not supported by the Transporter type
-    // Instead, we'll handle connection closure through other mechanisms
-  }
-
-  /**
-   * Initialize connection dengan retry mechanism
-   */
-  private async initializeConnection(): Promise<void> {
-    if (this.connectionPromise) {
-      return;
-    }
-
-    this.connectionPromise = this.connectWithRetry();
-
-    try {
-      const connected = await this.connectionPromise;
-      if (connected) {
-        console.log("🎉 Email service initialized successfully!");
-        console.log("✅ SMTP Connection is ready to send emails");
-      } else {
-        console.error("💥 Email service failed to initialize after retries");
-      }
-    } catch (error) {
-      console.error("💥 Email service initialization error:", error);
-    } finally {
-      this.connectionPromise = null;
-    }
-  }
-
-  /**
-   * Connect dengan retry mechanism - Enhanced untuk development
-   */
-  private async connectWithRetry(retryCount: number = 0): Promise<boolean> {
-    if (retryCount >= this.maxRetries) {
-      console.error("💥 Max retries reached. SMTP connection failed.");
-      this.isConnected = false;
-      return false;
-    }
-
-    try {
-      console.log(
-        `🔄 Attempting SMTP connection (attempt ${retryCount + 1}/${
-          this.maxRetries
-        })...`
-      );
-
-      // Untuk development, coba koneksi sederhana terlebih dahulu
-      if (emailConfig.isDevelopment) {
-        console.log(
-          "🔧 Development mode: Testing connection with simpler approach..."
-        );
-
-        // Coba kirim email test sederhana
-        await this.transporter.verify();
-        this.isConnected = true;
-        console.log(
-          "✅ SMTP Connection verified successfully in development mode!"
-        );
-        return true;
-      }
-
-      // Untuk production, gunakan verifikasi penuh
-      await this.transporter.verify();
-      this.isConnected = true;
-
-      console.log("✅ SMTP Connection verified successfully!");
-      return true;
-    } catch (error: unknown) {
-      // Type guard untuk error
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      console.error(
-        `❌ SMTP Connection failed (attempt ${retryCount + 1}/${
-          this.maxRetries
-        }):`,
-        errorMessage
-      );
-
-      // Analisis error untuk diagnosa lebih baik
-      if (errorMessage.includes("self-signed certificate")) {
-        console.warn(
-          "⚠️ Self-signed certificate error detected. This is common in development environments."
-        );
-        console.warn("🔧 Applying development certificate workaround...");
-
-        // Terapkan workaround khusus untuk error sertifikat
-        try {
-          // Buat transporter ulang dengan konfigurasi TLS yang lebih longgar
-          const originalConfig = this.transporter.options;
-
-          this.transporter = createTransport({
-            ...originalConfig,
-            tls: {
-              rejectUnauthorized: false,
-            },
-          });
-
-          console.log("🔧 Retrying connection with certificate workaround...");
-          await this.transporter.verify();
-          this.isConnected = true;
-          console.log("✅ Connection successful after certificate workaround!");
-          return true;
-        } catch (retryError: unknown) {
-          // Type guard untuk retryError
-          const retryErrorMessage =
-            retryError instanceof Error
-              ? retryError.message
-              : String(retryError);
-          console.error("❌ Certificate workaround failed:", retryErrorMessage);
-        }
-      }
-
-      // Jika masih gagal, coba retry
-      if (retryCount < this.maxRetries - 1) {
-        console.log(`⏳ Retrying in ${this.retryDelay / 1000} seconds...`);
-        await this.delay(this.retryDelay);
-        return this.connectWithRetry(retryCount + 1);
-      }
-
-      console.error(
-        "💥 All connection attempts failed. Email service unavailable."
-      );
-      this.isConnected = false;
-      return false;
-    }
-  }
-
-  /**
-   * Delay helper
-   */
-  private delay(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-  }
-
-  /**
-   * Wait for connection to be ready with timeout
-   */
-  private async waitForConnection(timeoutMs: number = 30000): Promise<boolean> {
-    const startTime = Date.now();
-
-    // Helper function untuk menunggu dengan timeout
-    const waitForConnectionHelper = async (): Promise<boolean> => {
-      while (!this.isConnected && Date.now() - startTime < timeoutMs) {
-        if (this.isConnected) {
-          return true;
-        }
-
-        if (!this.connectionPromise && !this.isConnected) {
-          console.log(
-            "🔄 Connection not active, initializing new connection..."
-          );
-          this.initializeConnection();
-        }
-
-        await this.delay(500); // Check every 500ms
-      }
-
-      return this.isConnected;
-    };
-
-    try {
-      const isReady = await Promise.race([
-        waitForConnectionHelper(),
-        new Promise<boolean>((resolve) =>
-          setTimeout(() => resolve(false), timeoutMs)
-        ),
-      ]);
-
-      if (!isReady) {
-        console.warn(`⚠️ Connection timeout after ${timeoutMs}ms`);
-
-        // Force a new connection attempt if timed out
-        if (!this.connectionPromise) {
-          console.log("🔄 Forcing new connection attempt after timeout...");
-          this.initializeConnection();
-          return this.waitForConnection(timeoutMs);
-        }
-      }
-
-      return isReady;
-    } catch (error) {
-      console.error("❌ Error waiting for connection:", error);
-      return false;
-    }
-  }
-
-  /**
-   * Send email dengan connection waiting dan fallback untuk development
-   */
-  async sendEmail(options: EmailOptions): Promise<EmailResult> {
-    try {
-      console.log("📤 Preparing to send email to:", options.to);
-      console.log("📝 Subject:", options.subject);
-
-      // Tunggu koneksi siap dengan timeout
-      const isReady = await this.waitForConnection(30000);
-
-      if (!isReady) {
-        // Fallback untuk development: simpan email ke console/file
-        if (emailConfig.isDevelopment) {
-          console.warn(
-            "⚠️ Development mode: SMTP not connected, falling back to console output"
-          );
-          this.logEmailToConsole(options);
-
-          return {
-            success: true,
-            message:
-              "Development mode: Email content logged to console instead of being sent",
-          };
-        }
-
-        const errorMsg =
-          "SMTP connection not established after waiting. Email cannot be sent.";
-        console.error("❌", errorMsg);
-        return {
-          success: false,
-          error: errorMsg,
-        };
-      }
-
-      console.log("✅ Connection ready, sending email...");
-
-      const mailOptions: SendMailOptions = {
-        from: `"${emailConfig.from.name}" <${emailConfig.from.address}>`,
-        to: options.to,
-        subject: options.subject,
-        html: options.html,
-        text: options.text || this.htmlToText(options.html),
-      };
-
-      if (emailConfig.debug) {
-        console.log(
-          "🔍 Debug: Email options:",
-          JSON.stringify(mailOptions, null, 2)
-        );
-      }
-
-      const info = await this.transporter.sendMail(mailOptions);
-
-      console.log("✅ Email sent successfully!");
-      console.log("📨 Message ID:", info.messageId);
-      if (info.response) {
-        console.log("📤 SMTP Response:", info.response);
-      }
-
-      return {
-        success: true,
-        message: `Email sent successfully to ${options.to}`,
-        messageId: info.messageId,
-      };
-    } catch (error: unknown) {
-      console.error("❌ Error sending email:", error);
-
-      // Reset connection status jika error
-      this.isConnected = false;
-
-      // Type guard untuk error
-      const errorObj =
-        error instanceof Error ? error : new Error(String(error));
-      const errorMessage = errorObj.message;
-      const errorCode = (errorObj as any).code || "UNKNOWN_ERROR";
-
-      // Mapping error codes to user-friendly messages
-      let userFriendlyMessage = "Unknown error occurred";
-
-      if (errorCode === "EAUTH") {
-        userFriendlyMessage =
-          "Authentication failed. Check your email credentials.";
-      } else if (errorCode === "ECONNECTION") {
-        userFriendlyMessage =
-          "Connection to SMTP server failed. Check your network connection and SMTP settings.";
-      } else if (errorCode === "ETIMEDOUT") {
-        userFriendlyMessage =
-          "SMTP connection timed out. The server might be busy or unreachable.";
-      } else if (errorCode === "EENVELOPE") {
-        userFriendlyMessage =
-          "Invalid recipient email address. Please check the email format.";
-      } else if (errorCode === "EFROM") {
-        userFriendlyMessage =
-          "Invalid sender email address. Please check your configuration.";
-      } else if (errorCode === "EDNS") {
-        userFriendlyMessage =
-          "DNS lookup failed. Please check your internet connection.";
-      } else if (errorCode === "EPROTOCOL") {
-        userFriendlyMessage =
-          "SMTP protocol error. This might be a configuration issue.";
-      } else {
-        if (errorMessage.includes("self-signed certificate")) {
-          userFriendlyMessage =
-            "SSL certificate error. This is common in development environments.";
-
-          if (emailConfig.isDevelopment) {
-            userFriendlyMessage +=
-              " In development mode, try setting NODE_TLS_REJECT_UNAUTHORIZED=0 or configure proper certificates.";
-          }
-        } else if (errorMessage.includes("Invalid login")) {
-          userFriendlyMessage =
-            "Invalid email login credentials. Check your username and password.";
-        } else if (errorMessage.includes("Connection refused")) {
-          userFriendlyMessage =
-            "Connection refused by SMTP server. Check host and port settings.";
-        } else {
-          userFriendlyMessage = errorMessage || "Failed to send email";
-        }
-      }
-
-      console.error(
-        `❌ Email sending failed with error code ${errorCode}: ${userFriendlyMessage}`
-      );
-
-      // Development fallback - log email content
-      if (emailConfig.isDevelopment) {
-        console.warn(
-          "⚠️ Development mode: Logging email content due to send failure"
-        );
-        this.logEmailToConsole(options, userFriendlyMessage);
-      }
-
-      return {
-        success: false,
-        error: userFriendlyMessage,
-      };
-    }
-  }
-
-  /**
-   * Log email content to console for development
-   */
-  private logEmailToConsole(options: EmailOptions, error?: string): void {
-    console.log("📧 DEVELOPMENT MODE EMAIL LOG 📧");
-    console.log("========================================");
-    console.log("TO:", options.to);
-    console.log("SUBJECT:", options.subject);
-    console.log(
-      "FROM:",
-      `${emailConfig.from.name} <${emailConfig.from.address}>`
-    );
-    console.log("TEXT VERSION:", options.text || this.htmlToText(options.html));
-    console.log(
-      "\nHTML VERSION (truncated):",
-      options.html.substring(0, 200) + "..."
-    );
-
-    if (error) {
-      console.log("\n❌ ERROR:", error);
-    }
-
-    console.log("========================================");
-    console.log(
-      "💡 TIP: Configure SMTP settings in .env file to send real emails"
-    );
-    console.log(
-      "💡 TIP: For Gmail, you may need to enable 'Less secure apps' or use App Passwords"
-    );
-
-    if (process.env.NODE_ENV === "development") {
-      console.log(
-        "💡 TIP: You can also set NODE_TLS_REJECT_UNAUTHORIZED=0 for development (not recommended for production)"
-      );
-    }
-
-    console.log("========================================");
-  }
-
-  /**
-   * Convert HTML to plain text (fallback)
-   */
-  private htmlToText(html: string): string {
-    return html
-      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
-      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
-      .replace(/<[^>]+>/g, "")
-      .replace(/\s{2,}/g, " ")
-      .trim();
-  }
-
-  /**
-   * Send verification email
-   */
-  async sendVerificationEmail(
-    to: string,
-    userName: string,
-    token: string
-  ): Promise<EmailResult> {
-    const appUrl = process.env.APP_URL || "http://localhost:3000";
-    const verificationUrl = `${appUrl}/verify-email?token=${token}`;
-
-    const subject = "Verify Your Email Address - Course Online Disabilitas";
-
-    const html = this.generateVerificationTemplate(userName, verificationUrl);
-    const text = `Hi ${userName},\n\nPlease verify your email address by clicking the link below:\n\n${verificationUrl}\n\nThis link will expire in 24 hours.\n\nIf you didn't create an account, please ignore this email.`;
-
-    console.log("🔐 Sending verification email to:", to);
-    console.log("🔗 Verification URL:", verificationUrl);
-
-    const result = await this.sendEmail({
-      to,
-      subject,
-      html,
-      text,
-    });
-
-    if (result.success) {
-      console.log("✅ Verification email sent successfully to:", to);
-    } else {
-      console.error(
-        "❌ Failed to send verification email to:",
-        to,
-        result.error
-      );
-    }
-
-    return result;
-  }
-
-  /**
-   * Send password reset email
-   */
-  async sendPasswordResetEmail(
-    to: string,
-    userName: string,
-    token: string
-  ): Promise<EmailResult> {
-    const appUrl = process.env.APP_URL || "http://localhost:3000";
-    const resetUrl = `${appUrl}/reset-password?token=${token}`;
-
-    const subject = "Reset Your Password - Course Online Disabilitas";
-
-    const html = this.generatePasswordResetTemplate(userName, resetUrl);
-    const text = `Hi ${userName},\n\nYou requested to reset your password. Click the link below to set a new password:\n\n${resetUrl}\n\nThis link will expire in 1 hour.\n\nIf you didn't request this, please ignore this email.`;
-
-    console.log("🔑 Sending password reset email to:", to);
-    console.log("🔗 Reset URL:", resetUrl);
-
-    const result = await this.sendEmail({
-      to,
-      subject,
-      html,
-      text,
-    });
-
-    if (result.success) {
-      console.log("✅ Password reset email sent successfully to:", to);
-    } else {
-      console.error(
-        "❌ Failed to send password reset email to:",
-        to,
-        result.error
-      );
-    }
-
-    return result;
-  }
-
-  /**
-   * Send welcome email
-   */
-  async sendWelcomeEmail(to: string, userName: string): Promise<EmailResult> {
-    const appUrl = process.env.APP_URL || "http://localhost:3000";
-    const subject = "Welcome to Course Online Disabilitas!";
-
-    const html = this.generateWelcomeTemplate(userName, appUrl);
-    const text = `Hi ${userName},\n\nWelcome to Course Online Disabilitas! We're excited to have you on board.\n\nStart exploring our courses and begin your learning journey today.\n\nIf you have any questions, feel free to reach out to our support team.\n\nHappy learning!`;
-
-    console.log("👋 Sending welcome email to:", to);
-
-    const result = await this.sendEmail({
-      to,
-      subject,
-      html,
-      text,
-    });
-
-    return result;
-  }
-
-  // Template generators tetap sama seperti sebelumnya...
-  private generateVerificationTemplate(
-    userName: string,
-    verificationUrl: string
-  ): string {
-    return `
-      <!DOCTYPE html>
-      <html lang="en">
-      <head>
-          <meta charset="UTF-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>Verify Your Email</title>
-          <style>
-              body {
-                  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-                  line-height: 1.6;
-                  color: #333;
-                  margin: 0;
-                  padding: 0;
-                  background-color: #f9fafb;
-              }
-              .container {
-                  max-width: 600px;
-                  margin: 0 auto;
-                  background: #ffffff;
-                  border-radius: 8px;
-                  overflow: hidden;
-                  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-              }
-              .header {
-                  background: linear-gradient(135deg, #4F46E5, #7E22CE);
-                  color: white;
-                  padding: 30px 20px;
-                  text-align: center;
-              }
-              .header h1 {
-                  margin: 0;
-                  font-size: 24px;
-                  font-weight: 600;
-              }
-              .content {
-                  padding: 30px;
-              }
-              .greeting {
-                  font-size: 18px;
-                  margin-bottom: 20px;
-                  color: #374151;
-              }
-              .message {
-                  margin-bottom: 25px;
-                  color: #6B7280;
-              }
-              .button {
-                  display: inline-block;
-                  padding: 14px 28px;
-                  background: linear-gradient(135deg, #4F46E5, #7E22CE);
-                  color: white;
-                  text-decoration: none;
-                  border-radius: 6px;
-                  font-weight: 600;
-                  text-align: center;
-                  margin: 20px 0;
-              }
-              .verification-link {
-                  background: #f3f4f6;
-                  padding: 15px;
-                  border-radius: 6px;
-                  word-break: break-all;
-                  font-family: monospace;
-                  font-size: 14px;
-                  color: #374151;
-                  margin: 20px 0;
-              }
-              .footer {
-                  padding: 20px;
-                  text-align: center;
-                  color: #9CA3AF;
-                  font-size: 14px;
-                  border-top: 1px solid #E5E7EB;
-              }
-              .warning {
-                  background: #FEF3C7;
-                  border: 1px solid #F59E0B;
-                  padding: 15px;
-                  border-radius: 6px;
-                  margin: 20px 0;
-                  color: #92400E;
-              }
-          </style>
-      </head>
-      <body>
-          <div class="container">
-              <div class="header">
-                  <h1>Verify Your Email Address</h1>
-              </div>
-              <div class="content">
-                  <div class="greeting">Hi ${userName},</div>
-                  
-                  <div class="message">
-                      Thank you for signing up! Please verify your email address to activate your account and start using our platform.
-                  </div>
-
-                  <div style="text-align: center;">
-                      <a href="${verificationUrl}" class="button">Verify Email Address</a>
-                  </div>
-
-                  <div class="message">
-                      Or copy and paste this link in your browser:
-                  </div>
-
-                  <div class="verification-link">
-                      ${verificationUrl}
-                  </div>
-
-                  <div class="warning">
-                      <strong>Important:</strong> This verification link will expire in 24 hours.
-                  </div>
-
-                  <div class="message">
-                      If you didn't create an account with us, please ignore this email.
-                  </div>
-              </div>
-              <div class="footer">
-                  <p>&copy; ${new Date().getFullYear()} Course Online Disabilitas. All rights reserved.</p>
-              </div>
-          </div>
-      </body>
-      </html>
-    `;
-  }
-
-  private generatePasswordResetTemplate(
-    userName: string,
-    resetUrl: string
-  ): string {
-    return `
-      <!DOCTYPE html>
-      <html lang="en">
-      <head>
-          <meta charset="UTF-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>Reset Your Password</title>
-          <style>
-              body {
-                  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-                  line-height: 1.6;
-                  color: #333;
-                  margin: 0;
-                  padding: 0;
-                  background-color: #f9fafb;
-              }
-              .container {
-                  max-width: 600px;
-                  margin: 0 auto;
-                  background: #ffffff;
-                  border-radius: 8px;
-                  overflow: hidden;
-                  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-              }
-              .header {
-                  background: linear-gradient(135deg, #DC2626, #EF4444);
-                  color: white;
-                  padding: 30px 20px;
-                  text-align: center;
-              }
-              .header h1 {
-                  margin: 0;
-                  font-size: 24px;
-                  font-weight: 600;
-              }
-              .content {
-                  padding: 30px;
-              }
-              .greeting {
-                  font-size: 18px;
-                  margin-bottom: 20px;
-                  color: #374151;
-              }
-              .message {
-                  margin-bottom: 25px;
-                  color: #6B7280;
-              }
-              .button {
-                  display: inline-block;
-                  padding: 14px 28px;
-                  background: linear-gradient(135deg, #DC2626, #EF4444);
-                  color: white;
-                  text-decoration: none;
-                  border-radius: 6px;
-                  font-weight: 600;
-                  text-align: center;
-                  margin: 20px 0;
-              }
-              .reset-link {
-                  background: #f3f4f6;
-                  padding: 15px;
-                  border-radius: 6px;
-                  word-break: break-all;
-                  font-family: monospace;
-                  font-size: 14px;
-                  color: #374151;
-                  margin: 20px 0;
-              }
-              .footer {
-                  padding: 20px;
-                  text-align: center;
-                  color: #9CA3AF;
-                  font-size: 14px;
-                  border-top: 1px solid #E5E7EB;
-              }
-              .warning {
-                  background: #FEF3C7;
-                  border: 1px solid #F59E0B;
-                  padding: 15px;
-                  border-radius: 6px;
-                  margin: 20px 0;
-                  color: #92400E;
-              }
-          </style>
-      </head>
-      <body>
-          <div class="container">
-              <div class="header">
-                  <h1>Reset Your Password</h1>
-              </div>
-              <div class="content">
-                  <div class="greeting">Hi ${userName},</div>
-                  
-                  <div class="message">
-                      We received a request to reset your password for your Course Online Disabilitas account.
-                  </div>
-
-                  <div style="text-align: center;">
-                      <a href="${resetUrl}" class="button">Reset Password</a>
-                  </div>
-
-                  <div class="message">
-                      Or copy and paste this link in your browser:
-                  </div>
-
-                  <div class="reset-link">
-                      ${resetUrl}
-                  </div>
-
-                  <div class="warning">
-                      <strong>Important:</strong> This password reset link will expire in 1 hour.
-                  </div>
-
-                  <div class="message">
-                      If you didn't request a password reset, please ignore this email. Your password will remain unchanged.
-                  </div>
-              </div>
-              <div class="footer">
-                  <p>&copy; ${new Date().getFullYear()} Course Online Disabilitas. All rights reserved.</p>
-              </div>
-          </div>
-      </body>
-      </html>
-    `;
-  }
-
-  private generateWelcomeTemplate(userName: string, appUrl: string): string {
-    return `
-      <!DOCTYPE html>
-      <html lang="en">
-      <head>
-          <meta charset="UTF-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>Welcome to Course Online Disabilitas</title>
-          <style>
-              body {
-                  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-                  line-height: 1.6;
-                  color: #333;
-                  margin: 0;
-                  padding: 0;
-                  background-color: #f9fafb;
-              }
-              .container {
-                  max-width: 600px;
-                  margin: 0 auto;
-                  background: #ffffff;
-                  border-radius: 8px;
-                  overflow: hidden;
-                  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-              }
-              .header {
-                  background: linear-gradient(135deg, #059669, #10B981);
-                  color: white;
-                  padding: 30px 20px;
-                  text-align: center;
-              }
-              .header h1 {
-                  margin: 0;
-                  font-size: 24px;
-                  font-weight: 600;
-              }
-              .content {
-                  padding: 30px;
-              }
-              .greeting {
-                  font-size: 18px;
-                  margin-bottom: 20px;
-                  color: #374151;
-              }
-              .message {
-                  margin-bottom: 25px;
-                  color: #6B7280;
-              }
-              .button {
-                  display: inline-block;
-                  padding: 14px 28px;
-                  background: linear-gradient(135deg, #059669, #10B981);
-                  color: white;
-                  text-decoration: none;
-                  border-radius: 6px;
-                  font-weight: 600;
-                  text-align: center;
-                  margin: 20px 0;
-              }
-              .features {
-                  margin: 25px 0;
-              }
-              .feature {
-                  display: flex;
-                  align-items: center;
-                  margin-bottom: 15px;
-              }
-              .feature-icon {
-                  background: #10B981;
-                  color: white;
-                  border-radius: 50%;
-                  width: 24px;
-                  height: 24px;
-                  display: flex;
-                  align-items: center;
-                  justify-content: center;
-                  margin-right: 15px;
-                  font-size: 14px;
-              }
-              .footer {
-                  padding: 20px;
-                  text-align: center;
-                  color: #9CA3AF;
-                  font-size: 14px;
-                  border-top: 1px solid #E5E7EB;
-              }
-          </style>
-      </head>
-      <body>
-          <div class="container">
-              <div class="header">
-                  <h1>Welcome to Course Online Disabilitas!</h1>
-              </div>
-              <div class="content">
-                  <div class="greeting">Hi ${userName},</div>
-                  
-                  <div class="message">
-                      Welcome to our platform! We're excited to have you join our community of learners.
-                  </div>
-
-                  <div class="features">
-                      <div class="feature">
-                          <div class="feature-icon">✓</div>
-                          <span>Access to specialized courses for different abilities</span>
-                      </div>
-                      <div class="feature">
-                          <div class="feature-icon">✓</div>
-                          <span>Learn at your own pace with flexible scheduling</span>
-                      </div>
-                      <div class="feature">
-                          <div class="feature-icon">✓</div>
-                          <span>Connect with mentors and fellow students</span>
-                      </div>
-                      <div class="feature">
-                          <div class="feature-icon">✓</div>
-                          <span>Earn certificates upon course completion</span>
-                      </div>
-                  </div>
-
-                  <div style="text-align: center;">
-                      <a href="${appUrl}/courses" class="button">Explore Courses</a>
-                  </div>
-
-                  <div class="message">
-                      If you have any questions or need assistance, feel free to contact our support team.
-                  </div>
-
-                  <div class="message">
-                      Happy learning!<br>
-                      The Course Online Disabilitas Team
-                  </div>
-              </div>
-              <div class="footer">
-                  <p>&copy; ${new Date().getFullYear()} Course Online Disabilitas. All rights reserved.</p>
-              </div>
-          </div>
-      </body>
-      </html>
-    `;
-  }
-
-  /**
-   * Check email service status
-   */
-  getStatus(): {
-    connected: boolean;
-    config: any;
-    lastError?: string;
-  } {
-    return {
-      connected: this.isConnected,
-      config: {
-        host: emailConfig.host,
-        port: emailConfig.port,
-        secure: emailConfig.secure,
-        user: emailConfig.auth.user,
-        hasPassword: !!emailConfig.auth.pass,
-        environment: process.env.NODE_ENV,
-        isDevelopment: emailConfig.isDevelopment,
-      },
-    };
-  }
-
-  /**
-   * Test email connection
-   */
-  async testConnection(): Promise<EmailResult> {
-    try {
-      console.log("🧪 Testing email connection...");
-
-      // Gunakan timeout lebih lama untuk test connection
-      const isReady = await this.waitForConnection(45000);
-
-      if (isReady) {
-        console.log("✅ Email service connection test successful!");
-        return {
-          success: true,
-          message: "Email service is connected and ready",
-        };
-      } else {
-        const errorMsg = "Email service is not connected after timeout";
-        console.error("❌", errorMsg);
-        return {
-          success: false,
-          error: errorMsg,
-        };
-      }
-    } catch (error: unknown) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      console.error("❌ Email connection test failed:", errorMessage);
-      return {
-        success: false,
-        error: errorMessage || "Connection test failed",
-      };
-    }
+    
+    // Throw error agar pemanggil tahu email gagal
+    throw error;
   }
 }
 
-// Export singleton instance
-const emailService = new EmailService();
-export default emailService;
+// Template email yang lebih baik dan responsif
+const createEmailTemplate = (content: string, footerText = '') => `
+<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 650px; margin: 0 auto; padding: 20px;">
+  <div style="background: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05); overflow: hidden; border: 1px solid #e2e8f0;">
+    <div style="background: linear-gradient(135deg, #1e3a8a, #3b82f6); padding: 30px 20px; text-align: center;">
+      <h1 style="color: white; margin: 0; font-size: 24px; font-weight: 700;">E-Learning Platform</h1>
+      <p style="color: rgba(255, 255, 255, 0.9); margin-top: 8px; font-size: 16px;">Tingkatkan Skill Anda Bersama Kami</p>
+    </div>
+    
+    <div style="padding: 30px; background: #f8fafc;">
+      ${content}
+      
+      <div style="margin-top: 30px; padding-top: 20px; border-top: 1px dashed #cbd5e1;">
+        <p style="color: #64748b; font-size: 14px; line-height: 1.5; margin: 0;">
+          ${footerText || 'Jika Anda tidak meminta email ini, silakan abaikan.'}
+        </p>
+      </div>
+    </div>
+    
+    <div style="background: #edf2f7; padding: 20px; text-align: center; color: #4a5568; font-size: 13px;">
+      <p style="margin: 0 0 8px;">© ${new Date().getFullYear()} E-Learning Platform. All rights reserved.</p>
+      <p style="margin: 0; color: #718096;">Jl. Pendidikan No. 123, Jakarta, Indonesia</p>
+    </div>
+  </div>
+</div>
+`;
+
+export async function sendVerificationEmail(
+  email: string,
+  name: string,
+  token: string
+) {
+  const verifyUrl = `${BASE_URL}/verify-email?token=${token}`;
+  const expires = new Date(Date.now() + 24 * 60 * 60 * 1000).toLocaleString('id-ID');
+  
+  const content = `
+    <h2 style="color: #1e293b; margin-top: 0;">Halo, ${name}!</h2>
+    <p style="color: #475569; line-height: 1.6; margin-bottom: 20px;">
+      Terima kasih telah mendaftar di E-Learning Platform. Silakan verifikasi alamat email Anda untuk mengaktifkan akun.
+    </p>
+    
+    <div style="text-align: center; margin: 30px 0;">
+      <a href="${verifyUrl}" style="display: inline-block; background: #3b82f6; color: white; text-decoration: none; font-weight: 600; padding: 14px 32px; border-radius: 8px; font-size: 16px; box-shadow: 0 4px 6px rgba(59, 130, 246, 0.3);">
+        Verifikasi Email Sekarang
+      </a>
+    </div>
+    
+    <p style="color: #475569; line-height: 1.6; margin-bottom: 15px;">
+      Atau salin dan tempel link berikut ke browser Anda:
+    </p>
+    <p style="word-break: break-all; background: #f1f5f9; padding: 12px; border-radius: 6px; font-family: monospace; font-size: 14px; color: #1e3a8a; margin-bottom: 20px;">
+      ${verifyUrl}
+    </p>
+    
+    <div style="background: #fef3c7; border-left: 4px solid #f59e0b; padding: 12px 16px; border-radius: 0 6px 6px 0; margin: 20px 0; display: flex; align-items: center;">
+      ${lucideIcon('clock', '#92400e', 18)}
+      <p style="color: #92400e; margin: 0; font-size: 14px;">
+        Link verifikasi ini akan kadaluarsa pada <strong>${expires}</strong>
+      </p>
+    </div>
+  `;
+
+  const html = createEmailTemplate(content, 'Jika Anda tidak mendaftar di platform kami, abaikan email ini.');
+
+  return sendEmail({
+    to: email,
+    subject: 'Verifikasi Email Anda - E-Learning Platform',
+    html,
+  });
+}
+
+export async function sendPasswordResetEmail(
+  email: string,
+  name: string,
+  token: string
+) {
+  const resetUrl = `${BASE_URL}/reset-password?token=${token}`;
+  const expires = new Date(Date.now() + 60 * 60 * 1000).toLocaleString('id-ID');
+  
+  const content = `
+    <h2 style="color: #1e293b; margin-top: 0;">Permintaan Reset Password</h2>
+    <p style="color: #475569; line-height: 1.6; margin-bottom: 20px;">
+      Halo ${name}, kami menerima permintaan untuk mengubah password akun Anda.
+    </p>
+    
+    <div style="text-align: center; margin: 30px 0;">
+      <a href="${resetUrl}" style="display: inline-block; background: #3b82f6; color: white; text-decoration: none; font-weight: 600; padding: 14px 32px; border-radius: 8px; font-size: 16px; box-shadow: 0 4px 6px rgba(59, 130, 246, 0.3);">
+        Reset Password Sekarang
+      </a>
+    </div>
+    
+    <p style="color: #475569; line-height: 1.6; margin-bottom: 15px;">
+      Atau salin dan tempel link berikut ke browser Anda:
+    </p>
+    <p style="word-break: break-all; background: #f1f5f9; padding: 12px; border-radius: 6px; font-family: monospace; font-size: 14px; color: #1e3a8a; margin-bottom: 20px;">
+      ${resetUrl}
+    </p>
+    
+    <div style="background: #fef3c7; border-left: 4px solid #f59e0b; padding: 12px 16px; border-radius: 0 6px 6px 0; margin: 20px 0; display: flex; align-items: center;">
+      ${lucideIcon('clock', '#92400e', 18)}
+      <p style="color: #92400e; margin: 0; font-size: 14px;">
+        Link reset password ini akan kadaluarsa pada <strong>${expires}</strong>
+      </p>
+    </div>
+    
+    <p style="color: #475569; line-height: 1.6; font-style: italic; margin-top: 10px; display: flex; align-items: center;">
+      ${lucideIcon('shield-alert', '#64748b', 16)}
+      Jika Anda tidak meminta perubahan password, abaikan email ini. Keamanan akun Anda adalah prioritas kami.
+    </p>
+  `;
+
+  const html = createEmailTemplate(content);
+
+  return sendEmail({
+    to: email,
+    subject: 'Permintaan Reset Password - E-Learning Platform',
+    html,
+  });
+}
+
+export async function sendWelcomeEmail(email: string, name: string) {
+  const content = `
+    <h2 style="color: #1e293b; margin-top: 0;">Selamat Datang di E-Learning Platform, ${name}!</h2>
+    <p style="color: #475569; line-height: 1.6; margin-bottom: 20px;">
+      Terima kasih telah bergabung bersama kami. Mulai jelajahi berbagai kursus berkualitas tinggi yang dirancang untuk membantu Anda mencapai tujuan pembelajaran.
+    </p>
+    
+    <div style="text-align: center; margin: 30px 0;">
+      <a href="${BASE_URL}/courses" style="display: inline-block; background: #10b981; color: white; text-decoration: none; font-weight: 600; padding: 14px 32px; border-radius: 8px; font-size: 16px; box-shadow: 0 4px 6px rgba(16, 185, 129, 0.3);">
+        Jelajahi Kursus
+      </a>
+    </div>
+    
+    <div style="background: #dbeafe; border-radius: 8px; padding: 20px; margin: 25px 0;">
+      <h3 style="color: #1e3a8a; margin-top: 0; display: flex; align-items: center;">
+        ${lucideIcon('award', '#1e3a8a', 20)}
+        Fitur Platform Kami:
+      </h3>
+      <ul style="color: #1e3a8a; padding-left: 20px; margin-bottom: 0;">
+        <li style="margin-bottom: 12px; display: flex; align-items: flex-start;">
+          ${lucideIcon('circle-check', '#10b981', 18)}
+          <span>Sertifikat resmi untuk setiap kursus yang diselesaikan</span>
+        </li>
+        <li style="margin-bottom: 12px; display: flex; align-items: flex-start;">
+          ${lucideIcon('clock', '#10b981', 18)}
+          <span>Pembelajaran fleksibel kapan saja dan di mana saja</span>
+        </li>
+        <li style="margin-bottom: 12px; display: flex; align-items: flex-start;">
+          ${lucideIcon('school', '#10b981', 18)}
+          <span>Materi berkualitas dari instruktur berpengalaman</span>
+        </li>
+        <li style="display: flex; align-items: flex-start;">
+          ${lucideIcon('users', '#10b981', 18)}
+          <span>Komunitas belajar yang mendukung</span>
+        </li>
+      </ul>
+    </div>
+    
+    <p style="color: #475569; line-height: 1.6; margin-top: 10px; display: flex; align-items: center;">
+      ${lucideIcon('message-circle', '#4a5568', 16)}
+      Jika Anda memiliki pertanyaan, balas email ini atau hubungi tim dukungan kami.
+    </p>
+  `;
+
+  const html = createEmailTemplate(content);
+
+  return sendEmail({
+    to: email,
+    subject: 'Selamat Datang di E-Learning Platform!',
+    html,
+  });
+}
+
+export async function sendEnrollmentEmail(
+  email: string,
+  name: string,
+  courseTitle: string,
+  courseSlug: string
+) {
+  const courseUrl = `${BASE_URL}/courses/${courseSlug}`;
+  
+  const content = `
+    <h2 style="color: #1e293b; margin-top: 0;">Pendaftaran Berhasil!</h2>
+    <p style="color: #475569; line-height: 1.6; margin-bottom: 20px;">
+      Halo ${name}, selamat! Anda telah berhasil mendaftar ke kursus:
+    </p>
+    
+    <div style="background: #f0f9ff; border: 2px solid #3b82f6; border-radius: 10px; padding: 20px; text-align: center; margin: 20px 0;">
+      <h3 style="color: #1e3a8a; margin: 0 0 10px; font-size: 20px; display: flex; align-items: center; justify-content: center;">
+        ${lucideIcon('graduation-cap', '#1e3a8a', 22)}
+        ${courseTitle}
+      </h3>
+      <p style="color: #334155; margin: 0; font-style: italic;">"Investasi terbaik adalah investasi pada diri sendiri"</p>
+    </div>
+    
+    <div style="text-align: center; margin: 30px 0;">
+      <a href="${courseUrl}" style="display: inline-block; background: #8b5cf6; color: white; text-decoration: none; font-weight: 600; padding: 14px 32px; border-radius: 8px; font-size: 16px; box-shadow: 0 4px 6px rgba(139, 92, 246, 0.3);">
+        Mulai Belajar Sekarang
+      </a>
+    </div>
+    
+    <p style="color: #475569; line-height: 1.6; margin-top: 10px; display: flex; align-items: center;">
+      ${lucideIcon('book-open', '#4a5568', 16)}
+      Akses kursus kapan saja melalui dashboard pembelajaran Anda. Kami berharap Anda mendapatkan pengalaman belajar yang berharga!
+    </p>
+  `;
+
+  const html = createEmailTemplate(content);
+
+  return sendEmail({
+    to: email,
+    subject: `Pendaftaran Berhasil: ${courseTitle}`,
+    html,
+  });
+}
+
+export async function sendCertificateEmail(
+  email: string,
+  name: string,
+  courseTitle: string,
+  certificateNumber: string
+) {
+  const certificateUrl = `${BASE_URL}/certificates/${certificateNumber}`;
+  
+  const content = `
+    <h2 style="color: #1e293b; margin-top: 0;">Selamat, ${name}! </h2>
+    <p style="color: #475569; line-height: 1.6; margin-bottom: 20px;">
+      Kami dengan bangga mengumumkan bahwa Anda telah berhasil menyelesaikan kursus:
+    </p>
+    
+    <div style="background: linear-gradient(135deg, #0ea5e9, #3b82f6); border-radius: 12px; padding: 25px; text-align: center; margin: 20px 0; color: white; box-shadow: 0 4px 15px rgba(59, 130, 246, 0.4);">
+      <h3 style="margin: 0 0 15px; font-size: 22px; text-shadow: 0 2px 4px rgba(0,0,0,0.2); display: flex; align-items: center; justify-content: center;">
+        ${lucideIcon('trophy', 'white', 28)}
+        ${courseTitle}
+      </h3>
+      <div style="background: rgba(255, 255, 255, 0.15); border-radius: 8px; padding: 12px; display: inline-block; margin: 0 auto;">
+        <span style="font-weight: 600; font-size: 18px; letter-spacing: 1px;">${certificateNumber}</span>
+      </div>
+      <p style="margin: 15px 0 0; opacity: 0.9; font-size: 15px; display: flex; align-items: center; justify-content: center;">
+        ${lucideIcon('hash', 'rgba(255,255,255,0.8)', 16)}
+        Nomor Sertifikat Resmi
+      </p>
+    </div>
+    
+    <div style="text-align: center; margin: 30px 0;">
+      <a href="${certificateUrl}" style="display: inline-block; background: #f59e0b; color: white; text-decoration: none; font-weight: 600; padding: 14px 32px; border-radius: 8px; font-size: 16px; box-shadow: 0 4px 6px rgba(245, 158, 11, 0.3);">
+        Lihat & Unduh Sertifikat
+      </a>
+    </div>
+    
+    <p style="color: #475569; line-height: 1.6; margin-top: 10px; display: flex; align-items: center;">
+      ${lucideIcon('share-2', '#4a5568', 16)}
+      Sertifikat ini dapat Anda bagikan di LinkedIn, CV, atau portofolio profesional Anda. Tetap semangat untuk terus belajar!
+    </p>
+  `;
+
+  const html = createEmailTemplate(content);
+
+  return sendEmail({
+    to: email,
+    subject: `Sertifikat Kelulusan: ${courseTitle}`,
+    html,
+  });
+}
+
+export async function sendPaymentConfirmationEmail(
+  email: string,
+  name: string,
+  courseTitle: string,
+  amount: number,
+  orderId: string
+) {
+  const formattedAmount = new Intl.NumberFormat('id-ID', {
+    style: 'currency',
+    currency: 'IDR',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0
+  }).format(amount);
+  
+  const content = `
+    <h2 style="color: #1e293b; margin-top: 0;">Pembayaran Berhasil! </h2>
+    <p style="color: #475569; line-height: 1.6; margin-bottom: 20px;">
+      Terima kasih, ${name}! Pembayaran Anda untuk kursus berikut telah berhasil diproses:
+    </p>
+    
+    <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 10px; padding: 20px; margin: 20px 0;">
+      <table style="width: 100%; border-collapse: collapse;">
+        <tr>
+          <td style="padding: 8px 0; color: #64748b; width: 30%; display: flex; align-items: center;">
+            ${lucideIcon('file-text', '#64748b', 16)}
+            Order ID:
+          </td>
+          <td style="padding: 8px 0; font-weight: 600; color: #1e293b;">${orderId}</td>
+        </tr>
+        <tr>
+          <td style="padding: 8px 0; color: #64748b; display: flex; align-items: center;">
+            ${lucideIcon('book', '#64748b', 16)}
+            Kursus:
+          </td>
+          <td style="padding: 8px 0; font-weight: 600; color: #1e293b;">${courseTitle}</td>
+        </tr>
+        <tr>
+          <td style="padding: 8px 0; color: #64748b; display: flex; align-items: center;">
+            ${lucideIcon('credit-card', '#0ea5e9', 16)}
+            Total Pembayaran:
+          </td>
+          <td style="padding: 8px 0; font-weight: 700; color: #0ea5e9; font-size: 18px;">${formattedAmount}</td>
+        </tr>
+      </table>
+    </div>
+    
+    <div style="text-align: center; margin: 30px 0;">
+      <a href="${BASE_URL}/dashboard/orders/${orderId}" style="display: inline-block; background: #0ea5e9; color: white; text-decoration: none; font-weight: 600; padding: 14px 32px; border-radius: 8px; font-size: 16px; box-shadow: 0 4px 6px rgba(14, 165, 233, 0.3);">
+        Lihat Detail Transaksi
+      </a>
+    </div>
+    
+    <p style="color: #475569; line-height: 1.6; margin-top: 10px; display: flex; align-items: center;">
+      ${lucideIcon('file-check', '#4a5568', 16)}
+      Kami telah mengirimkan invoice resmi ke email Anda. Akses kursus kapan saja melalui dashboard pembelajaran Anda.
+    </p>
+    
+    <div style="background: #dcfce7; border-left: 4px solid #22c55e; padding: 12px 16px; border-radius: 0 6px 6px 0; margin: 20px 0; display: flex; align-items: center;">
+      ${lucideIcon('circle-check', '#166534', 18)}
+      <p style="color: #166534; margin: 0; font-size: 14px;">
+        Pembayaran telah dikonfirmasi dan kursus siap diakses
+      </p>
+    </div>
+  `;
+
+  const html = createEmailTemplate(content);
+
+  return sendEmail({
+    to: email,
+    subject: `Konfirmasi Pembayaran - ${orderId}`,
+    html,
+  });
+}

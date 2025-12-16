@@ -1,54 +1,58 @@
-// src/lib/auth.ts
-import jwt from 'jsonwebtoken';
-import { JWT_CONFIG } from './constants';
+import * as jwt from 'jsonwebtoken';
+import * as bcrypt from 'bcryptjs';
+import { NextRequest } from 'next/server';
+import { UserRole } from '@prisma/client';
 
-// JWT Payload Interface
-export interface JWTPayload {
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'your-refresh-secret-key-change-in-production';
+const ACCESS_TOKEN_EXPIRY = '1h';
+const REFRESH_TOKEN_EXPIRY = '7d';
+
+export interface TokenPayload {
   userId: string;
   email: string;
-  role: string;
+  role: UserRole;
   iat?: number;
   exp?: number;
 }
 
-// Token Pair Interface
-export interface TokenPair {
+export interface AuthTokens {
   accessToken: string;
   refreshToken: string;
 }
 
 /**
- * Generate Access Token
+ * Hash a password using bcrypt
  */
-export function generateAccessToken(payload: Omit<JWTPayload, 'iat' | 'exp'>): string {
-  const secret = process.env.JWT_ACCESS_SECRET || JWT_CONFIG.ACCESS_SECRET;
-  const expiresIn = process.env.JWT_ACCESS_EXPIRY || JWT_CONFIG.ACCESS_EXPIRY;
-
-  if (!secret) {
-    throw new Error('JWT_ACCESS_SECRET is not defined');
-  }
-
-  return jwt.sign(payload, secret, { expiresIn } as jwt.SignOptions);
+export async function hashPassword(password: string): Promise<string> {
+  return bcrypt.hash(password, 12);
 }
 
 /**
- * Generate Refresh Token
+ * Compare a password with a hash
  */
-export function generateRefreshToken(payload: Omit<JWTPayload, 'iat' | 'exp'>): string {
-  const secret = process.env.JWT_REFRESH_SECRET || JWT_CONFIG.REFRESH_SECRET;
-  const expiresIn = process.env.JWT_REFRESH_EXPIRY || JWT_CONFIG.REFRESH_EXPIRY;
-
-  if (!secret) {
-    throw new Error('JWT_REFRESH_SECRET is not defined');
-  }
-
-  return jwt.sign(payload, secret, { expiresIn } as jwt.SignOptions);
+export async function comparePassword(password: string, hash: string): Promise<boolean> {
+  return bcrypt.compare(password, hash);
 }
 
 /**
- * Generate both Access and Refresh tokens
+ * Generate access token
  */
-export function generateTokenPair(payload: Omit<JWTPayload, 'iat' | 'exp'>): TokenPair {
+export function generateAccessToken(payload: Omit<TokenPayload, 'iat' | 'exp'>): string {
+  return jwt.sign(payload, JWT_SECRET, { expiresIn: ACCESS_TOKEN_EXPIRY });
+}
+
+/**
+ * Generate refresh token
+ */
+export function generateRefreshToken(payload: Omit<TokenPayload, 'iat' | 'exp'>): string {
+  return jwt.sign(payload, JWT_REFRESH_SECRET, { expiresIn: REFRESH_TOKEN_EXPIRY });
+}
+
+/**
+ * Generate both access and refresh tokens
+ */
+export function generateTokens(payload: Omit<TokenPayload, 'iat' | 'exp'>): AuthTokens {
   return {
     accessToken: generateAccessToken(payload),
     refreshToken: generateRefreshToken(payload),
@@ -56,64 +60,24 @@ export function generateTokenPair(payload: Omit<JWTPayload, 'iat' | 'exp'>): Tok
 }
 
 /**
- * Verify Access Token
+ * Verify access token
  */
-export function verifyAccessToken(token: string): JWTPayload {
+export function verifyAccessToken(token: string): TokenPayload | null {
   try {
-    const secret = process.env.JWT_ACCESS_SECRET || JWT_CONFIG.ACCESS_SECRET;
-
-    if (!secret) {
-      throw new Error('JWT_ACCESS_SECRET is not defined');
-    }
-
-    return jwt.verify(token, secret) as JWTPayload;
-  } catch (error) {
-    if (error instanceof jwt.TokenExpiredError) {
-      throw new Error('Access token has expired');
-    }
-    if (error instanceof jwt.JsonWebTokenError) {
-      throw new Error('Invalid access token');
-    }
-    throw new Error('Token verification failed');
+    const decoded = jwt.verify(token, JWT_SECRET) as TokenPayload;
+    return decoded;
+  } catch {
+    return null;
   }
 }
 
 /**
- * Verify Refresh Token
+ * Verify refresh token
  */
-export function verifyRefreshToken(token: string): JWTPayload {
+export function verifyRefreshToken(token: string): TokenPayload | null {
   try {
-    const secret = process.env.JWT_REFRESH_SECRET || JWT_CONFIG.REFRESH_SECRET;
-
-    if (!secret) {
-      throw new Error('JWT_REFRESH_SECRET is not defined');
-    }
-
-    return jwt.verify(token, secret) as JWTPayload;
-  } catch (error) {
-    if (error instanceof jwt.TokenExpiredError) {
-      throw new Error('Refresh token has expired');
-    }
-    if (error instanceof jwt.JsonWebTokenError) {
-      throw new Error('Invalid refresh token');
-    }
-    throw new Error('Token verification failed');
-  }
-}
-
-/**
- * Verify Token (alias for verifyAccessToken for backward compatibility)
- */
-export function verifyToken(token: string): JWTPayload {
-  return verifyAccessToken(token);
-}
-
-/**
- * Decode token without verification (useful for debugging)
- */
-export function decodeToken(token: string): JWTPayload | null {
-  try {
-    return jwt.decode(token) as JWTPayload;
+    const decoded = jwt.verify(token, JWT_REFRESH_SECRET) as TokenPayload;
+    return decoded;
   } catch {
     return null;
   }
@@ -122,41 +86,53 @@ export function decodeToken(token: string): JWTPayload | null {
 /**
  * Extract token from Authorization header
  */
-export function extractTokenFromHeader(authHeader: string | null): string | null {
-  if (!authHeader) return null;
-
-  const parts = authHeader.split(' ');
-  if (parts.length !== 2 || parts[0] !== 'Bearer') {
+export function extractTokenFromHeader(request: NextRequest): string | null {
+  const authHeader = request.headers.get('Authorization');
+  if (!authHeader?.startsWith('Bearer ')) {
     return null;
   }
-
-  return parts[1];
+  return authHeader.substring(7);
 }
 
 /**
- * Check if token is expired
+ * Get authenticated user from request
  */
-export function isTokenExpired(token: string): boolean {
-  try {
-    const decoded = decodeToken(token);
-    if (!decoded || !decoded.exp) return true;
-
-    return Date.now() >= decoded.exp * 1000;
-  } catch {
-    return true;
-  }
+export function getAuthUser(request: NextRequest): TokenPayload | null {
+  const token = extractTokenFromHeader(request);
+  if (!token) return null;
+  return verifyAccessToken(token);
 }
 
 /**
- * Get token expiry time
+ * Check if user has required role
  */
-export function getTokenExpiry(token: string): Date | null {
-  try {
-    const decoded = decodeToken(token);
-    if (!decoded || !decoded.exp) return null;
+export function hasRole(user: TokenPayload | null, roles: UserRole[]): boolean {
+  if (!user) return false;
+  return roles.includes(user.role);
+}
 
-    return new Date(decoded.exp * 1000);
-  } catch {
-    return null;
+/**
+ * Generate a random token for email verification/password reset
+ */
+export function generateRandomToken(): string {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  let token = '';
+  for (let i = 0; i < 64; i++) {
+    token += chars.charAt(Math.floor(Math.random() * chars.length));
   }
+  return token;
+}
+
+/**
+ * Create unauthorized response
+ */
+export function unauthorizedResponse(message: string = 'Unauthorized') {
+  return Response.json({ error: message }, { status: 401 });
+}
+
+/**
+ * Create forbidden response
+ */
+export function forbiddenResponse(message: string = 'Forbidden') {
+  return Response.json({ error: message }, { status: 403 });
 }

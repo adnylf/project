@@ -1,61 +1,67 @@
-import { NextRequest, NextResponse } from "next/server";
-import searchService from "@/services/search.service";
-import { successResponse, errorResponse } from "@/utils/response.util";
-import { errorHandler } from "@/middlewares/error.middleware";
-import { corsMiddleware } from "@/middlewares/cors.middleware";
-import { loggingMiddleware } from "@/middlewares/logging.middleware";
-import { HTTP_STATUS } from "@/lib/constants";
+import { NextRequest, NextResponse } from 'next/server';
+import prisma from '@/lib/prisma';
 
-/**
- * GET /api/search
- * Global search across courses and mentors
- */
-async function handler(request: NextRequest): Promise<NextResponse> {
+// GET /api/search - Global search
+export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const query = searchParams.get("q") || searchParams.get("query") || "";
+    const q = searchParams.get('q');
+    const page = parseInt(searchParams.get('page') || '1');
+    const limit = parseInt(searchParams.get('limit') || '10');
+    const type = searchParams.get('type') || 'all';
 
-    if (!query || query.trim().length < 2) {
-      return errorResponse(
-        "Search query must be at least 2 characters",
-        HTTP_STATUS.BAD_REQUEST
-      );
+    if (!q || q.length < 2) {
+      return NextResponse.json({ error: 'Kata kunci minimal 2 karakter' }, { status: 400 });
     }
 
-    const includeCoursesLimit = parseInt(
-      searchParams.get("coursesLimit") || "5"
-    );
-    const includeMentorsLimit = parseInt(
-      searchParams.get("mentorsLimit") || "3"
-    );
+    const skip = (page - 1) * limit;
 
-    const results = await searchService.globalSearch(query, {
-      includeCoursesLimit,
-      includeMentorsLimit,
-    });
+    const results: Record<string, unknown> = {};
 
-    return successResponse(
-      {
-        query,
-        results: {
-          courses: {
-            items: results.courses,
-            total: results.totalCourses,
-          },
-          mentors: {
-            items: results.mentors,
-            total: results.totalMentors,
-          },
+    if (type === 'all' || type === 'courses') {
+      const courses = await prisma.course.findMany({
+        where: {
+          status: 'PUBLISHED',
+          OR: [
+            { title: { contains: q, mode: 'insensitive' } },
+            { description: { contains: q, mode: 'insensitive' } },
+            { tags: { has: q.toLowerCase() } },
+          ],
         },
-      },
-      "Search completed successfully"
-    );
-  } catch (error) {
-    if (error instanceof Error) {
-      return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
+        take: type === 'all' ? 5 : limit,
+        skip: type === 'courses' ? skip : 0,
+        select: {
+          id: true, title: true, slug: true, thumbnail: true, price: true, average_rating: true, total_students: true,
+          mentor: { select: { user: { select: { full_name: true } } } },
+          category: { select: { name: true } },
+        },
+      });
+      results.courses = courses;
     }
-    return errorResponse("Search failed", HTTP_STATUS.INTERNAL_SERVER_ERROR);
+
+    if (type === 'all' || type === 'mentors') {
+      const mentors = await prisma.mentorProfile.findMany({
+        where: {
+          status: 'APPROVED',
+          OR: [
+            { user: { full_name: { contains: q, mode: 'insensitive' } } },
+            { headline: { contains: q, mode: 'insensitive' } },
+            { expertise: { has: q } },
+          ],
+        },
+        take: type === 'all' ? 5 : limit,
+        skip: type === 'mentors' ? skip : 0,
+        select: {
+          id: true, headline: true, expertise: true, average_rating: true, total_students: true,
+          user: { select: { id: true, full_name: true, avatar_url: true } },
+        },
+      });
+      results.mentors = mentors;
+    }
+
+    return NextResponse.json({ query: q, results });
+  } catch (error) {
+    console.error('Search error:', error);
+    return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 });
   }
 }
-
-export const GET = errorHandler(loggingMiddleware(corsMiddleware(handler)));

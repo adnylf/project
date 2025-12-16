@@ -1,34 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { useState, useEffect, useCallback } from "react";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import {
-  Save,
-  Globe,
-  Bell,
-  Shield,
-  Mail,
-  CreditCard,
-  Users,
-  BookOpen,
-  Eye,
-  EyeOff,
-  CheckCircle,
-} from "lucide-react";
-import AdminLayout from "@/components/admin/admin-layout";
-import ProtectedRoute from "@/components/ui/protected-route";
 import {
   Select,
   SelectContent,
@@ -36,842 +13,640 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Settings,
+  Key,
+  Loader2,
+  AlertCircle,
+  CheckCircle,
+  Eye,
+  EyeOff,
+  Shield,
+  Lock,
+  Info,
+  Database,
+  Save,
+  Plus,
+  Trash2,
+  Sliders,
+  Users,
+  BookOpen,
+  DollarSign,
+  Activity,
+  TrendingUp,
+  Award,
+  Sparkles,
+} from "lucide-react";
+import AdminLayout from "@/components/admin/admin-layout";
+import ProtectedRoute from "@/components/auth/protected-route";
 
-// Define types for our settings
-type Settings = {
-  general: {
-    siteName: string;
-    siteDescription: string;
-    siteUrl: string;
-    adminEmail: string;
-    supportEmail: string;
-    defaultLanguage: string;
-    timezone: string;
-    dateFormat: string;
-    maintenanceMode: boolean;
-  };
-  notifications: {
-    emailNotifications: boolean;
-    userRegistrations: boolean;
-    courseSubmissions: boolean;
-    paymentNotifications: boolean;
-    systemAlerts: boolean;
-    weeklyReports: boolean;
-    mentorApplications: boolean;
-    certificateRequests: boolean;
-  };
-  security: {
-    twoFactorAuth: boolean;
-    sessionTimeout: number;
-    maxLoginAttempts: number;
-    passwordMinLength: number;
-    requireStrongPassword: boolean;
-    ipWhitelist: string[];
-    auditLogRetention: number;
-  };
-  payment: {
-    currency: string;
-    platformFee: number;
-    payoutThreshold: number;
-    payoutSchedule: string;
-    autoApprovePayouts: boolean;
-    paymentMethods: string[];
-    taxRate: number;
-    invoicePrefix: string;
-  };
-  courses: {
-    autoApproveCourses: boolean;
-    maxCourseDuration: number;
-    minCoursePrice: number;
-    maxCoursePrice: number;
-    allowCoursePreviews: boolean;
-    requireCourseApproval: boolean;
-    courseCategories: string[];
-    defaultCommission: number;
-  };
+const API_BASE_URL = "http://localhost:3000/api";
+
+interface SystemSetting {
+  id: string;
+  key: string;
+  value: string;
+  type: string;
+  category: string;
+  is_public: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+interface PlatformStats {
+  total_users: number;
+  new_users: number;
+  total_courses: number;
+  active_courses: number;
+  total_enrollments: number;
+  new_enrollments: number;
+  total_revenue: number;
+  recent_revenue: number;
+}
+
+interface PasswordStrength {
+  score: number;
+  label: string;
+  color: string;
+}
+
+const checkPasswordStrength = (password: string): PasswordStrength => {
+  let score = 0;
+  if (password.length >= 8) score++;
+  if (password.length >= 12) score++;
+  if (/[a-z]/.test(password)) score++;
+  if (/[A-Z]/.test(password)) score++;
+  if (/[0-9]/.test(password)) score++;
+  if (/[^a-zA-Z0-9]/.test(password)) score++;
+
+  if (score <= 2) return { score, label: "Lemah", color: "bg-red-500" };
+  if (score <= 4) return { score, label: "Sedang", color: "bg-yellow-500" };
+  return { score, label: "Kuat", color: "bg-green-500" };
 };
 
-type TabKey = "general" | "notifications" | "security" | "payment" | "courses";
+const formatCurrency = (amount: number) => {
+  return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(amount);
+};
 
 export default function AdminSettings() {
-  const [isClient, setIsClient] = useState(false);
-  const [activeTab, setActiveTab] = useState<TabKey>("general");
-  const [settings, setSettings] = useState<Settings>({
-    // General Settings
-    general: {
-      siteName: "Online Course Disabilitas",
-      siteDescription: "Platform pembelajaran online inklusif untuk semua",
-      siteUrl: "https://course-disabilitas.com",
-      adminEmail: "admin@course-disabilitas.com",
-      supportEmail: "support@course-disabilitas.com",
-      defaultLanguage: "id",
-      timezone: "Asia/Jakarta",
-      dateFormat: "DD/MM/YYYY",
-      maintenanceMode: false,
-    },
-    // Notification Settings
-    notifications: {
-      emailNotifications: true,
-      userRegistrations: true,
-      courseSubmissions: true,
-      paymentNotifications: true,
-      systemAlerts: true,
-      weeklyReports: true,
-      mentorApplications: true,
-      certificateRequests: true,
-    },
-    // Security Settings
-    security: {
-      twoFactorAuth: true,
-      sessionTimeout: 60,
-      maxLoginAttempts: 5,
-      passwordMinLength: 8,
-      requireStrongPassword: true,
-      ipWhitelist: ["192.168.1.0/24"],
-      auditLogRetention: 365,
-    },
-    // Payment Settings
-    payment: {
-      currency: "IDR",
-      platformFee: 10,
-      payoutThreshold: 100000,
-      payoutSchedule: "weekly",
-      autoApprovePayouts: false,
-      paymentMethods: ["credit_card", "bank_transfer", "e_wallet"],
-      taxRate: 0,
-      invoicePrefix: "INV",
-    },
-    // Course Settings
-    courses: {
-      autoApproveCourses: false,
-      maxCourseDuration: 12,
-      minCoursePrice: 0,
-      maxCoursePrice: 5000000,
-      allowCoursePreviews: true,
-      requireCourseApproval: true,
-      courseCategories: ["Programming", "Design", "Business", "Lifestyle"],
-      defaultCommission: 70,
-    },
-  });
+  // Password states
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
+  const [passwordStrength, setPasswordStrength] = useState<PasswordStrength>({ score: 0, label: "", color: "" });
 
-  const [formData, setFormData] = useState<Settings>(settings);
-  const [hasChanges, setHasChanges] = useState(false);
+  // System settings states
+  const [settings, setSettings] = useState<SystemSetting[]>([]);
+  const [settingsLoading, setSettingsLoading] = useState(true);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
+  const [savingKey, setSavingKey] = useState<string | null>(null);
+
+  // Stats
+  const [stats, setStats] = useState<PlatformStats | null>(null);
+  const [statsLoading, setStatsLoading] = useState(true);
+
+  // New setting form
+  const [newSettingKey, setNewSettingKey] = useState("");
+  const [newSettingValue, setNewSettingValue] = useState("");
+  const [newSettingType, setNewSettingType] = useState("string");
+  const [newSettingCategory, setNewSettingCategory] = useState("general");
+  const [addingNew, setAddingNew] = useState(false);
+
+  // Active tab
+  const [activeTab, setActiveTab] = useState<"password" | "system">("password");
+
+  const getAuthToken = useCallback(() => typeof window !== "undefined" ? localStorage.getItem("token") || localStorage.getItem("accessToken") : null, []);
 
   useEffect(() => {
-    setIsClient(true);
-  }, []);
+    if (newPassword) {
+      setPasswordStrength(checkPasswordStrength(newPassword));
+    } else {
+      setPasswordStrength({ score: 0, label: "", color: "" });
+    }
+  }, [newPassword]);
 
-  const handleInputChange = <K extends keyof Settings>(
-    section: K,
-    field: keyof Settings[K],
-    value: any
-  ) => {
-    setFormData((prev) => ({
-      ...prev,
-      [section]: {
-        ...prev[section],
-        [field]: value,
-      },
-    }));
-    setHasChanges(true);
+  const passwordCriteria = [
+    { label: "Minimal 8 karakter", met: newPassword.length >= 8 },
+    { label: "Huruf kecil (a-z)", met: /[a-z]/.test(newPassword) },
+    { label: "Huruf besar (A-Z)", met: /[A-Z]/.test(newPassword) },
+    { label: "Angka (0-9)", met: /[0-9]/.test(newPassword) },
+    { label: "Simbol (!@#$%)", met: /[^a-zA-Z0-9]/.test(newPassword) },
+  ];
+
+  // Fetch system settings
+  const fetchSettings = useCallback(async () => {
+    try {
+      setSettingsLoading(true);
+      setSettingsError(null);
+      const token = getAuthToken();
+      const response = await fetch(`${API_BASE_URL}/admin/settings`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) throw new Error("Gagal memuat pengaturan");
+      const data = await response.json();
+      setSettings(data.settings || []);
+    } catch (err) {
+      setSettingsError(err instanceof Error ? err.message : "Gagal memuat pengaturan");
+    } finally {
+      setSettingsLoading(false);
+    }
+  }, [getAuthToken]);
+
+  // Fetch stats
+  const fetchStats = useCallback(async () => {
+    try {
+      setStatsLoading(true);
+      const token = getAuthToken();
+      const response = await fetch(`${API_BASE_URL}/admin/stats?period=30`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setStats(data.overview);
+      }
+    } catch (err) {
+      console.error("Error fetching stats:", err);
+    } finally {
+      setStatsLoading(false);
+    }
+  }, [getAuthToken]);
+
+  useEffect(() => {
+    fetchSettings();
+    fetchStats();
+  }, [fetchSettings, fetchStats]);
+
+  // Handle change password
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordError(null);
+    setPasswordSuccess(null);
+
+    if (!currentPassword.trim()) { setPasswordError("Password lama harus diisi"); return; }
+    if (!newPassword.trim()) { setPasswordError("Password baru harus diisi"); return; }
+    if (newPassword.length < 8) { setPasswordError("Password baru minimal 8 karakter"); return; }
+    if (newPassword !== confirmPassword) { setPasswordError("Konfirmasi password tidak cocok"); return; }
+    if (currentPassword === newPassword) { setPasswordError("Password baru tidak boleh sama dengan password lama"); return; }
+
+    try {
+      setPasswordLoading(true);
+      const token = getAuthToken();
+      const response = await fetch(`${API_BASE_URL}/auth/change-password`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Gagal mengubah password");
+
+      setPasswordSuccess("Password berhasil diubah");
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setTimeout(() => setPasswordSuccess(null), 5000);
+    } catch (err) {
+      setPasswordError(err instanceof Error ? err.message : "Gagal mengubah password");
+    } finally {
+      setPasswordLoading(false);
+    }
   };
 
-  const handleSaveSettings = () => {
-    console.log("Saving settings:", formData);
-    // API call: PUT /api/admin/settings
-    setSettings(formData);
-    setHasChanges(false);
-    // Show success message
-    alert("Pengaturan berhasil disimpan");
+  // Handle update setting
+  const handleUpdateSetting = async (setting: SystemSetting, newValue: string) => {
+    try {
+      setSavingKey(setting.key);
+      const token = getAuthToken();
+      const response = await fetch(`${API_BASE_URL}/admin/settings`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ key: setting.key, value: newValue, type: setting.type, category: setting.category, is_public: setting.is_public }),
+      });
+
+      if (!response.ok) throw new Error("Gagal menyimpan");
+
+      setSettings(prev => prev.map(s => s.key === setting.key ? { ...s, value: newValue } : s));
+    } catch (err) {
+      setSettingsError(err instanceof Error ? err.message : "Gagal menyimpan");
+    } finally {
+      setSavingKey(null);
+    }
   };
 
-  const handleResetSettings = () => {
-    setFormData(settings);
-    setHasChanges(false);
+  // Handle add new setting
+  const handleAddSetting = async () => {
+    if (!newSettingKey.trim() || !newSettingValue.trim()) return;
+
+    try {
+      setAddingNew(true);
+      const token = getAuthToken();
+      const response = await fetch(`${API_BASE_URL}/admin/settings`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          key: newSettingKey,
+          value: newSettingValue,
+          type: newSettingType,
+          category: newSettingCategory,
+          is_public: false,
+        }),
+      });
+
+      if (!response.ok) throw new Error("Gagal menambah setting");
+
+      setNewSettingKey("");
+      setNewSettingValue("");
+      fetchSettings();
+    } catch (err) {
+      setSettingsError(err instanceof Error ? err.message : "Gagal menambah");
+    } finally {
+      setAddingNew(false);
+    }
   };
 
-  const renderGeneralSettings = () => (
-    <div className="space-y-6">
-      <div className="grid md:grid-cols-2 gap-6">
-        <div className="space-y-2">
-          <Label htmlFor="siteName">Nama Situs</Label>
-          <Input
-            id="siteName"
-            value={formData.general.siteName}
-            onChange={(e) =>
-              handleInputChange("general", "siteName", e.target.value)
-            }
-          />
-        </div>
+  const groupedSettings = settings.reduce((acc, setting) => {
+    const cat = setting.category || "general";
+    if (!acc[cat]) acc[cat] = [];
+    acc[cat].push(setting);
+    return acc;
+  }, {} as Record<string, SystemSetting[]>);
 
-        <div className="space-y-2">
-          <Label htmlFor="siteUrl">URL Situs</Label>
-          <Input
-            id="siteUrl"
-            value={formData.general.siteUrl}
-            onChange={(e) =>
-              handleInputChange("general", "siteUrl", e.target.value)
-            }
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="adminEmail">Email Admin</Label>
-          <Input
-            id="adminEmail"
-            type="email"
-            value={formData.general.adminEmail}
-            onChange={(e) =>
-              handleInputChange("general", "adminEmail", e.target.value)
-            }
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="supportEmail">Email Support</Label>
-          <Input
-            id="supportEmail"
-            type="email"
-            value={formData.general.supportEmail}
-            onChange={(e) =>
-              handleInputChange("general", "supportEmail", e.target.value)
-            }
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="defaultLanguage">Bahasa Default</Label>
-          <Select
-            value={formData.general.defaultLanguage}
-            onValueChange={(value) =>
-              handleInputChange("general", "defaultLanguage", value)
-            }
-          >
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="id">Indonesia</SelectItem>
-              <SelectItem value="en">English</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="timezone">Zona Waktu</Label>
-          <Select
-            value={formData.general.timezone}
-            onValueChange={(value) =>
-              handleInputChange("general", "timezone", value)
-            }
-          >
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="Asia/Jakarta">WIB (Jakarta)</SelectItem>
-              <SelectItem value="Asia/Makassar">WITA (Makassar)</SelectItem>
-              <SelectItem value="Asia/Jayapura">WIT (Jayapura)</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="siteDescription">Deskripsi Situs</Label>
-        <Textarea
-          id="siteDescription"
-          value={formData.general.siteDescription}
-          onChange={(e) =>
-            handleInputChange("general", "siteDescription", e.target.value)
-          }
-          rows={3}
-        />
-      </div>
-
-      <div className="flex items-center justify-between p-4 rounded-lg border border-gray-200 dark:border-gray-700">
-        <div>
-          <Label className="font-medium">Maintenance Mode</Label>
-          <p className="text-sm text-gray-600 dark:text-gray-400">
-            Nonaktifkan akses publik ke situs
-          </p>
-        </div>
-        <Switch
-          checked={formData.general.maintenanceMode}
-          onCheckedChange={(value) =>
-            handleInputChange("general", "maintenanceMode", value)
-          }
-        />
-      </div>
-    </div>
-  );
-
-  const renderNotificationSettings = () => (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between p-4 rounded-lg border border-gray-200 dark:border-gray-700">
-        <div>
-          <Label className="font-medium">Email Notifications</Label>
-          <p className="text-sm text-gray-600 dark:text-gray-400">
-            Aktifkan semua notifikasi email
-          </p>
-        </div>
-        <Switch
-          checked={formData.notifications.emailNotifications}
-          onCheckedChange={(value) =>
-            handleInputChange("notifications", "emailNotifications", value)
-          }
-        />
-      </div>
-
-      <div className="grid md:grid-cols-2 gap-6">
-        <div className="flex items-center justify-between p-4 rounded-lg border border-gray-200 dark:border-gray-700">
-          <div>
-            <Label className="font-medium">Pendaftaran User Baru</Label>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              Notifikasi ketika user mendaftar
-            </p>
-          </div>
-          <Switch
-            checked={formData.notifications.userRegistrations}
-            onCheckedChange={(value) =>
-              handleInputChange("notifications", "userRegistrations", value)
-            }
-          />
-        </div>
-
-        <div className="flex items-center justify-between p-4 rounded-lg border border-gray-200 dark:border-gray-700">
-          <div>
-            <Label className="font-medium">Pengajuan Kursus</Label>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              Notifikasi kursus baru menunggu persetujuan
-            </p>
-          </div>
-          <Switch
-            checked={formData.notifications.courseSubmissions}
-            onCheckedChange={(value) =>
-              handleInputChange("notifications", "courseSubmissions", value)
-            }
-          />
-        </div>
-
-        <div className="flex items-center justify-between p-4 rounded-lg border border-gray-200 dark:border-gray-700">
-          <div>
-            <Label className="font-medium">Notifikasi Pembayaran</Label>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              Notifikasi transaksi pembayaran
-            </p>
-          </div>
-          <Switch
-            checked={formData.notifications.paymentNotifications}
-            onCheckedChange={(value) =>
-              handleInputChange("notifications", "paymentNotifications", value)
-            }
-          />
-        </div>
-
-        <div className="flex items-center justify-between p-4 rounded-lg border border-gray-200 dark:border-gray-700">
-          <div>
-            <Label className="font-medium">System Alerts</Label>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              Notifikasi error dan warning sistem
-            </p>
-          </div>
-          <Switch
-            checked={formData.notifications.systemAlerts}
-            onCheckedChange={(value) =>
-              handleInputChange("notifications", "systemAlerts", value)
-            }
-          />
-        </div>
-
-        <div className="flex items-center justify-between p-4 rounded-lg border border-gray-200 dark:border-gray-700">
-          <div>
-            <Label className="font-medium">Laporan Mingguan</Label>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              Kirim laporan mingguan ke email admin
-            </p>
-          </div>
-          <Switch
-            checked={formData.notifications.weeklyReports}
-            onCheckedChange={(value) =>
-              handleInputChange("notifications", "weeklyReports", value)
-            }
-          />
-        </div>
-
-        <div className="flex items-center justify-between p-4 rounded-lg border border-gray-200 dark:border-gray-700">
-          <div>
-            <Label className="font-medium">Aplikasi Mentor</Label>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              Notifikasi aplikasi mentor baru
-            </p>
-          </div>
-          <Switch
-            checked={formData.notifications.mentorApplications}
-            onCheckedChange={(value) =>
-              handleInputChange("notifications", "mentorApplications", value)
-            }
-          />
-        </div>
-      </div>
-    </div>
-  );
-
-  const renderSecuritySettings = () => (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between p-4 rounded-lg border border-gray-200 dark:border-gray-700">
-        <div>
-          <Label className="font-medium">Two-Factor Authentication</Label>
-          <p className="text-sm text-gray-600 dark:text-gray-400">
-            Wajibkan 2FA untuk akses admin
-          </p>
-        </div>
-        <Switch
-          checked={formData.security.twoFactorAuth}
-          onCheckedChange={(value) =>
-            handleInputChange("security", "twoFactorAuth", value)
-          }
-        />
-      </div>
-
-      <div className="grid md:grid-cols-2 gap-6">
-        <div className="space-y-2">
-          <Label htmlFor="sessionTimeout">Session Timeout (menit)</Label>
-          <Input
-            id="sessionTimeout"
-            type="number"
-            value={formData.security.sessionTimeout}
-            onChange={(e) =>
-              handleInputChange(
-                "security",
-                "sessionTimeout",
-                parseInt(e.target.value)
-              )
-            }
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="maxLoginAttempts">Max Login Attempts</Label>
-          <Input
-            id="maxLoginAttempts"
-            type="number"
-            value={formData.security.maxLoginAttempts}
-            onChange={(e) =>
-              handleInputChange(
-                "security",
-                "maxLoginAttempts",
-                parseInt(e.target.value)
-              )
-            }
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="passwordMinLength">Minimal Panjang Password</Label>
-          <Input
-            id="passwordMinLength"
-            type="number"
-            value={formData.security.passwordMinLength}
-            onChange={(e) =>
-              handleInputChange(
-                "security",
-                "passwordMinLength",
-                parseInt(e.target.value)
-              )
-            }
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="auditLogRetention">Retensi Log (hari)</Label>
-          <Input
-            id="auditLogRetention"
-            type="number"
-            value={formData.security.auditLogRetention}
-            onChange={(e) =>
-              handleInputChange(
-                "security",
-                "auditLogRetention",
-                parseInt(e.target.value)
-              )
-            }
-          />
-        </div>
-      </div>
-
-      <div className="flex items-center justify-between p-4 rounded-lg border border-gray-200 dark:border-gray-700">
-        <div>
-          <Label className="font-medium">Password Kuat</Label>
-          <p className="text-sm text-gray-600 dark:text-gray-400">
-            Wajibkan kombinasi huruf, angka, dan simbol
-          </p>
-        </div>
-        <Switch
-          checked={formData.security.requireStrongPassword}
-          onCheckedChange={(value) =>
-            handleInputChange("security", "requireStrongPassword", value)
-          }
-        />
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="ipWhitelist">IP Whitelist</Label>
-        <Textarea
-          id="ipWhitelist"
-          value={formData.security.ipWhitelist.join(", ")}
-          onChange={(e) =>
-            handleInputChange(
-              "security",
-              "ipWhitelist",
-              e.target.value.split(",").map((ip) => ip.trim())
-            )
-          }
-          placeholder="Masukkan IP addresses dipisahkan koma"
-          rows={3}
-        />
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          Hanya IP yang terdaftar yang bisa mengakses panel admin
-        </p>
-      </div>
-    </div>
-  );
-
-  const renderPaymentSettings = () => (
-    <div className="space-y-6">
-      <div className="grid md:grid-cols-2 gap-6">
-        <div className="space-y-2">
-          <Label htmlFor="currency">Mata Uang</Label>
-          <Select
-            value={formData.payment.currency}
-            onValueChange={(value) =>
-              handleInputChange("payment", "currency", value)
-            }
-          >
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="IDR">IDR - Indonesian Rupiah</SelectItem>
-              <SelectItem value="USD">USD - US Dollar</SelectItem>
-              <SelectItem value="EUR">EUR - Euro</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="platformFee">Platform Fee (%)</Label>
-          <Input
-            id="platformFee"
-            type="number"
-            value={formData.payment.platformFee}
-            onChange={(e) =>
-              handleInputChange(
-                "payment",
-                "platformFee",
-                parseFloat(e.target.value)
-              )
-            }
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="payoutThreshold">Minimum Payout</Label>
-          <Input
-            id="payoutThreshold"
-            type="number"
-            value={formData.payment.payoutThreshold}
-            onChange={(e) =>
-              handleInputChange(
-                "payment",
-                "payoutThreshold",
-                parseInt(e.target.value)
-              )
-            }
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="payoutSchedule">Jadwal Payout</Label>
-          <Select
-            value={formData.payment.payoutSchedule}
-            onValueChange={(value) =>
-              handleInputChange("payment", "payoutSchedule", value)
-            }
-          >
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="daily">Harian</SelectItem>
-              <SelectItem value="weekly">Mingguan</SelectItem>
-              <SelectItem value="monthly">Bulanan</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
-      <div className="flex items-center justify-between p-4 rounded-lg border border-gray-200 dark:border-gray-700">
-        <div>
-          <Label className="font-medium">Auto Approve Payouts</Label>
-          <p className="text-sm text-gray-600 dark:text-gray-400">
-            Otomatis setujui payout yang memenuhi syarat
-          </p>
-        </div>
-        <Switch
-          checked={formData.payment.autoApprovePayouts}
-          onCheckedChange={(value) =>
-            handleInputChange("payment", "autoApprovePayouts", value)
-          }
-        />
-      </div>
-    </div>
-  );
-
-  const renderCourseSettings = () => (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between p-4 rounded-lg border border-gray-200 dark:border-gray-700">
-        <div>
-          <Label className="font-medium">Auto Approve Courses</Label>
-          <p className="text-sm text-gray-600 dark:text-gray-400">
-            Otomatis setujui kursus baru tanpa review
-          </p>
-        </div>
-        <Switch
-          checked={formData.courses.autoApproveCourses}
-          onCheckedChange={(value) =>
-            handleInputChange("courses", "autoApproveCourses", value)
-          }
-        />
-      </div>
-
-      <div className="grid md:grid-cols-2 gap-6">
-        <div className="space-y-2">
-          <Label htmlFor="maxCourseDuration">
-            Maksimal Durasi Kursus (bulan)
-          </Label>
-          <Input
-            id="maxCourseDuration"
-            type="number"
-            value={formData.courses.maxCourseDuration}
-            onChange={(e) =>
-              handleInputChange(
-                "courses",
-                "maxCourseDuration",
-                parseInt(e.target.value)
-              )
-            }
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="minCoursePrice">Harga Minimum Kursus</Label>
-          <Input
-            id="minCoursePrice"
-            type="number"
-            value={formData.courses.minCoursePrice}
-            onChange={(e) =>
-              handleInputChange(
-                "courses",
-                "minCoursePrice",
-                parseInt(e.target.value)
-              )
-            }
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="maxCoursePrice">Harga Maksimum Kursus</Label>
-          <Input
-            id="maxCoursePrice"
-            type="number"
-            value={formData.courses.maxCoursePrice}
-            onChange={(e) =>
-              handleInputChange(
-                "courses",
-                "maxCoursePrice",
-                parseInt(e.target.value)
-              )
-            }
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="defaultCommission">Komisi Default Mentor (%)</Label>
-          <Input
-            id="defaultCommission"
-            type="number"
-            value={formData.courses.defaultCommission}
-            onChange={(e) =>
-              handleInputChange(
-                "courses",
-                "defaultCommission",
-                parseInt(e.target.value)
-              )
-            }
-          />
-        </div>
-      </div>
-
-      <div className="flex items-center justify-between p-4 rounded-lg border border-gray-200 dark:border-gray-700">
-        <div>
-          <Label className="font-medium">Course Previews</Label>
-          <p className="text-sm text-gray-600 dark:text-gray-400">
-            Izinkan preview kursus untuk user belum login
-          </p>
-        </div>
-        <Switch
-          checked={formData.courses.allowCoursePreviews}
-          onCheckedChange={(value) =>
-            handleInputChange("courses", "allowCoursePreviews", value)
-          }
-        />
-      </div>
-    </div>
-  );
-
-  const tabContent: Record<TabKey, JSX.Element> = {
-    general: renderGeneralSettings(),
-    notifications: renderNotificationSettings(),
-    security: renderSecuritySettings(),
-    payment: renderPaymentSettings(),
-    courses: renderCourseSettings(),
+  const getCategoryIcon = (category: string) => {
+    switch (category) {
+      case "payment": return <DollarSign className="h-4 w-4 text-[#005EB8]" />;
+      case "email": return <Activity className="h-4 w-4 text-[#005EB8]" />;
+      case "course": return <BookOpen className="h-4 w-4 text-[#005EB8]" />;
+      case "user": return <Users className="h-4 w-4 text-[#005EB8]" />;
+      default: return <Sliders className="h-4 w-4 text-[#005EB8]" />;
+    }
   };
 
   return (
     <ProtectedRoute allowedRoles={["ADMIN"]}>
-    <AdminLayout>
-      <div className="space-y-8">
-        {/* Header Section */}
-        <div className="animate-fadeIn">
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-            Settings
-          </h1>
-          <p className="text-gray-600 dark:text-gray-400">
-            Pengaturan global sistem dan preferensi admin
-          </p>
-        </div>
-
-        <div className="flex flex-col lg:flex-row gap-8">
-          {/* Sidebar Navigation */}
-          <div className="w-full lg:w-64 flex-shrink-0">
-            <Card className="rounded-lg border bg-card text-card-foreground shadow-sm border-gray-200 dark:border-gray-700">
-              <CardContent className="p-4">
-                <nav className="space-y-2">
-                  <button
-                    onClick={() => setActiveTab("general")}
-                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors ${
-                      activeTab === "general"
-                        ? "bg-[#005EB8] text-white"
-                        : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
-                    }`}
-                  >
-                    <Globe className="h-4 w-4" />
-                    <span>General</span>
-                  </button>
-
-                  <button
-                    onClick={() => setActiveTab("notifications")}
-                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors ${
-                      activeTab === "notifications"
-                        ? "bg-[#005EB8] text-white"
-                        : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
-                    }`}
-                  >
-                    <Bell className="h-4 w-4" />
-                    <span>Notifications</span>
-                  </button>
-
-                  <button
-                    onClick={() => setActiveTab("security")}
-                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors ${
-                      activeTab === "security"
-                        ? "bg-[#005EB8] text-white"
-                        : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
-                    }`}
-                  >
-                    <Shield className="h-4 w-4" />
-                    <span>Security</span>
-                  </button>
-
-                  <button
-                    onClick={() => setActiveTab("payment")}
-                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors ${
-                      activeTab === "payment"
-                        ? "bg-[#005EB8] text-white"
-                        : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
-                    }`}
-                  >
-                    <CreditCard className="h-4 w-4" />
-                    <span>Payment</span>
-                  </button>
-
-                  <button
-                    onClick={() => setActiveTab("courses")}
-                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors ${
-                      activeTab === "courses"
-                        ? "bg-[#005EB8] text-white"
-                        : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
-                    }`}
-                  >
-                    <BookOpen className="h-4 w-4" />
-                    <span>Courses</span>
-                  </button>
-                </nav>
-              </CardContent>
-            </Card>
+      <AdminLayout>
+        <div className="space-y-8">
+          {/* Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-3">
+                <Settings className="h-8 w-8 text-[#005EB8]" />
+                Pengaturan Admin
+              </h1>
+              <p className="text-gray-600 dark:text-gray-400">Kelola keamanan akun dan pengaturan sistem</p>
+            </div>
           </div>
 
-          {/* Main Content */}
-          <div className="flex-1">
-            <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 animate-fadeSlide">
-              <CardHeader>
-                <CardTitle className="text-xl font-bold capitalize">
-                  {activeTab} Settings
-                </CardTitle>
-                <CardDescription>
-                  Kelola pengaturan {activeTab} untuk platform
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                {tabContent[activeTab]}
+          {/* Tabs */}
+          <div className="flex gap-2 border-b border-gray-200 dark:border-gray-700">
+            <button
+              onClick={() => setActiveTab("password")}
+              className={`px-4 py-3 font-medium flex items-center gap-2 border-b-2 transition-colors ${activeTab === "password" ? "border-[#005EB8] text-[#005EB8]" : "border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"}`}
+            >
+              <Key className="h-4 w-4" />
+              Keamanan Akun
+            </button>
+            <button
+              onClick={() => setActiveTab("system")}
+              className={`px-4 py-3 font-medium flex items-center gap-2 border-b-2 transition-colors ${activeTab === "system" ? "border-[#005EB8] text-[#005EB8]" : "border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"}`}
+            >
+              <Database className="h-4 w-4" />
+              Pengaturan Sistem
+            </button>
+          </div>
 
-                {/* Save Button */}
-                <div className="flex gap-3 pt-6 border-t border-gray-200 dark:border-gray-700">
-                  <Button
-                    onClick={handleSaveSettings}
-                    disabled={!hasChanges}
-                    className="bg-[#005EB8] hover:bg-[#004A93]"
-                  >
-                    <Save className="h-4 w-4 mr-2" />
-                    Simpan Perubahan
-                  </Button>
+          {/* Password Tab */}
+          {activeTab === "password" && (
+            <div className="grid lg:grid-cols-3 gap-6">
+              <div className="lg:col-span-2">
+                <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-white text-xl font-bold">
+                      <Key className="h-5 w-5 text-[#005EB8]" />
+                      Ubah Password
+                    </CardTitle>
+                    <CardDescription>Pastikan password baru Anda kuat dan mudah diingat</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <form onSubmit={handleChangePassword} className="space-y-6">
+                      {passwordError && (
+                        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 flex items-center gap-3">
+                          <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0" />
+                          <p className="text-red-600 dark:text-red-400 text-sm">{passwordError}</p>
+                        </div>
+                      )}
+                      {passwordSuccess && (
+                        <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4 flex items-center gap-3">
+                          <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400 flex-shrink-0" />
+                          <p className="text-green-600 dark:text-green-400 text-sm">{passwordSuccess}</p>
+                        </div>
+                      )}
 
-                  {hasChanges && (
-                    <Button
-                      variant="outline"
-                      onClick={handleResetSettings}
-                      className="border-gray-300 dark:border-gray-600"
-                    >
-                      Reset
-                    </Button>
-                  )}
+                      <div className="space-y-2">
+                        <Label htmlFor="currentPassword" className="text-gray-900 dark:text-white">Password Saat Ini</Label>
+                        <div className="relative">
+                          <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                          <Input
+                            id="currentPassword"
+                            type={showCurrentPassword ? "text" : "password"}
+                            value={currentPassword}
+                            onChange={(e) => setCurrentPassword(e.target.value)}
+                            placeholder="Masukkan password saat ini"
+                            className="pl-10 pr-10 border-gray-300 dark:border-gray-600 focus:border-[#005EB8] focus:ring-[#005EB8] dark:bg-gray-800"
+                          />
+                          <button type="button" onClick={() => setShowCurrentPassword(!showCurrentPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                            {showCurrentPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                          </button>
+                        </div>
+                      </div>
 
-                  {!hasChanges && (
-                    <div className="flex items-center gap-2 text-[#008A00]">
-                      <CheckCircle className="h-4 w-4" />
-                      <span className="text-sm">
-                        Semua perubahan telah disimpan
-                      </span>
+                      <div className="space-y-2">
+                        <Label htmlFor="newPassword" className="text-gray-900 dark:text-white">Password Baru</Label>
+                        <div className="relative">
+                          <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                          <Input
+                            id="newPassword"
+                            type={showNewPassword ? "text" : "password"}
+                            value={newPassword}
+                            onChange={(e) => setNewPassword(e.target.value)}
+                            placeholder="Masukkan password baru"
+                            className="pl-10 pr-10 border-gray-300 dark:border-gray-600 focus:border-[#005EB8] focus:ring-[#005EB8] dark:bg-gray-800"
+                          />
+                          <button type="button" onClick={() => setShowNewPassword(!showNewPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                            {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                          </button>
+                        </div>
+                        {newPassword && (
+                          <div className="space-y-2">
+                            <div className="flex gap-1">
+                              {[1, 2, 3, 4, 5, 6].map((i) => (
+                                <div key={i} className={`h-1.5 flex-1 rounded-full ${i <= passwordStrength.score ? passwordStrength.color : "bg-gray-200 dark:bg-gray-700"}`} />
+                              ))}
+                            </div>
+                            <p className={`text-xs font-medium ${passwordStrength.score <= 2 ? "text-red-600 dark:text-red-400" : passwordStrength.score <= 4 ? "text-yellow-600 dark:text-yellow-400" : "text-green-600 dark:text-green-400"}`}>
+                              Kekuatan: {passwordStrength.label}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="confirmPassword" className="text-gray-900 dark:text-white">Konfirmasi Password Baru</Label>
+                        <div className="relative">
+                          <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                          <Input
+                            id="confirmPassword"
+                            type={showConfirmPassword ? "text" : "password"}
+                            value={confirmPassword}
+                            onChange={(e) => setConfirmPassword(e.target.value)}
+                            placeholder="Konfirmasi password baru"
+                            className="pl-10 pr-10 border-gray-300 dark:border-gray-600 focus:border-[#005EB8] focus:ring-[#005EB8] dark:bg-gray-800"
+                          />
+                          <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                            {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                          </button>
+                        </div>
+                        {confirmPassword && newPassword !== confirmPassword && (
+                          <p className="text-xs text-red-600 dark:text-red-400 flex items-center gap-1">
+                            <AlertCircle className="h-3 w-3" />
+                            Password tidak cocok
+                          </p>
+                        )}
+                        {confirmPassword && newPassword === confirmPassword && (
+                          <p className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
+                            <CheckCircle className="h-3 w-3" />
+                            Password cocok
+                          </p>
+                        )}
+                      </div>
+
+                      <Button type="submit" disabled={passwordLoading} className="w-full bg-[#005EB8] hover:bg-[#004A93]">
+                        {passwordLoading ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Mengubah Password...
+                          </>
+                        ) : (
+                          <>
+                            <Key className="h-4 w-4 mr-2" />
+                            Ubah Password
+                          </>
+                        )}
+                      </Button>
+                    </form>
+                  </CardContent>
+                </Card>
+              </div>
+
+              <div className="space-y-6">
+                <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
+                  <CardHeader>
+                    <CardTitle className="text-base flex items-center gap-2 text-gray-900 dark:text-white text-xl font-bold">
+                      <Shield className="h-5 w-5 text-[#005EB8]" />
+                      Kriteria Password
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      {passwordCriteria.map((criteria, index) => (
+                        <div key={index} className="flex items-center gap-2">
+                          {criteria.met ? (
+                            <CheckCircle className="h-4 w-4 text-[#008A00]" />
+                          ) : (
+                            <div className="h-4 w-4 rounded-full border-2 border-gray-300 dark:border-gray-600" />
+                          )}
+                          <span className={`text-sm ${criteria.met ? "text-green-600 dark:text-green-400" : "text-gray-500 dark:text-gray-400"}`}>
+                            {criteria.label}
+                          </span>
+                        </div>
+                      ))}
                     </div>
-                  )}
+                  </CardContent>
+                </Card>
+
+                <Card className="rounded-lg border bg-[#005EB8]/5 text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-[#005EB8]">
+                  <CardHeader>
+                    <CardTitle className="text-base flex items-center gap-2 text-gray-900 dark:text-white text-xl font-bold">
+                      <Info className="h-5 w-5 text-[#005EB8]" />
+                      Tips Admin
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <ul className="space-y-2 text-sm text-gray-700 dark:text-gray-300">
+                      <li className="flex items-start gap-2">
+                        <span className="text-[#005EB8]">•</span>
+                        <span>Gunakan password yang berbeda untuk akun admin</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-[#005EB8]">•</span>
+                        <span>Ganti password setiap 30 hari untuk keamanan</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-[#005EB8]">•</span>
+                        <span>Jangan bagikan akses admin ke pihak lain</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-[#005EB8]">•</span>
+                        <span>Aktifkan 2FA jika tersedia</span>
+                      </li>
+                    </ul>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+          )}
+
+          {/* System Settings Tab */}
+          {activeTab === "system" && (
+            <div className="space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900 dark:text-white">Pengaturan Sistem</h2>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Kelola konfigurasi platform</p>
                 </div>
-              </CardContent>
-            </Card>
-          </div>
+              </div>
+
+              {settingsError && (
+                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 flex items-center gap-3">
+                  <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
+                  <p className="text-red-600 dark:text-red-400">{settingsError}</p>
+                </div>
+              )}
+
+              {/* Add New Setting */}
+              <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2 text-gray-900 dark:text-white text-xl font-bold">
+                    <Plus className="h-5 w-5 text-[#005EB8]" />
+                    Tambah Setting Baru
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                    <Input 
+                      placeholder="Key (misal: site_name)" 
+                      value={newSettingKey} 
+                      onChange={(e) => setNewSettingKey(e.target.value)}
+                      className="border-gray-300 dark:border-gray-600 focus:border-[#005EB8] focus:ring-[#005EB8] dark:bg-gray-800"
+                    />
+                    <Input 
+                      placeholder="Value" 
+                      value={newSettingValue} 
+                      onChange={(e) => setNewSettingValue(e.target.value)}
+                      className="border-gray-300 dark:border-gray-600 focus:border-[#005EB8] focus:ring-[#005EB8] dark:bg-gray-800"
+                    />
+                    <Select value={newSettingType} onValueChange={setNewSettingType}>
+                      <SelectTrigger className="border-gray-300 dark:border-gray-600 focus:border-[#005EB8] focus:ring-[#005EB8] dark:bg-gray-800">
+                        <SelectValue placeholder="Type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="string">String</SelectItem>
+                        <SelectItem value="number">Number</SelectItem>
+                        <SelectItem value="boolean">Boolean</SelectItem>
+                        <SelectItem value="json">JSON</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Select value={newSettingCategory} onValueChange={setNewSettingCategory}>
+                      <SelectTrigger className="border-gray-300 dark:border-gray-600 focus:border-[#005EB8] focus:ring-[#005EB8] dark:bg-gray-800">
+                        <SelectValue placeholder="Category" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="general">General</SelectItem>
+                        <SelectItem value="payment">Payment</SelectItem>
+                        <SelectItem value="email">Email</SelectItem>
+                        <SelectItem value="course">Course</SelectItem>
+                        <SelectItem value="user">User</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Button 
+                      onClick={handleAddSetting} 
+                      disabled={addingNew || !newSettingKey.trim() || !newSettingValue.trim()} 
+                      className="bg-[#005EB8] hover:bg-[#004A93]"
+                    >
+                      {addingNew ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <>
+                          <Plus className="h-4 w-4 mr-1" />
+                          Tambah
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Settings by Category */}
+              {settingsLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="h-8 w-8 animate-spin text-[#005EB8]" />
+                </div>
+              ) : Object.keys(groupedSettings).length === 0 ? (
+                <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
+                  <CardContent className="p-12 text-center">
+                    <Database className="h-12 w-12 text-gray-300 dark:text-gray-700 mx-auto mb-4" />
+                    <h3 className="font-semibold text-gray-900 dark:text-white mb-2">Belum Ada Setting</h3>
+                    <p className="text-gray-500 dark:text-gray-400">Tambahkan setting baru di atas</p>
+                  </CardContent>
+                </Card>
+              ) : (
+                Object.entries(groupedSettings).map(([category, categorySettings]) => (
+                  <Card key={category} className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
+                    <CardHeader>
+                      <CardTitle className="text-base flex items-center gap-2 text-gray-900 dark:text-white text-xl font-bold capitalize">
+                        {getCategoryIcon(category)}
+                        {category}
+                        <Badge variant="outline" className="ml-2 bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-300">
+                          {categorySettings.length}
+                        </Badge>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-4">
+                        {categorySettings.map((setting) => (
+                          <div key={setting.id} className="flex flex-col md:flex-row md:items-center gap-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+                            <div className="flex-1">
+                              <p className="font-medium text-gray-900 dark:text-white">{setting.key}</p>
+                              <div className="flex items-center gap-2 mt-1">
+                                <Badge variant="secondary" className="text-xs bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
+                                  {setting.type}
+                                </Badge>
+                                <Badge variant="secondary" className={`text-xs ${setting.is_public ? "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400" : "bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300"}`}>
+                                  {setting.is_public ? "Public" : "Private"}
+                                </Badge>
+                              </div>
+                            </div>
+                            <div className="w-full md:w-64">
+                              <Input
+                                defaultValue={setting.value}
+                                onBlur={(e) => {
+                                  if (e.target.value !== setting.value) {
+                                    handleUpdateSetting(setting, e.target.value);
+                                  }
+                                }}
+                                disabled={savingKey === setting.key}
+                                className="border-gray-300 dark:border-gray-600 focus:border-[#005EB8] focus:ring-[#005EB8] dark:bg-gray-800"
+                              />
+                            </div>
+                            {savingKey === setting.key && (
+                              <Loader2 className="h-4 w-4 animate-spin text-[#005EB8]" />
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))
+              )}
+            </div>
+          )}
         </div>
-      </div>
-    </AdminLayout>
+      </AdminLayout>
     </ProtectedRoute>
   );
 }

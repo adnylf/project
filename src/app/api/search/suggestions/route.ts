@@ -1,44 +1,42 @@
-import { NextRequest, NextResponse } from "next/server";
-import searchService from "@/services/search.service";
-import { successResponse, errorResponse } from "@/utils/response.util";
-import { errorHandler } from "@/middlewares/error.middleware";
-import { corsMiddleware } from "@/middlewares/cors.middleware";
-import { loggingMiddleware } from "@/middlewares/logging.middleware";
-import { HTTP_STATUS } from "@/lib/constants";
+import { NextRequest, NextResponse } from 'next/server';
+import prisma from '@/lib/prisma';
 
-/**
- * GET /api/search/suggestions
- * Get search suggestions for autocomplete
- */
-async function handler(request: NextRequest): Promise<NextResponse> {
+// GET /api/search/suggestions - Get search suggestions
+export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const query = searchParams.get("q") || searchParams.get("query") || "";
-    const limit = parseInt(searchParams.get("limit") || "5");
+    const q = searchParams.get('q');
 
-    if (!query || query.trim().length < 2) {
-      return successResponse(
-        {
-          courses: [],
-          mentors: [],
-          tags: [],
-        },
-        "Query too short for suggestions"
-      );
+    if (!q || q.length < 2) {
+      return NextResponse.json({ suggestions: [] });
     }
 
-    const suggestions = await searchService.getSearchSuggestions(query, limit);
+    const courses = await prisma.course.findMany({
+      where: {
+        status: 'PUBLISHED',
+        title: { contains: q, mode: 'insensitive' },
+      },
+      take: 5,
+      select: { id: true, title: true, slug: true },
+    });
 
-    return successResponse(suggestions, "Suggestions retrieved successfully");
+    const categories = await prisma.category.findMany({
+      where: {
+        is_active: true,
+        name: { contains: q, mode: 'insensitive' },
+      },
+      take: 3,
+      select: { id: true, name: true, slug: true },
+    });
+
+    return NextResponse.json({
+      suggestions: [
+        ...courses.map(c => ({ type: 'course', ...c })),
+        ...categories.map(c => ({ type: 'category', ...c })),
+      ],
+    });
   } catch (error) {
-    if (error instanceof Error) {
-      return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
-    }
-    return errorResponse(
-      "Failed to get suggestions",
-      HTTP_STATUS.INTERNAL_SERVER_ERROR
-    );
+    console.error('Get suggestions error:', error);
+    return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 });
   }
 }
-
-export const GET = errorHandler(loggingMiddleware(corsMiddleware(handler)));

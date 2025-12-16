@@ -1,154 +1,141 @@
-import { NextRequest, NextResponse } from "next/server";
-import materialService from "@/services/material.service";
-import { updateMaterialSchema } from "@/lib/validation";
-import {
-  successResponse,
-  validationErrorResponse,
-  errorResponse,
-  noContentResponse,
-} from "@/utils/response.util";
-import { validateData } from "@/utils/validation.util";
-import { errorHandler } from "@/middlewares/error.middleware";
-import { authMiddleware } from "@/middlewares/auth.middleware";
-import { corsMiddleware } from "@/middlewares/cors.middleware";
-import { loggingMiddleware } from "@/middlewares/logging.middleware";
-import { HTTP_STATUS } from "@/lib/constants";
+import { NextRequest, NextResponse } from 'next/server';
+import prisma from '@/lib/prisma';
+import { getAuthUser, hasRole, unauthorizedResponse } from '@/lib/auth';
+import { updateMaterialSchema } from '@/lib/validation';
+import { UserRole } from '@prisma/client';
 
-async function getHandler(
-  request: NextRequest,
-  context: { params: Promise<{ id: string }> }
-) {
+interface RouteParams {
+  params: { id: string };
+}
+
+// GET /api/materials/[id] - Get material by ID
+export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
-    const { id } = await context.params;
+    const { id } = params;
+    const authUser = getAuthUser(request);
 
-    const material = await materialService.getMaterialById(id);
+    const material = await prisma.material.findUnique({
+      where: { id },
+      include: {
+        section: { include: { course: true } },
+        video: true,
+        resources: true,
+      },
+    });
 
-    return successResponse(material, "Material retrieved successfully");
-  } catch (error) {
-    if (error instanceof Error) {
-      return errorResponse(error.message, HTTP_STATUS.NOT_FOUND);
+    if (!material) {
+      return NextResponse.json({ error: 'Materi tidak ditemukan' }, { status: 404 });
     }
-    return errorResponse(
-      "Failed to get material",
-      HTTP_STATUS.INTERNAL_SERVER_ERROR
-    );
+
+    // Check if user can access full content
+    let canAccess = material.is_free;
+    if (authUser && !canAccess) {
+      const enrollment = await prisma.enrollment.findUnique({
+        where: {
+          user_id_course_id: {
+            user_id: authUser.userId,
+            course_id: material.section.course_id,
+          },
+        },
+      });
+      canAccess = !!enrollment;
+    }
+
+    if (!canAccess) {
+      material.content = null;
+      material.document_url = null;
+    }
+
+    return NextResponse.json({ material, canAccess });
+  } catch (error) {
+    console.error('Get material error:', error);
+    return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 });
   }
 }
 
-async function putHandler(
-  request: NextRequest,
-  user: any,
-  context: { params: Promise<{ id: string }> }
-) {
+// PUT /api/materials/[id] - Update material
+export async function PUT(request: NextRequest, { params }: RouteParams) {
   try {
-    const { id } = await context.params;
+    const authUser = getAuthUser(request);
+    if (!authUser) return unauthorizedResponse();
+
+    const { id } = params;
+
+    const material = await prisma.material.findUnique({
+      where: { id },
+      include: { section: { include: { course: { include: { mentor: true } } } } },
+    });
+
+    if (!material) {
+      return NextResponse.json({ error: 'Materi tidak ditemukan' }, { status: 404 });
+    }
+
+    const isMentor = material.section.course.mentor.user_id === authUser.userId;
+    const isAdmin = hasRole(authUser, [UserRole.ADMIN]);
+    if (!isMentor && !isAdmin) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
 
     const body = await request.json();
-
-    const validation = await validateData(updateMaterialSchema, body);
-
-    if (!validation.success) {
-      return validationErrorResponse(validation.errors);
+    const result = updateMaterialSchema.safeParse(body);
+    if (!result.success) {
+      return NextResponse.json({ error: 'Validasi gagal', details: result.error.flatten().fieldErrors }, { status: 400 });
     }
 
-    const material = await materialService.updateMaterial(
-      id,
-      user.userId,
-      user.role,
-      validation.data
-    );
+    const updatedMaterial = await prisma.material.update({
+      where: { id },
+      data: result.data,
+    });
 
-    return successResponse(material, "Material updated successfully");
+    return NextResponse.json({ message: 'Materi berhasil diperbarui', material: updatedMaterial });
   } catch (error) {
-    if (error instanceof Error) {
-      return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
-    }
-    return errorResponse(
-      "Failed to update material",
-      HTTP_STATUS.INTERNAL_SERVER_ERROR
-    );
+    console.error('Update material error:', error);
+    return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 });
   }
 }
 
-async function deleteHandler(
-  request: NextRequest,
-  user: any,
-  context: { params: Promise<{ id: string }> }
-) {
+// DELETE /api/materials/[id] - Delete material
+export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
-    const { id } = await context.params;
+    const authUser = getAuthUser(request);
+    if (!authUser) return unauthorizedResponse();
 
-    await materialService.deleteMaterial(id, user.userId, user.role);
+    const { id } = params;
 
-    return noContentResponse();
-  } catch (error) {
-    if (error instanceof Error) {
-      return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
+    const material = await prisma.material.findUnique({
+      where: { id },
+      include: { section: { include: { course: { include: { mentor: true } } } } },
+    });
+
+    if (!material) {
+      return NextResponse.json({ error: 'Materi tidak ditemukan' }, { status: 404 });
     }
-    return errorResponse(
-      "Failed to delete material",
-      HTTP_STATUS.INTERNAL_SERVER_ERROR
-    );
+
+    const isMentor = material.section.course.mentor.user_id === authUser.userId;
+    const isAdmin = hasRole(authUser, [UserRole.ADMIN]);
+    if (!isMentor && !isAdmin) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    await prisma.material.delete({ where: { id } });
+
+    // Update section and course totals
+    await prisma.section.update({
+      where: { id: material.section_id },
+      data: { duration: { decrement: material.duration } },
+    });
+
+    await prisma.course.update({
+      where: { id: material.section.course_id },
+      data: {
+        total_lectures: { decrement: 1 },
+        total_duration: { decrement: material.duration },
+      },
+    });
+
+    return NextResponse.json({ message: 'Materi berhasil dihapus' });
+  } catch (error) {
+    console.error('Delete material error:', error);
+    return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 });
   }
-}
-
-const authenticatedPutHandler = async (
-  request: NextRequest,
-  context: { params: Promise<{ id: string }> }
-): Promise<NextResponse> => {
-  const authResult = await authMiddleware(request);
-  if (authResult instanceof NextResponse) {
-    return authResult;
-  }
-  return putHandler(request, authResult, context);
-};
-
-const authenticatedDeleteHandler = async (
-  request: NextRequest,
-  context: { params: Promise<{ id: string }> }
-): Promise<NextResponse> => {
-  const authResult = await authMiddleware(request);
-  if (authResult instanceof NextResponse) {
-    return authResult;
-  }
-  return deleteHandler(request, authResult, context);
-};
-
-export async function GET(
-  req: NextRequest,
-  context: { params: Promise<{ id: string }> }
-): Promise<NextResponse> {
-  return errorHandler(async (request: NextRequest) => {
-    return loggingMiddleware(async (r: NextRequest) => {
-      return corsMiddleware(async (rq: NextRequest) => {
-        return getHandler(rq, context);
-      })(r);
-    })(request);
-  })(req);
-}
-
-export async function PUT(
-  req: NextRequest,
-  context: { params: Promise<{ id: string }> }
-): Promise<NextResponse> {
-  return errorHandler(async (request: NextRequest) => {
-    return loggingMiddleware(async (r: NextRequest) => {
-      return corsMiddleware(async (rq: NextRequest) => {
-        return authenticatedPutHandler(rq, context);
-      })(r);
-    })(request);
-  })(req);
-}
-
-export async function DELETE(
-  req: NextRequest,
-  context: { params: Promise<{ id: string }> }
-): Promise<NextResponse> {
-  return errorHandler(async (request: NextRequest) => {
-    return loggingMiddleware(async (r: NextRequest) => {
-      return corsMiddleware(async (rq: NextRequest) => {
-        return authenticatedDeleteHandler(rq, context);
-      })(r);
-    })(request);
-  })(req);
 }

@@ -1,99 +1,61 @@
-import { NextRequest } from "next/server";
-import videoService from "@/services/video.service";
-import uploadService from "@/services/upload.service";
-import { successResponse, errorResponse } from "@/utils/response.util";
-import { errorHandler } from "@/middlewares/error.middleware";
-import { requireAuth } from "@/middlewares/auth.middleware";
-import { corsMiddleware } from "@/middlewares/cors.middleware";
-import { loggingMiddleware } from "@/middlewares/logging.middleware";
-import { HTTP_STATUS } from "@/lib/constants";
+import { NextRequest, NextResponse } from 'next/server';
+import prisma from '@/lib/prisma';
+import { getAuthUser, hasRole, unauthorizedResponse } from '@/lib/auth';
+import { UserRole } from '@prisma/client';
 
-/**
- * POST /api/videos
- * Upload video file
- */
-async function handler(
-  request: NextRequest,
-  context: { user: { userId: string; email: string; role: string } }
-) {
-  const { user } = context;
-
+// GET /api/videos - List videos (mentor/admin only)
+export async function GET(request: NextRequest) {
   try {
-    // Get file from form data
-    const formData = await request.formData();
-    const file = formData.get("file") as File;
-    const materialId = formData.get("materialId") as string | undefined;
+    const authUser = getAuthUser(request);
+    if (!authUser) return unauthorizedResponse();
 
-    if (!file) {
-      return errorResponse("No file provided", HTTP_STATUS.BAD_REQUEST);
+    const { searchParams } = new URL(request.url);
+    const page = parseInt(searchParams.get('page') || '1');
+    const limit = parseInt(searchParams.get('limit') || '10');
+    const status = searchParams.get('status');
+
+    const skip = (page - 1) * limit;
+    const where: Record<string, unknown> = {};
+
+    // If mentor, only show their videos
+    if (!hasRole(authUser, [UserRole.ADMIN])) {
+      const mentorProfile = await prisma.mentorProfile.findUnique({
+        where: { user_id: authUser.userId },
+        select: { id: true },
+      });
+
+      if (!mentorProfile) {
+        return NextResponse.json({ videos: [], pagination: { page, limit, total: 0, totalPages: 0 } });
+      }
+
+      where.material = { section: { course: { mentor_id: mentorProfile.id } } };
     }
 
-    // Validate file type
-    if (!file.type.startsWith("video/")) {
-      return errorResponse(
-        "Only video files are allowed",
-        HTTP_STATUS.BAD_REQUEST
-      );
-    }
+    if (status) where.status = status;
 
-    // Convert File to Buffer
-    const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
+    const [videos, total] = await Promise.all([
+      prisma.video.findMany({
+        where, skip, take: limit,
+        orderBy: { created_at: 'desc' },
+        include: {
+          material: {
+            select: {
+              id: true, title: true,
+              section: { select: { course: { select: { id: true, title: true } } } },
+            },
+          },
+          qualities: true,
+        },
+      }),
+      prisma.video.count({ where }),
+    ]);
 
-    // Create multer-like file object
-    const multerFile = {
-      fieldname: "file",
-      originalname: file.name,
-      encoding: "7bit",
-      mimetype: file.type,
-      buffer: buffer,
-      size: buffer.length,
-    } as Express.Multer.File;
-
-    // Upload video
-    const uploadResult = await uploadService.uploadVideo(multerFile);
-
-    // Create video record in database
-    const video = await videoService.createVideo(multerFile);
-
-    // Link to material if provided
-    if (materialId) {
-      const materialService = (await import("@/services/material.service"))
-        .default;
-      await materialService.linkVideoToMaterial(
-        materialId,
-        video.id,
-        user.userId,
-        user.role
-      );
-    }
-
-    return successResponse(
-      {
-        id: video.id,
-        filename: video.filename,
-        path: video.path,
-        size: video.size,
-        status: video.status,
-        uploadUrl: uploadResult.url,
-      },
-      "Video uploaded successfully. Processing will start shortly.",
-      HTTP_STATUS.CREATED
-    );
+    return NextResponse.json({
+      videos,
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    });
   } catch (error) {
-    if (error instanceof Error) {
-      return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
-    }
-    return errorResponse(
-      "Failed to upload video",
-      HTTP_STATUS.INTERNAL_SERVER_ERROR
-    );
+    console.error('Get videos error:', error);
+    return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 });
   }
 }
-
-// Apply authentication
-const authenticatedHandler = requireAuth(handler);
-
-export const POST = errorHandler(
-  loggingMiddleware(corsMiddleware(authenticatedHandler))
-);

@@ -1,125 +1,212 @@
-import { NextRequest } from "next/server";
-import reviewService from "@/services/review.service";
-import { createReviewSchema } from "@/lib/validation";
-import {
-  paginatedResponse,
-  successResponse,
-  validationErrorResponse,
-  errorResponse,
-} from "@/utils/response.util";
-import { validateData } from "@/utils/validation.util";
-import { errorHandler } from "@/middlewares/error.middleware";
-import { requireAuth } from "@/middlewares/auth.middleware";
-import { corsMiddleware } from "@/middlewares/cors.middleware";
-import { loggingMiddleware } from "@/middlewares/logging.middleware";
-import { HTTP_STATUS } from "@/lib/constants";
+import { NextRequest, NextResponse } from 'next/server';
+import prisma from '@/lib/prisma';
+import { getAuthUser, unauthorizedResponse } from '@/lib/auth';
+import { createReviewSchema } from '@/lib/validation';
 
-async function getHandler(request: NextRequest) {
+interface RouteParams {
+  params: { id: string };
+}
+
+// GET /api/courses/[id]/reviews - Get course reviews
+export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
-    // Extract course ID from URL
-    const url = new URL(request.url);
-    const pathSegments = url.pathname.split("/");
-    const courseId = pathSegments[pathSegments.length - 2]; // Get ID from /api/courses/[id]/reviews
+    const { id } = params;
+    const { searchParams } = new URL(request.url);
+    const page = parseInt(searchParams.get('page') || '1');
+    const limit = parseInt(searchParams.get('limit') || '10');
+    const sort = searchParams.get('sort') || 'newest';
 
-    if (!courseId) {
-      return errorResponse("Course ID is required", HTTP_STATUS.BAD_REQUEST);
+    const skip = (page - 1) * limit;
+
+    let orderBy: Record<string, string> = {};
+    switch (sort) {
+      case 'helpful':
+        orderBy = { helpful_count: 'desc' };
+        break;
+      case 'rating_high':
+        orderBy = { rating: 'desc' };
+        break;
+      case 'rating_low':
+        orderBy = { rating: 'asc' };
+        break;
+      case 'oldest':
+        orderBy = { created_at: 'asc' };
+        break;
+      case 'newest':
+      default:
+        orderBy = { created_at: 'desc' };
     }
 
-    const { searchParams } = new URL(request.url);
-    const page = parseInt(searchParams.get("page") || "1");
-    const limit = parseInt(searchParams.get("limit") || "10");
-    const sortBy = searchParams.get("sortBy") || "created_at";
-    const sortOrder = (searchParams.get("sortOrder") || "desc") as
-      | "asc"
-      | "desc";
+    const [reviews, total] = await Promise.all([
+      prisma.review.findMany({
+        where: { course_id: id },
+        skip,
+        take: limit,
+        orderBy,
+        include: {
+          user: {
+            select: {
+              id: true,
+              full_name: true,
+              avatar_url: true,
+            },
+          },
+        },
+      }),
+      prisma.review.count({ where: { course_id: id } }),
+    ]);
 
-    const result = await reviewService.getCourseReviews(courseId, {
-      page,
-      limit,
-      sortBy,
-      sortOrder,
+    // Get rating distribution
+    const ratingDistribution = await prisma.review.groupBy({
+      by: ['rating'],
+      where: { course_id: id },
+      _count: { rating: true },
     });
 
-    return paginatedResponse(
-      result.data,
-      {
-        page: result.meta.page,
-        limit: result.meta.limit,
-        total: result.meta.total,
+    const distribution = {
+      1: 0, 2: 0, 3: 0, 4: 0, 5: 0,
+    };
+    ratingDistribution.forEach(item => {
+      distribution[item.rating as keyof typeof distribution] = item._count.rating;
+    });
+
+    return NextResponse.json({
+      reviews,
+      distribution,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
       },
-      "Reviews retrieved successfully"
-    );
+    });
   } catch (error) {
-    if (error instanceof Error) {
-      return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
-    }
-    return errorResponse(
-      "Failed to get reviews",
-      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    console.error('Get reviews error:', error);
+    return NextResponse.json(
+      { error: 'Terjadi kesalahan server' },
+      { status: 500 }
     );
   }
 }
 
-async function postHandler(
-  request: NextRequest,
-  context: { user: { userId: string; email: string; role: string } }
-) {
-  const { user } = context;
-
+// POST /api/courses/[id]/reviews - Create a review
+export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
-    // Extract course ID from URL
-    const url = new URL(request.url);
-    const pathSegments = url.pathname.split("/");
-    const courseId = pathSegments[pathSegments.length - 2]; // Get ID from /api/courses/[id]/reviews
-
-    if (!courseId) {
-      return errorResponse("Course ID is required", HTTP_STATUS.BAD_REQUEST);
+    const authUser = getAuthUser(request);
+    if (!authUser) {
+      return unauthorizedResponse();
     }
 
-    // Parse request body
-    let body;
-    try {
-      body = await request.json();
-    } catch {
-      return errorResponse("Invalid JSON body", HTTP_STATUS.BAD_REQUEST);
+    const { id } = params;
+
+    // Check if user is enrolled
+    const enrollment = await prisma.enrollment.findUnique({
+      where: {
+        user_id_course_id: {
+          user_id: authUser.userId,
+          course_id: id,
+        },
+      },
+    });
+
+    if (!enrollment) {
+      return NextResponse.json(
+        { error: 'Anda harus terdaftar di kursus ini untuk memberikan review' },
+        { status: 403 }
+      );
     }
 
-    const dataWithCourseId = { ...body, courseId };
+    // Check if already reviewed
+    const existingReview = await prisma.review.findUnique({
+      where: {
+        user_id_course_id: {
+          user_id: authUser.userId,
+          course_id: id,
+        },
+      },
+    });
 
-    // Validate input
-    const validation = await validateData(createReviewSchema, dataWithCourseId);
-
-    if (!validation.success) {
-      return validationErrorResponse(validation.errors);
+    if (existingReview) {
+      return NextResponse.json(
+        { error: 'Anda sudah memberikan review untuk kursus ini' },
+        { status: 400 }
+      );
     }
+
+    const body = await request.json();
+    
+    const result = createReviewSchema.safeParse(body);
+    if (!result.success) {
+      return NextResponse.json(
+        { error: 'Validasi gagal', details: result.error.flatten().fieldErrors },
+        { status: 400 }
+      );
+    }
+
+    const data = result.data;
 
     // Create review
-    const review = await reviewService.createReview(
-      user.userId,
-      validation.data
-    );
+    const review = await prisma.review.create({
+      data: {
+        user_id: authUser.userId,
+        course_id: id,
+        rating: data.rating,
+        comment: data.comment,
+        is_anonymous: data.is_anonymous,
+      },
+      include: {
+        user: {
+          select: { id: true, full_name: true, avatar_url: true },
+        },
+      },
+    });
 
-    return successResponse(
-      review,
-      "Review added successfully",
-      HTTP_STATUS.CREATED
+    // Update course average rating
+    const avgResult = await prisma.review.aggregate({
+      where: { course_id: id },
+      _avg: { rating: true },
+      _count: { rating: true },
+    });
+
+    await prisma.course.update({
+      where: { id },
+      data: {
+        average_rating: avgResult._avg.rating || 0,
+        total_reviews: avgResult._count.rating,
+      },
+    });
+
+    // Update mentor average rating
+    const course = await prisma.course.findUnique({
+      where: { id },
+      select: { mentor_id: true },
+    });
+
+    if (course) {
+      const mentorAvg = await prisma.review.aggregate({
+        where: { course: { mentor_id: course.mentor_id } },
+        _avg: { rating: true },
+        _count: { rating: true },
+      });
+
+      await prisma.mentorProfile.update({
+        where: { id: course.mentor_id },
+        data: {
+          average_rating: mentorAvg._avg.rating || 0,
+          total_reviews: mentorAvg._count.rating,
+        },
+      });
+    }
+
+    return NextResponse.json(
+      { message: 'Review berhasil ditambahkan', review },
+      { status: 201 }
     );
   } catch (error) {
-    if (error instanceof Error) {
-      return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
-    }
-    return errorResponse(
-      "Failed to add review",
-      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    console.error('Create review error:', error);
+    return NextResponse.json(
+      { error: 'Terjadi kesalahan server' },
+      { status: 500 }
     );
   }
 }
-
-// Gunakan requireAuth untuk POST handler
-const authenticatedPostHandler = requireAuth(postHandler);
-
-export const GET = errorHandler(loggingMiddleware(corsMiddleware(getHandler)));
-
-export const POST = errorHandler(
-  loggingMiddleware(corsMiddleware(authenticatedPostHandler))
-);

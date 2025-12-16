@@ -1,117 +1,137 @@
-import { NextRequest } from "next/server";
-import sectionService from "@/services/section.service";
-import { createSectionSchema } from "@/lib/validation";
-import {
-  successResponse,
-  validationErrorResponse,
-  errorResponse,
-} from "@/utils/response.util";
-import { validateData } from "@/utils/validation.util";
-import { errorHandler } from "@/middlewares/error.middleware";
-import { requireAuth } from "@/middlewares/auth.middleware";
-import { corsMiddleware } from "@/middlewares/cors.middleware";
-import { loggingMiddleware } from "@/middlewares/logging.middleware";
-import { HTTP_STATUS } from "@/lib/constants";
+import { NextRequest, NextResponse } from 'next/server';
+import prisma from '@/lib/prisma';
+import { getAuthUser, hasRole } from '@/lib/auth';
+import { createSectionSchema } from '@/lib/validation';
+import { UserRole } from '@prisma/client';
 
-/**
- * GET /api/courses/:id/sections
- * Get all sections for a course
- */
-async function getHandler(request: NextRequest) {
+interface RouteParams {
+  params: { id: string };
+}
+
+// GET /api/courses/[id]/sections - Get course sections
+export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
-    // Extract course ID from URL
-    const url = new URL(request.url);
-    const pathSegments = url.pathname.split("/");
-    const courseId = pathSegments[pathSegments.length - 2]; // Get ID from /api/courses/[id]/sections
+    const { id } = params;
 
-    if (!courseId) {
-      return errorResponse("Course ID is required", HTTP_STATUS.BAD_REQUEST);
-    }
+    const sections = await prisma.section.findMany({
+      where: { course_id: id },
+      orderBy: { order: 'asc' },
+      include: {
+        materials: {
+          orderBy: { order: 'asc' },
+          select: {
+            id: true,
+            title: true,
+            description: true,
+            type: true,
+            content: true,
+            video_id: true,
+            document_url: true,
+            youtube_url: true,
+            duration: true,
+            order: true,
+            is_free: true,
+            video: {
+              select: {
+                id: true,
+                status: true,
+                path: true,
+                thumbnail: true,
+              },
+            },
+          },
+        },
+        _count: {
+          select: { materials: true },
+        },
+      },
+    });
 
-    // Get sections
-    const sections = await sectionService.getCourseSections(courseId);
-
-    return successResponse(sections, "Sections retrieved successfully");
+    return NextResponse.json({ sections });
   } catch (error) {
-    if (error instanceof Error) {
-      return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
-    }
-    return errorResponse(
-      "Failed to get sections",
-      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    console.error('Get sections error:', error);
+    return NextResponse.json(
+      { error: 'Terjadi kesalahan server' },
+      { status: 500 }
     );
   }
 }
 
-/**
- * POST /api/courses/:id/sections
- * Create new section for a course
- */
-async function postHandler(
-  request: NextRequest,
-  context: { user: { userId: string; email: string; role: string } }
-) {
-  const { user } = context;
-
+// POST /api/courses/[id]/sections - Create a new section
+export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
-    // Extract course ID from URL
-    const url = new URL(request.url);
-    const pathSegments = url.pathname.split("/");
-    const courseId = pathSegments[pathSegments.length - 2]; // Get ID from /api/courses/[id]/sections
-
-    if (!courseId) {
-      return errorResponse("Course ID is required", HTTP_STATUS.BAD_REQUEST);
+    const authUser = getAuthUser(request);
+    if (!authUser) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Parse request body
-    let body;
-    try {
-      body = await request.json();
-    } catch {
-      return errorResponse("Invalid JSON body", HTTP_STATUS.BAD_REQUEST);
+    const { id } = params;
+
+    // Find course and check ownership
+    const course = await prisma.course.findUnique({
+      where: { id },
+      include: { mentor: { select: { user_id: true } } },
+    });
+
+    if (!course) {
+      return NextResponse.json(
+        { error: 'Kursus tidak ditemukan' },
+        { status: 404 }
+      );
     }
 
-    // Add courseId to body
-    const dataWithCourseId = { ...body, courseId };
+    const isMentor = course.mentor.user_id === authUser.userId;
+    const isAdmin = hasRole(authUser, [UserRole.ADMIN]);
 
-    // Validate input
-    const validation = await validateData(
-      createSectionSchema,
-      dataWithCourseId
-    );
-
-    if (!validation.success) {
-      return validationErrorResponse(validation.errors);
+    if (!isMentor && !isAdmin) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    // Create section
-    const section = await sectionService.createSection(
-      user.userId,
-      user.role,
-      validation.data
-    );
+    const body = await request.json();
+    
+    const result = createSectionSchema.safeParse(body);
+    if (!result.success) {
+      return NextResponse.json(
+        { error: 'Validasi gagal', details: result.error.flatten().fieldErrors },
+        { status: 400 }
+      );
+    }
 
-    return successResponse(
-      section,
-      "Section created successfully",
-      HTTP_STATUS.CREATED
+    const data = result.data;
+
+    // Get max order if not provided
+    let order = data.order;
+    if (order === undefined) {
+      const maxSection = await prisma.section.findFirst({
+        where: { course_id: id },
+        orderBy: { order: 'desc' },
+        select: { order: true },
+      });
+      order = (maxSection?.order ?? -1) + 1;
+    }
+
+    const section = await prisma.section.create({
+      data: {
+        course_id: id,
+        title: data.title,
+        description: data.description,
+        order,
+      },
+      include: {
+        materials: true,
+      },
+    });
+
+    return NextResponse.json(
+      { message: 'Section berhasil dibuat', section },
+      { status: 201 }
     );
   } catch (error) {
-    if (error instanceof Error) {
-      return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
-    }
-    return errorResponse(
-      "Failed to create section",
-      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    console.error('Create section error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Terjadi kesalahan server';
+    return NextResponse.json(
+      { error: errorMessage },
+      { status: 500 }
     );
   }
 }
-
-// Gunakan requireAuth untuk POST handler
-const authenticatedPostHandler = requireAuth(postHandler);
-
-export const GET = errorHandler(loggingMiddleware(corsMiddleware(getHandler)));
-
-export const POST = errorHandler(
-  loggingMiddleware(corsMiddleware(authenticatedPostHandler))
-);

@@ -1,124 +1,63 @@
-import { NextRequest } from "next/server";
-import uploadService from "@/services/upload.service";
-import userService from "@/services/user.service";
-import {
-  successResponse,
-  errorResponse,
-  noContentResponse,
-} from "@/utils/response.util";
-import { errorHandler } from "@/middlewares/error.middleware";
-import { requireAuth } from "@/middlewares/auth.middleware";
-import { corsMiddleware } from "@/middlewares/cors.middleware";
-import { loggingMiddleware } from "@/middlewares/logging.middleware";
-import { HTTP_STATUS } from "@/lib/constants";
-import authService from "@/services/auth.service";
+import { NextRequest, NextResponse } from 'next/server';
+import prisma from '@/lib/prisma';
+import { getAuthUser, unauthorizedResponse } from '@/lib/auth';
+import { writeFile, mkdir } from 'fs/promises';
+import path from 'path';
 
-/**
- * PUT /api/users/profile/picture
- * Upload profile picture
- */
-async function putHandler(
-  request: NextRequest,
-  context: { user: { userId: string; email: string; role: string } }
-) {
-  const { user } = context;
-
+// POST /api/users/profile/picture - Upload profile picture
+export async function POST(request: NextRequest) {
   try {
-    // Get file from form data
+    const authUser = getAuthUser(request);
+    if (!authUser) return unauthorizedResponse();
+
     const formData = await request.formData();
-    const file = formData.get("file") as File;
+    const file = formData.get('file') as File | null;
 
     if (!file) {
-      return errorResponse("No file provided", HTTP_STATUS.BAD_REQUEST);
+      return NextResponse.json({ error: 'File wajib diisi' }, { status: 400 });
     }
 
-    // Convert File to Buffer
+    // Validate file type
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      return NextResponse.json({ error: 'Format file tidak didukung. Gunakan JPG, PNG, GIF, atau WebP' }, { status: 400 });
+    }
+
+    // Validate file size (max 5MB)
+    const maxSize = 5 * 1024 * 1024;
+    if (file.size > maxSize) {
+      return NextResponse.json({ error: 'Ukuran file maksimal 5MB' }, { status: 400 });
+    }
+
+    // Create upload directory
+    const uploadDir = path.join(process.cwd(), 'uploads', 'images', 'profiles');
+    await mkdir(uploadDir, { recursive: true });
+
+    // Generate filename
+    const ext = file.name.split('.').pop();
+    const filename = `profile_${authUser.userId}_${Date.now()}.${ext}`;
+    const filepath = path.join(uploadDir, filename);
+
+    // Save file
     const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
+    const uint8Array = new Uint8Array(bytes);
+    await writeFile(filepath, uint8Array);
 
-    // Create multer-like file object
-    const multerFile = {
-      fieldname: "file",
-      originalname: file.name,
-      encoding: "7bit",
-      mimetype: file.type,
-      buffer: buffer,
-      size: buffer.length,
-    } as Express.Multer.File;
+    const avatarUrl = `/api/uploads/images/profiles/${filename}`;
 
-    // Upload profile picture
-    const uploadResult = await uploadService.uploadProfilePicture(multerFile);
-
-    // Update user profile picture
-    await userService.updateUser(user.userId, {
-      avatar_url: uploadResult.url,
+    // Update user avatar
+    const user = await prisma.user.update({
+      where: { id: authUser.userId },
+      data: { avatar_url: avatarUrl },
+      select: { id: true, avatar_url: true },
     });
 
-    return successResponse(
-      {
-        url: uploadResult.url,
-        filename: uploadResult.filename,
-      },
-      "Profile picture uploaded successfully"
-    );
-  } catch (error) {
-    if (error instanceof Error) {
-      return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
-    }
-    return errorResponse(
-      "Failed to upload profile picture",
-      HTTP_STATUS.INTERNAL_SERVER_ERROR
-    );
-  }
-}
-
-/**
- * DELETE /api/users/profile/picture
- * Delete profile picture
- */
-async function deleteHandler(
-  request: NextRequest,
-  context: { user: { userId: string; email: string; role: string } }
-) {
-  const { user } = context;
-
-  try {
-    // Get current user to check if has profile picture
-    const currentUser = await authService.getCurrentUser(user.userId);
-
-    if (currentUser.avatar_url) {
-      // Extract filename from URL
-      const filename = currentUser.avatar_url.split("/").pop();
-      if (filename) {
-        const filePath = `images/profiles/${filename}`;
-        await uploadService.deleteFile(filePath);
-      }
-    }
-
-    // Remove profile picture from database
-    await userService.updateUser(user.userId, {
-      avatar_url: null,
+    return NextResponse.json({
+      message: 'Foto profil berhasil diupload',
+      avatar_url: user.avatar_url,
     });
-
-    return noContentResponse();
   } catch (error) {
-    if (error instanceof Error) {
-      return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
-    }
-    return errorResponse(
-      "Failed to delete profile picture",
-      HTTP_STATUS.INTERNAL_SERVER_ERROR
-    );
+    console.error('Upload profile picture error:', error);
+    return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 });
   }
 }
-
-// Apply authentication
-const authenticatedPutHandler = requireAuth(putHandler);
-const authenticatedDeleteHandler = requireAuth(deleteHandler);
-
-export const PUT = errorHandler(
-  loggingMiddleware(corsMiddleware(authenticatedPutHandler))
-);
-export const DELETE = errorHandler(
-  loggingMiddleware(corsMiddleware(authenticatedDeleteHandler))
-);

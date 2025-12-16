@@ -1,44 +1,85 @@
-import { NextRequest } from "next/server";
-import authService from "@/services/auth.service";
-import { successResponse, errorResponse } from "@/utils/response.util";
-import { errorHandler } from "@/middlewares/error.middleware";
-import { requireAuth } from "@/middlewares/auth.middleware";
-import { corsMiddleware } from "@/middlewares/cors.middleware";
-import { loggingMiddleware } from "@/middlewares/logging.middleware";
-import { HTTP_STATUS } from "@/lib/constants";
+import { NextRequest, NextResponse } from 'next/server';
+import prisma from '@/lib/prisma';
+import { getAuthUser, unauthorizedResponse } from '@/lib/auth';
 
-async function handler(
-  request: NextRequest,
-  context: { user: { userId: string; email: string; role: string } }
-) {
+export async function GET(request: NextRequest) {
   try {
-    const { user } = context;
-    console.log("🔍 Getting user data for:", user.userId);
+    const authUser = getAuthUser(request);
 
-    const userData = await authService.getCurrentUser(user.userId);
-
-    if (!userData) {
-      return errorResponse("User not found", HTTP_STATUS.NOT_FOUND);
+    if (!authUser) {
+      return unauthorizedResponse('Token tidak valid atau sudah kadaluarsa');
     }
 
-    return successResponse(userData, "User data retrieved successfully");
+    // Get full user data
+    const user = await prisma.user.findUnique({
+      where: { id: authUser.userId },
+      select: {
+        id: true,
+        email: true,
+        full_name: true,
+        role: true,
+        status: true,
+        disability_type: true,
+        avatar_url: true,
+        bio: true,
+        phone: true,
+        date_of_birth: true,
+        address: true,
+        city: true,
+        email_verified: true,
+        email_verified_at: true,
+        last_login: true,
+        created_at: true,
+        updated_at: true,
+        mentor_profile: {
+          select: {
+            id: true,
+            expertise: true,
+            experience: true,
+            education: true,
+            bio: true,
+            headline: true,
+            website: true,
+            linkedin: true,
+            twitter: true,
+            portfolio: true,
+            status: true,
+            approved_at: true,
+            total_students: true,
+            total_courses: true,
+            average_rating: true,
+            total_reviews: true,
+            total_revenue: true,
+          },
+        },
+        _count: {
+          select: {
+            enrollments: true,
+            certificates: true,
+            reviews: true,
+            wishlist: true,
+          },
+        },
+      },
+    });
+
+    if (!user) {
+      return unauthorizedResponse('User tidak ditemukan');
+    }
+
+    if (user.status === 'SUSPENDED') {
+      return NextResponse.json(
+        { error: 'Akun Anda telah dinonaktifkan' },
+        { status: 403 }
+      );
+    }
+
+    return NextResponse.json({ user });
   } catch (error) {
-    console.error("❌ Error in /api/auth/me:", error);
-    if (error instanceof Error) {
-      if (error.message === "User not found") {
-        return errorResponse(error.message, HTTP_STATUS.NOT_FOUND);
-      }
-      return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
-    }
-    return errorResponse(
-      "Failed to get user data",
-      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    console.error('Get me error:', error);
+    return NextResponse.json(
+      { error: 'Terjadi kesalahan server' },
+      { status: 500 }
     );
   }
 }
-
-const authenticatedHandler = requireAuth(handler);
-
-export const GET = errorHandler(
-  loggingMiddleware(corsMiddleware(authenticatedHandler))
-);

@@ -1,52 +1,32 @@
-import { NextRequest, NextResponse } from "next/server";
-import reviewService from "@/services/review.service";
-import { successResponse, errorResponse } from "@/utils/response.util";
-import { errorHandler } from "@/middlewares/error.middleware";
-import { corsMiddleware } from "@/middlewares/cors.middleware";
-import { loggingMiddleware } from "@/middlewares/logging.middleware";
-import { HTTP_STATUS } from "@/lib/constants";
+import { NextRequest, NextResponse } from 'next/server';
+import prisma from '@/lib/prisma';
+import { getAuthUser, unauthorizedResponse } from '@/lib/auth';
 
-/**
- * POST /api/reviews/:id/helpful
- * Mark review as helpful
- */
-async function handler(
-  request: NextRequest,
-  context: { params: Promise<{ id: string }> }
-) {
-  try {
-    const { id } = await context.params;
-
-    const review = await reviewService.markHelpful(id);
-
-    return successResponse(
-      {
-        reviewId: review.id,
-        helpfulCount: review.helpfulCount,
-      },
-      "Marked as helpful"
-    );
-  } catch (error) {
-    if (error instanceof Error) {
-      return errorResponse(error.message, HTTP_STATUS.NOT_FOUND);
-    }
-    return errorResponse(
-      "Failed to mark as helpful",
-      HTTP_STATUS.INTERNAL_SERVER_ERROR
-    );
-  }
+interface RouteParams {
+  params: { id: string };
 }
 
-// Properly typed export
-export async function POST(
-  request: NextRequest,
-  context: { params: Promise<{ id: string }> }
-): Promise<NextResponse> {
-  return errorHandler(async (req: NextRequest) => {
-    return loggingMiddleware(async (r: NextRequest) => {
-      return corsMiddleware(async (rq: NextRequest) => {
-        return handler(rq, context);
-      })(r);
-    })(req);
-  })(request);
+// POST /api/reviews/[id]/helpful - Mark review as helpful
+export async function POST(request: NextRequest, { params }: RouteParams) {
+  try {
+    const authUser = getAuthUser(request);
+    if (!authUser) return unauthorizedResponse();
+
+    const { id } = params;
+
+    const review = await prisma.review.findUnique({ where: { id } });
+    if (!review) {
+      return NextResponse.json({ error: 'Review tidak ditemukan' }, { status: 404 });
+    }
+
+    const updatedReview = await prisma.review.update({
+      where: { id },
+      data: { helpful_count: { increment: 1 } },
+    });
+
+    return NextResponse.json({ message: 'Terima kasih atas feedback Anda', review: updatedReview });
+  } catch (error) {
+    console.error('Helpful review error:', error);
+    return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 });
+  }
 }

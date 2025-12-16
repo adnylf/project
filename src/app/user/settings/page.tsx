@@ -1,618 +1,397 @@
 "use client";
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation"; // Add this import
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+
+import { useState, useEffect, useCallback } from "react";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import { Bell, Key, CheckCircle, Loader2, AlertCircle } from "lucide-react";
+import {
+  Settings,
+  Key,
+  Loader2,
+  AlertCircle,
+  CheckCircle,
+  Eye,
+  EyeOff,
+  Shield,
+  Lock,
+  Info,
+  Sparkles,
+  Award,
+  Bell,
+  ShieldCheck,
+} from "lucide-react";
 import UserLayout from "@/components/user/user-layout";
-import SweetAlert, { AlertType } from "@/components/ui/sweet-alert";
-import ProtectedRoute from "@/components/ui/protected-route";
+import ProtectedRoute from "@/components/auth/protected-route";
+
+const API_BASE_URL = "http://localhost:3000/api";
+
+interface PasswordStrength {
+  score: number;
+  label: string;
+  color: string;
+}
+
+const checkPasswordStrength = (password: string): PasswordStrength => {
+  let score = 0;
+  if (password.length >= 8) score++;
+  if (password.length >= 12) score++;
+  if (/[a-z]/.test(password)) score++;
+  if (/[A-Z]/.test(password)) score++;
+  if (/[0-9]/.test(password)) score++;
+  if (/[^a-zA-Z0-9]/.test(password)) score++;
+
+  if (score <= 2) return { score, label: "Lemah", color: "bg-red-500" };
+  if (score <= 4) return { score, label: "Sedang", color: "bg-yellow-500" };
+  return { score, label: "Kuat", color: "bg-green-500" };
+};
+
 export default function UserSettings() {
-  const [notificationSettings, setNotificationSettings] = useState({
-    emailNotifications: true,
-    courseUpdates: true,
-    promotions: false,
-    weeklyDigest: true,
-    assignmentReminders: true,
-    certificateAlerts: true,
-  });
-  const [passwordData, setPasswordData] = useState({
-    currentPassword: "",
-    newPassword: "",
-    confirmPassword: "",
-  });
-  const [passwordErrors, setPasswordErrors] = useState({
-    currentPassword: "",
-    newPassword: "",
-    confirmPassword: "",
-    general: "",
-  });
-  const [isLoading, setIsLoading] = useState(false);
-  const [showAlert, setShowAlert] = useState(false);
-  const [alertConfig, setAlertConfig] = useState<{
-    type: AlertType;
-    title: string;
-    message: string;
-  }>({
-    type: "success",
-    title: "",
-    message: "",
-  });
-  const router = useRouter(); // Initialize router here
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [passwordStrength, setPasswordStrength] = useState<PasswordStrength>({ score: 0, label: "", color: "" });
+
+  const getAuthToken = useCallback(() => typeof window !== "undefined" ? localStorage.getItem("token") || localStorage.getItem("accessToken") : null, []);
 
   useEffect(() => {
-    // Validate passwords whenever they change
-    validatePasswords();
-  }, [
-    passwordData.newPassword,
-    passwordData.confirmPassword,
-    passwordData.currentPassword,
-  ]);
-
-  const validatePasswords = () => {
-    const errors = {
-      currentPassword: "",
-      newPassword: "",
-      confirmPassword: "",
-      general: "",
-    };
-    // Validate new password criteria
-    if (passwordData.newPassword) {
-      const criteria = [
-        {
-          test: passwordData.newPassword.length >= 8,
-          message: "Minimal 8 karakter",
-        },
-        {
-          test: /[A-Z]/.test(passwordData.newPassword),
-          message: "Huruf kapital",
-        },
-        {
-          test: /[a-z]/.test(passwordData.newPassword),
-          message: "Huruf kecil",
-        },
-        { test: /[0-9]/.test(passwordData.newPassword), message: "Angka" },
-        {
-          test: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(
-            passwordData.newPassword
-          ),
-          message: "Simbol",
-        },
-      ];
-      const failedCriteria = criteria.filter((c) => !c.test);
-      if (failedCriteria.length > 0) {
-        errors.newPassword = `Password tidak memenuhi kriteria (${failedCriteria
-          .map((c) => c.message)
-          .join(", ")})`;
-      }
+    if (newPassword) {
+      setPasswordStrength(checkPasswordStrength(newPassword));
+    } else {
+      setPasswordStrength({ score: 0, label: "", color: "" });
     }
-    // Check if new password matches confirmation
-    if (passwordData.newPassword && passwordData.confirmPassword) {
-      if (passwordData.newPassword !== passwordData.confirmPassword) {
-        errors.confirmPassword = "Password baru dan konfirmasi tidak cocok";
-      }
-    }
-    // Check if old and new password are the same
-    if (passwordData.currentPassword && passwordData.newPassword) {
-      if (passwordData.currentPassword === passwordData.newPassword) {
-        errors.general = "Password lama dan baru tidak boleh sama";
-      }
-    }
-    setPasswordErrors(errors);
-    return !errors.general && !errors.newPassword && !errors.confirmPassword;
-  };
+  }, [newPassword]);
 
-  const handleNotificationChange = (key: string, value: boolean) => {
-    setNotificationSettings((prev) => ({
-      ...prev,
-      [key]: value,
-    }));
-  };
+  const passwordCriteria = [
+    { label: "Minimal 8 karakter", met: newPassword.length >= 8 },
+    { label: "Huruf kecil (a-z)", met: /[a-z]/.test(newPassword) },
+    { label: "Huruf besar (A-Z)", met: /[A-Z]/.test(newPassword) },
+    { label: "Angka (0-9)", met: /[0-9]/.test(newPassword) },
+    { label: "Simbol (!@#$%)", met: /[^a-zA-Z0-9]/.test(newPassword) },
+  ];
 
-  const handlePasswordChange = async () => {
-    // Reset general error
-    setPasswordErrors((prev) => ({ ...prev, general: "" }));
-    // Validate form
-    if (!validatePasswords()) {
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setSuccess(null);
+
+    if (!currentPassword.trim()) {
+      setError("Password lama harus diisi");
       return;
     }
-    // Validate current password is filled
-    if (!passwordData.currentPassword.trim()) {
-      setPasswordErrors((prev) => ({
-        ...prev,
-        currentPassword: "Password lama harus diisi",
-      }));
+    if (!newPassword.trim()) {
+      setError("Password baru harus diisi");
       return;
     }
-    if (!passwordData.newPassword.trim()) {
-      setPasswordErrors((prev) => ({
-        ...prev,
-        newPassword: "Password baru harus diisi",
-      }));
+    if (newPassword.length < 8) {
+      setError("Password baru minimal 8 karakter");
       return;
     }
-    setIsLoading(true);
+    if (newPassword !== confirmPassword) {
+      setError("Konfirmasi password tidak cocok");
+      return;
+    }
+    if (currentPassword === newPassword) {
+      setError("Password baru tidak boleh sama dengan password lama");
+      return;
+    }
+
     try {
-      // Get token from localStorage or cookies
-      let token = localStorage.getItem("accessToken");
-
-      // Fallback to cookie if not found in localStorage
+      setLoading(true);
+      const token = getAuthToken();
       if (!token) {
-        const cookieMatch = document.cookie.match(
-          /(?:^|;)\s*accessToken\s*=\s*([^;]+)/
-        );
-        if (cookieMatch && cookieMatch[1]) {
-          token = decodeURIComponent(cookieMatch[1]);
-        }
+        setError("Silakan login terlebih dahulu");
+        return;
       }
 
-      if (!token) {
-        throw new Error("Token tidak ditemukan. Silakan login ulang.");
-      }
-
-      const response = await fetch(
-        "http://localhost:3000/api/auth/change-password",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            currentPassword: passwordData.currentPassword,
-            newPassword: passwordData.newPassword,
-          }),
-        }
-      );
+      const response = await fetch(`${API_BASE_URL}/auth/change-password`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          current_password: currentPassword,
+          new_password: newPassword,
+        }),
+      });
 
       const data = await response.json();
 
       if (!response.ok) {
-        let errorMessage = "Terjadi kesalahan saat mengubah password";
-        // Map specific error messages
-        if (
-          data.message?.includes("Current password is incorrect") ||
-          data.error?.includes("Current password is incorrect")
-        ) {
-          errorMessage = "Password lama salah";
-          setPasswordErrors((prev) => ({
-            ...prev,
-            currentPassword: errorMessage,
-          }));
-        } else if (
-          data.message?.includes(
-            "Password must be at least 8 characters long"
-          ) ||
-          data.error?.includes("Password must be at least 8 characters long")
-        ) {
-          errorMessage = "Password baru tidak memenuhi kriteria keamanan";
-          setPasswordErrors((prev) => ({ ...prev, newPassword: errorMessage }));
-        } else if (
-          data.message?.includes("User not found") ||
-          data.error?.includes("User not found")
-        ) {
-          errorMessage = "Akun tidak ditemukan";
-        } else if (
-          data.message?.includes(
-            "Current password and new password are required"
-          ) ||
-          data.error?.includes("Current password and new password are required")
-        ) {
-          if (!passwordData.currentPassword) {
-            setPasswordErrors((prev) => ({
-              ...prev,
-              currentPassword: "Password lama harus diisi",
-            }));
-          }
-          if (!passwordData.newPassword) {
-            setPasswordErrors((prev) => ({
-              ...prev,
-              newPassword: "Password baru harus diisi",
-            }));
-          }
-        } else {
-          // Try to get more specific error from the API response
-          errorMessage =
-            data.message ||
-            data.error ||
-            "Terjadi kesalahan saat mengubah password";
-          setPasswordErrors((prev) => ({ ...prev, general: errorMessage }));
-        }
-        throw new Error(errorMessage);
+        throw new Error(data.error || "Gagal mengubah password");
       }
 
-      // Show success notification
-      showSweetAlert(
-        "success",
-        "Password Berhasil Diubah!",
-        "Password Anda telah berhasil diubah."
-      );
-
-      // Reset form
-      setPasswordData({
-        currentPassword: "",
-        newPassword: "",
-        confirmPassword: "",
-      });
-
-      // Clear errors
-      setPasswordErrors({
-        currentPassword: "",
-        newPassword: "",
-        confirmPassword: "",
-        general: "",
-      });
+      setSuccess("Password berhasil diubah");
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setTimeout(() => setSuccess(null), 5000);
     } catch (err) {
-      console.error("Password change failed:", err);
-      // Type-safe error handling
-      let errorMessage = "Terjadi kesalahan saat mengubah password";
-      if (err instanceof Error) {
-        errorMessage = err.message;
-      } else if (typeof err === "string") {
-        errorMessage = err;
-      } else if (typeof err === "object" && err !== null && "message" in err) {
-        errorMessage = String(err.message);
-      }
-
-      // Only show alert if it's not a field-specific error
-      if (
-        !passwordErrors.currentPassword &&
-        !passwordErrors.newPassword &&
-        !passwordErrors.confirmPassword &&
-        !passwordErrors.general
-      ) {
-        showSweetAlert("error", "Gagal Mengubah Password", errorMessage);
-      }
-
-      // If token is invalid/expired, clear it and redirect to login
-      if (
-        errorMessage.includes("Token tidak ditemukan") ||
-        errorMessage.includes("invalid token") ||
-        errorMessage.includes("Token expired")
-      ) {
-        localStorage.removeItem("accessToken");
-        localStorage.removeItem("refreshToken");
-        document.cookie = "accessToken=; path=/; max-age=0";
-        document.cookie = "refreshToken=; path=/; max-age=0";
-        showSweetAlert(
-          "error",
-          "Sesi Habis",
-          "Anda akan dialihkan ke halaman login"
-        );
-        setTimeout(() => {
-          router.push("/login");
-        }, 3000);
-      }
+      setError(err instanceof Error ? err.message : "Gagal mengubah password");
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
-  };
-
-  const handleSaveSettings = () => {
-    console.log("Saving settings...");
-    // Implement notification settings save logic here
-  };
-
-  const showSweetAlert = (type: AlertType, title: string, message: string) => {
-    setAlertConfig({ type, title, message });
-    setShowAlert(true);
   };
 
   return (
     <ProtectedRoute allowedRoles={["STUDENT"]}>
       <UserLayout>
         <div className="space-y-8">
-          <div className="animate-fadeIn">
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-              Pengaturan
-            </h1>
-            <p className="text-gray-600 dark:text-gray-400">
-              Kelola preferensi akun dan keamanan Anda
-            </p>
-          </div>
-          <div className="grid lg:grid-cols-2 gap-8">
-            {/* Card Notifikasi */}
-            <div className="flex">
-              <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 animate-scaleIn flex-1 flex flex-col">
-                <CardHeader>
-                  <div className="flex items-center gap-2">
-                    <Bell className="h-5 w-5 text-[#005EB8]" />
-                    <CardTitle className="text-xl font-bold">
-                      Notifikasi
-                    </CardTitle>
-                  </div>
-                  <CardDescription>
-                    Atur preferensi notifikasi Anda
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6 flex-1 flex flex-col">
-                  <div className="space-y-6 flex-1">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <Label className="font-medium">Email Notifikasi</Label>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
-                          Terima notifikasi melalui email
-                        </p>
-                      </div>
-                      <Switch
-                        checked={notificationSettings.emailNotifications}
-                        onCheckedChange={(value) =>
-                          handleNotificationChange("emailNotifications", value)
-                        }
-                      />
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <Label className="font-medium">Update Kursus</Label>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
-                          Notifikasi materi baru
-                        </p>
-                      </div>
-                      <Switch
-                        checked={notificationSettings.courseUpdates}
-                        onCheckedChange={(value) =>
-                          handleNotificationChange("courseUpdates", value)
-                        }
-                      />
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <Label className="font-medium">
-                          Promosi & Penawaran
-                        </Label>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
-                          Info promo dan diskon
-                        </p>
-                      </div>
-                      <Switch
-                        checked={notificationSettings.promotions}
-                        onCheckedChange={(value) =>
-                          handleNotificationChange("promotions", value)
-                        }
-                      />
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <Label className="font-medium">
-                          Ringkasan Mingguan
-                        </Label>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
-                          Laporan progress mingguan
-                        </p>
-                      </div>
-                      <Switch
-                        checked={notificationSettings.weeklyDigest}
-                        onCheckedChange={(value) =>
-                          handleNotificationChange("weeklyDigest", value)
-                        }
-                      />
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <Label className="font-medium">Pengingat Tugas</Label>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
-                          Reminder deadline tugas
-                        </p>
-                      </div>
-                      <Switch
-                        checked={notificationSettings.assignmentReminders}
-                        onCheckedChange={(value) =>
-                          handleNotificationChange("assignmentReminders", value)
-                        }
-                      />
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <Label className="font-medium">Alert Sertifikat</Label>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
-                          Notifikasi sertifikat siap
-                        </p>
-                      </div>
-                      <Switch
-                        checked={notificationSettings.certificateAlerts}
-                        onCheckedChange={(value) =>
-                          handleNotificationChange("certificateAlerts", value)
-                        }
-                      />
-                    </div>
-                  </div>
-                  <Button
-                    onClick={handleSaveSettings}
-                    className="w-full bg-[#005EB8] hover:bg-[#004A93] mt-auto"
-                  >
-                    <CheckCircle className="h-4 w-4 mr-2" />
-                    Simpan Notifikasi
-                  </Button>
-                </CardContent>
-              </Card>
+          {/* Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 animate-fadeIn">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-3">
+                <Settings className="h-8 w-8 text-[#005EB8]" />
+                Pengaturan
+              </h1>
+              <p className="text-gray-600 dark:text-gray-400">Kelola keamanan dan preferensi akun Anda</p>
             </div>
-            {/* Card Keamanan */}
-            <div className="flex">
-              <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 animate-scaleIn delay-100 flex-1 flex flex-col">
+          </div>
+
+          <div className="grid lg:grid-cols-3 gap-6">
+            {/* Password Change Form */}
+            <div className="lg:col-span-2">
+              <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 animate-scaleIn">
                 <CardHeader>
-                  <div className="flex items-center gap-2">
+                  <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-white text-xl font-bold">
                     <Key className="h-5 w-5 text-[#005EB8]" />
-                    <CardTitle className="text-xl font-bold">
-                      Keamanan
-                    </CardTitle>
-                  </div>
-                  <CardDescription>
-                    Ubah password dan tingkatkan keamanan akun
-                  </CardDescription>
+                    Ubah Password
+                  </CardTitle>
+                  <CardDescription className="text-gray-600 dark:text-gray-400">Pastikan password baru Anda kuat dan mudah diingat</CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-6 flex-1 flex flex-col">
-                  <div className="space-y-6 flex-1">
+                <CardContent>
+                  <form onSubmit={handleChangePassword} className="space-y-6">
+                    {/* Alerts */}
+                    {error && (
+                      <Card className="rounded-lg border bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800">
+                        <CardContent className="p-4 flex items-center gap-3">
+                          <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0" />
+                          <p className="text-red-600 dark:text-red-400 text-sm">{error}</p>
+                        </CardContent>
+                      </Card>
+                    )}
+                    {success && (
+                      <Card className="rounded-lg border bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800">
+                        <CardContent className="p-4 flex items-center gap-3">
+                          <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400 flex-shrink-0" />
+                          <p className="text-green-600 dark:text-green-400 text-sm">{success}</p>
+                        </CardContent>
+                      </Card>
+                    )}
+
+                    {/* Current Password */}
                     <div className="space-y-2">
-                      <Label htmlFor="currentPassword">Password Saat Ini</Label>
-                      <Input
-                        id="currentPassword"
-                        type="password"
-                        value={passwordData.currentPassword}
-                        onChange={(e) =>
-                          setPasswordData({
-                            ...passwordData,
-                            currentPassword: e.target.value,
-                          })
-                        }
-                        onBlur={() => {
-                          if (!passwordData.currentPassword.trim()) {
-                            setPasswordErrors((prev) => ({
-                              ...prev,
-                              currentPassword: "Password lama harus diisi",
-                            }));
-                          } else {
-                            setPasswordErrors((prev) => ({
-                              ...prev,
-                              currentPassword: "",
-                            }));
-                          }
-                        }}
-                        placeholder="Masukkan password saat ini"
-                        className={
-                          passwordErrors.currentPassword ? "border-red-500" : ""
-                        }
-                      />
-                      {passwordErrors.currentPassword && (
-                        <p className="text-red-500 text-xs mt-1 flex items-center gap-1">
-                          <AlertCircle className="h-3 w-3" />
-                          {passwordErrors.currentPassword}
-                        </p>
-                      )}
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="newPassword">Password Baru</Label>
-                      <Input
-                        id="newPassword"
-                        type="password"
-                        value={passwordData.newPassword}
-                        onChange={(e) =>
-                          setPasswordData({
-                            ...passwordData,
-                            newPassword: e.target.value,
-                          })
-                        }
-                        onBlur={() => {
-                          if (!passwordData.newPassword.trim()) {
-                            setPasswordErrors((prev) => ({
-                              ...prev,
-                              newPassword: "Password baru harus diisi",
-                            }));
-                          }
-                        }}
-                        placeholder="Masukkan password baru"
-                        className={
-                          passwordErrors.newPassword ? "border-red-500" : ""
-                        }
-                      />
-                      {passwordErrors.newPassword && (
-                        <p className="text-red-500 text-xs mt-1 flex items-center gap-1">
-                          <AlertCircle className="h-3 w-3" />
-                          {passwordErrors.newPassword}
-                        </p>
-                      )}
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="confirmPassword">
-                        Konfirmasi Password Baru
-                      </Label>
-                      <Input
-                        id="confirmPassword"
-                        type="password"
-                        value={passwordData.confirmPassword}
-                        onChange={(e) =>
-                          setPasswordData({
-                            ...passwordData,
-                            confirmPassword: e.target.value,
-                          })
-                        }
-                        onBlur={() => {
-                          if (
-                            passwordData.newPassword &&
-                            passwordData.confirmPassword &&
-                            passwordData.newPassword !==
-                              passwordData.confirmPassword
-                          ) {
-                            setPasswordErrors((prev) => ({
-                              ...prev,
-                              confirmPassword:
-                                "Password baru dan konfirmasi tidak cocok",
-                            }));
-                          }
-                        }}
-                        placeholder="Konfirmasi password baru"
-                        className={
-                          passwordErrors.confirmPassword ? "border-red-500" : ""
-                        }
-                      />
-                      {passwordErrors.confirmPassword && (
-                        <p className="text-red-500 text-xs mt-1 flex items-center gap-1">
-                          <AlertCircle className="h-3 w-3" />
-                          {passwordErrors.confirmPassword}
-                        </p>
-                      )}
-                    </div>
-                    {passwordErrors.general && (
-                      <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-                        <p className="text-red-600 text-sm flex items-center gap-2">
-                          <AlertCircle className="h-4 w-4" />
-                          {passwordErrors.general}
-                        </p>
+                      <Label htmlFor="currentPassword" className="text-gray-900 dark:text-white">Password Saat Ini</Label>
+                      <div className="relative">
+                        <div className="absolute left-3 top-1/2 -translate-y-1/2">
+                          <Lock className="h-4 w-4 text-gray-400" />
+                        </div>
+                        <Input
+                          id="currentPassword"
+                          type={showCurrentPassword ? "text" : "password"}
+                          value={currentPassword}
+                          onChange={(e) => setCurrentPassword(e.target.value)}
+                          placeholder="Masukkan password saat ini"
+                          className="pl-10 pr-10 border-gray-300 dark:border-gray-600 focus:border-[#005EB8] focus:ring-[#005EB8] dark:bg-gray-800"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                        >
+                          {showCurrentPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
                       </div>
-                    )}
-                    <Card className="rounded-lg border bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700">
-                      <CardContent className="p-4">
-                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-                          Password harus memenuhi syarat:
+                    </div>
+
+                    {/* New Password */}
+                    <div className="space-y-2">
+                      <Label htmlFor="newPassword" className="text-gray-900 dark:text-white">Password Baru</Label>
+                      <div className="relative">
+                        <div className="absolute left-3 top-1/2 -translate-y-1/2">
+                          <Lock className="h-4 w-4 text-gray-400" />
+                        </div>
+                        <Input
+                          id="newPassword"
+                          type={showNewPassword ? "text" : "password"}
+                          value={newPassword}
+                          onChange={(e) => setNewPassword(e.target.value)}
+                          placeholder="Masukkan password baru"
+                          className="pl-10 pr-10 border-gray-300 dark:border-gray-600 focus:border-[#005EB8] focus:ring-[#005EB8] dark:bg-gray-800"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowNewPassword(!showNewPassword)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                        >
+                          {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                      </div>
+                      
+                      {/* Strength Indicator */}
+                      {newPassword && (
+                        <div className="space-y-2 pt-2">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs text-gray-600 dark:text-gray-400">Kekuatan password:</span>
+                            <span className={`text-xs font-medium ${
+                              passwordStrength.label === "Lemah" ? "text-red-600 dark:text-red-400" :
+                              passwordStrength.label === "Sedang" ? "text-yellow-600 dark:text-yellow-400" :
+                              "text-green-600 dark:text-green-400"
+                            }`}>
+                              {passwordStrength.label}
+                            </span>
+                          </div>
+                          <div className="flex gap-1">
+                            {[1, 2, 3, 4, 5, 6].map((i) => (
+                              <div
+                                key={i}
+                                className={`h-1.5 flex-1 rounded-full ${
+                                  i <= passwordStrength.score ? 
+                                  (passwordStrength.label === "Lemah" ? "bg-red-500" :
+                                   passwordStrength.label === "Sedang" ? "bg-yellow-500" : "bg-green-500") : 
+                                  "bg-gray-200 dark:bg-gray-700"
+                                }`}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Confirm Password */}
+                    <div className="space-y-2">
+                      <Label htmlFor="confirmPassword" className="text-gray-900 dark:text-white">Konfirmasi Password Baru</Label>
+                      <div className="relative">
+                        <div className="absolute left-3 top-1/2 -translate-y-1/2">
+                          <Lock className="h-4 w-4 text-gray-400" />
+                        </div>
+                        <Input
+                          id="confirmPassword"
+                          type={showConfirmPassword ? "text" : "password"}
+                          value={confirmPassword}
+                          onChange={(e) => setConfirmPassword(e.target.value)}
+                          placeholder="Konfirmasi password baru"
+                          className="pl-10 pr-10 border-gray-300 dark:border-gray-600 focus:border-[#005EB8] focus:ring-[#005EB8] dark:bg-gray-800"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                        >
+                          {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                      </div>
+                      {confirmPassword && newPassword !== confirmPassword && (
+                        <p className="text-xs text-red-500 dark:text-red-400 flex items-center gap-1">
+                          <AlertCircle className="h-3 w-3" />
+                          Password tidak cocok
                         </p>
-                        <ul className="text-xs text-gray-600 dark:text-gray-400 space-y-1 list-disc list-inside">
-                          <li>Minimal 8 karakter</li>
-                          <li>Kombinasi huruf besar dan kecil</li>
-                          <li>Minimal 1 angka</li>
-                          <li>Minimal 1 karakter spesial</li>
-                        </ul>
-                      </CardContent>
-                    </Card>
+                      )}
+                      {confirmPassword && newPassword === confirmPassword && (
+                        <p className="text-xs text-green-500 dark:text-green-400 flex items-center gap-1">
+                          <CheckCircle className="h-3 w-3" />
+                          Password cocok
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Submit Button */}
+                    <Button
+                      type="submit"
+                      disabled={loading}
+                      className="w-full bg-[#005EB8] hover:bg-[#004A93]"
+                    >
+                      {loading ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Mengubah Password...
+                        </>
+                      ) : (
+                        <>
+                          <Key className="h-4 w-4 mr-2" />
+                          Ubah Password
+                        </>
+                      )}
+                    </Button>
+                  </form>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Side Info */}
+            <div className="space-y-6">
+              {/* Password Criteria */}
+              <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 animate-scaleIn delay-100">
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2 text-gray-900 dark:text-white">
+                    <Shield className="h-5 w-5 text-[#005EB8]" />
+                    Kriteria Password
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {passwordCriteria.map((criteria, index) => (
+                      <div key={index} className="flex items-center gap-2">
+                        {criteria.met ? (
+                          <CheckCircle className="h-4 w-4 text-[#008A00]" />
+                        ) : (
+                          <div className="h-4 w-4 rounded-full border-2 border-gray-300 dark:border-gray-600" />
+                        )}
+                        <span className={`text-sm ${criteria.met ? "text-[#008A00] font-medium" : "text-gray-500 dark:text-gray-400"}`}>
+                          {criteria.label}
+                        </span>
+                      </div>
+                    ))}
                   </div>
-                  <Button
-                    onClick={handlePasswordChange}
-                    disabled={isLoading}
-                    className="w-full bg-[#D93025] hover:bg-[#B71C1C] mt-auto flex items-center justify-center"
-                  >
-                    {isLoading ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Mengubah Password...
-                      </>
-                    ) : (
-                      <>
-                        <Key className="h-4 w-4 mr-2" />
-                        Ubah Password
-                      </>
-                    )}
-                  </Button>
+                </CardContent>
+              </Card>
+
+              {/* Security Tips */}
+              <Card className="rounded-lg border bg-gradient-to-br from-[#005EB8]/10 to-[#004A93]/10 text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-[#005EB8]/20 animate-scaleIn delay-200">
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2 text-gray-900 dark:text-white">
+                    <Info className="h-5 w-5 text-[#005EB8]" />
+                    Tips Keamanan
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ul className="space-y-3 text-sm">
+                    <li className="flex items-start gap-2">
+                      <div className="p-1 bg-[#005EB8]/20 rounded">
+                        <Shield className="h-3 w-3 text-[#005EB8] mt-0.5" />
+                      </div>
+                      <span className="text-gray-700 dark:text-gray-300">Jangan gunakan password yang sama dengan akun lain</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <div className="p-1 bg-[#005EB8]/20 rounded">
+                        <Sparkles className="h-3 w-3 text-[#005EB8] mt-0.5" />
+                      </div>
+                      <span className="text-gray-700 dark:text-gray-300">Ganti password secara berkala setiap 3 bulan</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <div className="p-1 bg-[#005EB8]/20 rounded">
+                        <Award className="h-3 w-3 text-[#005EB8] mt-0.5" />
+                      </div>
+                      <span className="text-gray-700 dark:text-gray-300">Hindari menggunakan informasi pribadi</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <div className="p-1 bg-[#005EB8]/20 rounded">
+                        <Bell className="h-3 w-3 text-[#005EB8] mt-0.5" />
+                      </div>
+                      <span className="text-gray-700 dark:text-gray-300">Gunakan kombinasi huruf, angka, dan simbol</span>
+                    </li>
+                  </ul>
                 </CardContent>
               </Card>
             </div>
           </div>
-          {/* SweetAlert Component */}
-          <SweetAlert
-            type={alertConfig.type}
-            title={alertConfig.title}
-            message={alertConfig.message}
-            show={showAlert}
-            onClose={() => setShowAlert(false)}
-            duration={alertConfig.type === "success" ? 3000 : 5000}
-            showCloseButton={true}
-          />
         </div>
       </UserLayout>
     </ProtectedRoute>

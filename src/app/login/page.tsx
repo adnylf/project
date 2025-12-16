@@ -5,7 +5,7 @@ import {
   SignInPage,
   Testimonial,
   LoginCredentials,
-} from "@/components/ui/login";
+} from "@/components/auth/login";
 import SweetAlert, { AlertType } from "@/components/ui/sweet-alert";
 export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
@@ -91,23 +91,33 @@ export default function LoginPage() {
       console.log("Login response structure:", JSON.stringify(data, null, 2));
       
       // Extract tokens - handle different possible response structures
-      let tokens = null;
-      if (data.tokens) {
-        tokens = data.tokens;
+      // API returns with spread: { message, user, accessToken, refreshToken }
+      let accessToken = null;
+      let refreshToken = null;
+      
+      // Check root level first (API uses spread operator)
+      if (data.accessToken) {
+        accessToken = data.accessToken;
+        refreshToken = data.refreshToken;
+      } else if (data.tokens) {
+        accessToken = data.tokens.accessToken;
+        refreshToken = data.tokens.refreshToken;
       } else if (data.data?.tokens) {
-        tokens = data.data.tokens;
-      } else if (data.payload?.tokens) {
-        tokens = data.payload.tokens;
+        accessToken = data.data.tokens.accessToken;
+        refreshToken = data.data.tokens.refreshToken;
       }
 
-      // Save auth tokens and user data
-      if (tokens?.accessToken) {
-        localStorage.setItem("accessToken", tokens.accessToken);
-        document.cookie = `accessToken=${tokens.accessToken}; path=/; max-age=86400`;
+      // Save auth tokens
+      if (accessToken) {
+        localStorage.setItem("accessToken", accessToken);
+        document.cookie = `accessToken=${accessToken}; path=/; max-age=86400`;
+        console.log("AccessToken saved:", accessToken.substring(0, 20) + "...");
+      } else {
+        console.error("No accessToken found in response!");
       }
-      if (tokens?.refreshToken) {
-        localStorage.setItem("refreshToken", tokens.refreshToken);
-        document.cookie = `refreshToken=${tokens.refreshToken}; path=/; max-age=604800`;
+      if (refreshToken) {
+        localStorage.setItem("refreshToken", refreshToken);
+        document.cookie = `refreshToken=${refreshToken}; path=/; max-age=604800`;
       }
       
       // Extract user data - handle different possible response structures
@@ -140,7 +150,14 @@ export default function LoginPage() {
           if (role && role.toUpperCase() === "ADMIN") {
             router.push("/admin/dashboard");
           } else if (role && role.toUpperCase() === "MENTOR") {
-            router.push("/mentor/dashboard");
+            // Check if mentor is approved
+            const mentorProfile = userData.mentor_profile;
+            if (mentorProfile && mentorProfile.status === "APPROVED") {
+              router.push("/mentor/dashboard");
+            } else {
+              // Redirect to profile for pending/rejected or no profile
+              router.push("/mentor/profile");
+            }
           } else {
             router.push("/user/dashboard");
           }

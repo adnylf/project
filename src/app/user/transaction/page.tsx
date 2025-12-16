@@ -1,31 +1,29 @@
-// app/user/transactions/page.tsx
 "use client";
 
-import { useState } from "react";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { useState, useEffect, useCallback } from "react";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
-  Search,
-  FileText,
-  RefreshCw,
-  CheckCircle,
-  XCircle,
-  Clock,
-  CreditCard,
   Receipt,
-  Eye,
+  Search,
+  Clock,
+  CheckCircle2,
+  XCircle,
+  AlertCircle,
+  CreditCard,
+  Calendar,
+  ExternalLink,
+  Loader2,
+  BookOpen,
+  Filter,
+  TrendingUp,
+  DollarSign,
+  BarChart3,
 } from "lucide-react";
 import Link from "next/link";
 import UserLayout from "@/components/user/user-layout";
-import ProtectedRoute from "@/components/ui/protected-route";
 import {
   Select,
   SelectContent,
@@ -33,439 +31,432 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import ProtectedRoute from "@/components/auth/protected-route";
 
-const transactions = [
-  {
-    id: "TRX-2024-001",
-    courseName: "Full-Stack Web Development",
-    amount: 499000,
-    status: "completed",
-    paymentMethod: "Credit Card",
-    date: "2024-09-15",
-    progress: 65,
-    materialsAccessed: 12,
-    canRefund: true,
-    invoice: "/invoices/TRX-2024-001.pdf",
-    paymentDetails: {
-      cardNumber: "**** **** **** 1234",
-      bankName: "BCA",
-      paymentTime: "2024-09-15 14:30:25",
-    },
-  },
-  {
-    id: "TRX-2024-002",
-    courseName: "Data Science dengan Python",
-    amount: 599000,
-    status: "completed",
-    paymentMethod: "Bank Transfer",
-    date: "2024-08-10",
-    progress: 25,
-    materialsAccessed: 5,
-    canRefund: true,
-    invoice: "/invoices/TRX-2024-002.pdf",
-    paymentDetails: {
-      accountNumber: "123-456-789",
-      bankName: "Mandiri",
-      paymentTime: "2024-08-10 09:15:42",
-    },
-  },
-  {
-    id: "TRX-2024-003",
-    courseName: "Digital Marketing Fundamentals",
-    amount: 399000,
-    status: "pending",
-    paymentMethod: "E-Wallet",
-    date: "2024-10-05",
-    progress: 0,
-    materialsAccessed: 0,
-    canRefund: false,
-    invoice: null,
-    paymentDetails: {
-      walletType: "Gopay",
-      paymentTime: "2024-10-05 16:20:15",
-    },
-  },
-  {
-    id: "TRX-2024-004",
-    courseName: "UI/UX Design Mastery",
-    amount: 549000,
-    status: "completed",
-    paymentMethod: "Credit Card",
-    date: "2024-07-20",
-    progress: 90,
-    materialsAccessed: 13,
-    canRefund: false,
-    invoice: "/invoices/TRX-2024-004.pdf",
-    paymentDetails: {
-      cardNumber: "**** **** **** 5678",
-      bankName: "BNI",
-      paymentTime: "2024-07-20 11:45:30",
-    },
-  },
-  {
-    id: "TRX-2024-005",
-    courseName: "Mobile App Development",
-    amount: 699000,
-    status: "refunded",
-    paymentMethod: "Bank Transfer",
-    date: "2024-09-01",
-    refundDate: "2024-09-08",
-    progress: 10,
-    materialsAccessed: 2,
-    canRefund: false,
-    invoice: "/invoices/TRX-2024-005.pdf",
-    paymentDetails: {
-      accountNumber: "987-654-321",
-      bankName: "BRI",
-      paymentTime: "2024-09-01 13:20:10",
-    },
-  },
-  {
-    id: "TRX-2024-006",
-    courseName: "Machine Learning Professional",
-    amount: 799000,
-    status: "failed",
-    paymentMethod: "Credit Card",
-    date: "2024-10-01",
-    progress: 0,
-    materialsAccessed: 0,
-    canRefund: false,
-    invoice: null,
-    paymentDetails: {
-      cardNumber: "**** **** **** 9012",
-      bankName: "BCA",
-      paymentTime: "2024-10-01 10:05:22",
-    },
-  },
-];
+const API_BASE_URL = "http://localhost:3000/api";
 
-const getStatusBadge = (status: string) => {
-  switch (status) {
-    case "completed":
-      return <Badge className="bg-[#008A00]">Berhasil</Badge>;
-    case "pending":
-      return <Badge className="bg-[#F4B400]">Pending</Badge>;
-    case "refunded":
-      return <Badge className="bg-[#005EB8]">Refund</Badge>;
-    case "failed":
-      return <Badge className="bg-[#D93025]">Gagal</Badge>;
-    default:
-      return <Badge>Unknown</Badge>;
-  }
+type TransactionStatus = "PENDING" | "PAID" | "SUCCESS" | "FAILED" | "CANCELLED" | "REFUNDED";
+
+interface Course {
+  id: string;
+  title: string;
+  slug: string;
+  thumbnail: string | null;
+  price: number;
+  mentor: {
+    user: {
+      full_name: string;
+    };
+  } | null;
+}
+
+interface Transaction {
+  id: string;
+  order_id: string;
+  course_id: string;
+  amount: number;
+  discount: number;
+  total_amount: number;
+  payment_method: string;
+  status: TransactionStatus;
+  payment_url: string | null;
+  paid_at: string | null;
+  expired_at: string | null;
+  created_at: string;
+  course: Course;
+}
+
+const formatCurrency = (amount: number) => {
+  return new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: "IDR",
+    minimumFractionDigits: 0,
+  }).format(amount);
 };
 
-const getStatusIcon = (status: string) => {
-  switch (status) {
-    case "completed":
-      return <CheckCircle className="h-5 w-5 text-[#008A00]" />;
-    case "pending":
-      return <Clock className="h-5 w-5 text-[#F4B400]" />;
-    case "refunded":
-      return <Receipt className="h-5 w-5 text-[#005EB8]" />;
-    case "failed":
-      return <XCircle className="h-5 w-5 text-[#D93025]" />;
-    default:
-      return null;
-  }
+const formatDate = (dateString: string) => {
+  return new Date(dateString).toLocaleDateString("id-ID", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 };
 
-export default function UserTransaction() {
+const getStatusConfig = (status: TransactionStatus) => {
+  const configs = {
+    PENDING: {
+      label: "Menunggu Pembayaran",
+      icon: Clock,
+      color: "bg-[#F4B400]/10 text-[#F4B400] border-[#F4B400]/20",
+      iconColor: "text-[#F4B400]",
+    },
+    PAID: {
+      label: "Dibayar",
+      icon: CheckCircle2,
+      color: "bg-[#008A00]/10 text-[#008A00] border-[#008A00]/20",
+      iconColor: "text-[#008A00]",
+    },
+    SUCCESS: {
+      label: "Berhasil",
+      icon: CheckCircle2,
+      color: "bg-[#008A00]/10 text-[#008A00] border-[#008A00]/20",
+      iconColor: "text-[#008A00]",
+    },
+    FAILED: {
+      label: "Gagal",
+      icon: XCircle,
+      color: "bg-[#D93025]/10 text-[#D93025] border-[#D93025]/20",
+      iconColor: "text-[#D93025]",
+    },
+    CANCELLED: {
+      label: "Dibatalkan",
+      icon: XCircle,
+      color: "bg-gray-100 text-gray-800 border-gray-200",
+      iconColor: "text-gray-600",
+    },
+    REFUNDED: {
+      label: "Dikembalikan",
+      icon: AlertCircle,
+      color: "bg-purple-100 text-purple-800 border-purple-200",
+      iconColor: "text-purple-600",
+    },
+  };
+  return configs[status] || configs.PENDING;
+};
+
+const getPaymentMethodLabel = (method: string) => {
+  const labels: Record<string, string> = {
+    MIDTRANS: "Midtrans",
+    E_WALLET: "E-Wallet",
+    VIRTUAL_ACCOUNT: "Virtual Account",
+    QRIS: "QRIS",
+    BANK_TRANSFER: "Transfer Bank",
+  };
+  return labels[method] || method;
+};
+
+export default function UserTransactions() {
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
+  const [sortBy, setSortBy] = useState("newest");
 
-  const filteredTransactions = transactions.filter((trx) => {
-    const matchesSearch =
-      trx.courseName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      trx.id.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = filterStatus === "all" || trx.status === filterStatus;
-    return matchesSearch && matchesStatus;
-  });
-
-  const handleRefundRequest = (transactionId: string) => {
-    console.log(`Requesting refund for transaction: ${transactionId}`);
-  };
-
-  const handleRefreshPayment = (transactionId: string) => {
-    console.log(`Refreshing payment status for: ${transactionId}`);
-  };
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("id-ID", {
-      style: "currency",
-      currency: "IDR",
-      minimumFractionDigits: 0,
-    }).format(amount);
-  };
-
-  const totalSpent = transactions
-    .filter((t) => t.status === "completed")
-    .reduce((sum, t) => sum + t.amount, 0);
-
-  const totalRefunded = transactions
-    .filter((t) => t.status === "refunded")
-    .reduce((sum, t) => sum + t.amount, 0);
-
-  const getActionButton = (transaction: any) => {
-    switch (transaction.status) {
-      case "completed":
-        return (
-          <Link href={`/user/transaction/${transaction.id}`}>
-            <Button size="sm" variant="outline">
-              <Eye className="h-4 w-4" />
-            </Button>
-          </Link>
-        );
-      case "pending":
-        return (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => handleRefreshPayment(transaction.id)}
-          >
-            <RefreshCw className="h-4 w-4" />
-          </Button>
-        );
-      case "refunded":
-        return (
-          <Link href={`/user/transaction/${transaction.id}`}>
-            <Button size="sm" variant="outline">
-              <Eye className="h-4 w-4" />
-            </Button>
-          </Link>
-        );
-      default:
-        return null;
+  const getAuthToken = useCallback(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("token") || localStorage.getItem("accessToken");
     }
+    return null;
+  }, []);
+
+  useEffect(() => {
+    const fetchTransactions = async () => {
+      try {
+        setLoading(true);
+        const token = getAuthToken();
+        if (!token) {
+          setError("Silakan login terlebih dahulu");
+          return;
+        }
+
+        const response = await fetch(`${API_BASE_URL}/payments`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        if (!response.ok) throw new Error("Gagal mengambil data transaksi");
+
+        const data = await response.json();
+        setTransactions(data.transactions || []);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Terjadi kesalahan");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchTransactions();
+  }, [getAuthToken]);
+
+  const filteredTransactions = transactions
+    .filter((tx) => {
+      const matchesSearch =
+        tx.order_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        tx.course.title.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesStatus = filterStatus === "all" || tx.status === filterStatus;
+      return matchesSearch && matchesStatus;
+    })
+    .sort((a, b) => {
+      if (sortBy === "oldest") return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      if (sortBy === "amount-high") return b.total_amount - a.total_amount;
+      if (sortBy === "amount-low") return a.total_amount - b.total_amount;
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    });
+
+  const stats = {
+    total: transactions.length,
+    success: transactions.filter((t) => t.status === "SUCCESS" || t.status === "PAID").length,
+    pending: transactions.filter((t) => t.status === "PENDING").length,
+    totalSpent: transactions
+      .filter((t) => t.status === "SUCCESS" || t.status === "PAID")
+      .reduce((sum, t) => sum + t.total_amount, 0),
   };
+
+  if (loading) {
+    return (
+      <ProtectedRoute allowedRoles={["STUDENT"]}>
+        <UserLayout>
+          <div className="flex items-center justify-center min-h-[400px]">
+            <Loader2 className="h-12 w-12 animate-spin text-[#005EB8]" />
+          </div>
+        </UserLayout>
+      </ProtectedRoute>
+    );
+  }
 
   return (
     <ProtectedRoute allowedRoles={["STUDENT"]}>
       <UserLayout>
         <div className="space-y-8">
-          <div className="animate-fadeIn">
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-              Riwayat Transaksi
-            </h1>
-            <p className="text-gray-600 dark:text-gray-400">
-              Kelola transaksi dan ajukan refund untuk kursus berbayar
-            </p>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-3">
+                <Receipt className="h-8 w-8 text-[#005EB8]" />
+                Riwayat Transaksi
+              </h1>
+              <p className="text-gray-600 dark:text-gray-400">Lihat semua transaksi pembelian kursus Anda</p>
+            </div>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-6">
-            <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 animate-scaleIn">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="h-12 w-12 rounded-full bg-[#008A00]/10 flex items-center justify-center">
-                    <CheckCircle className="h-6 w-6 text-[#008A00]" />
-                  </div>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                    Total Pengeluaran
-                  </p>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                    {formatCurrency(totalSpent)}
-                  </p>
-                </div>
+          {error && (
+            <Card className="rounded-lg border bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800">
+              <CardContent className="p-4">
+                <p className="text-red-600 dark:text-red-400">{error}</p>
               </CardContent>
             </Card>
+          )}
 
-            <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 animate-scaleIn delay-100">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="h-12 w-12 rounded-full bg-[#005EB8]/10 flex items-center justify-center">
+          {/* Stats Cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
+              <CardContent className="p-5">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 rounded-xl bg-[#005EB8]/10">
                     <Receipt className="h-6 w-6 text-[#005EB8]" />
                   </div>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                    Total Refund
-                  </p>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                    {formatCurrency(totalRefunded)}
-                  </p>
+                  <div>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Total Transaksi</p>
+                    <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.total}</p>
+                  </div>
                 </div>
               </CardContent>
             </Card>
-
-            <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 animate-scaleIn delay-200">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="h-12 w-12 rounded-full bg-[#F4B400]/10 flex items-center justify-center">
-                    <CreditCard className="h-6 w-6 text-[#F4B400]" />
+            <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
+              <CardContent className="p-5">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 rounded-xl bg-[#008A00]/10">
+                    <CheckCircle2 className="h-6 w-6 text-[#008A00]" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Berhasil</p>
+                    <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.success}</p>
                   </div>
                 </div>
-                <div className="space-y-1">
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                    Total Transaksi
-                  </p>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                    {transactions.length}
-                  </p>
+              </CardContent>
+            </Card>
+            <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
+              <CardContent className="p-5">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 rounded-xl bg-[#F4B400]/10">
+                    <Clock className="h-6 w-6 text-[#F4B400]" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Pending</p>
+                    <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.pending}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
+              <CardContent className="p-5">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 rounded-xl bg-[#D93025]/10">
+                    <DollarSign className="h-6 w-6 text-[#D93025]" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Total Belanja</p>
+                    <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                      {formatCurrency(stats.totalSpent).replace('IDR', 'Rp')}
+                    </p>
+                  </div>
                 </div>
               </CardContent>
             </Card>
           </div>
 
-          <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 animate-fadeSlide">
+          {/* Filters */}
+          <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
             <CardContent className="p-6">
               <div className="flex flex-col md:flex-row gap-4">
                 <div className="flex-1 relative">
                   <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                  <Input
-                    type="search"
-                    placeholder="Cari transaksi atau kursus..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
+                  <Input 
+                    type="search" 
+                    placeholder="Cari order ID atau nama kursus..." 
+                    value={searchTerm} 
+                    onChange={(e) => setSearchTerm(e.target.value)} 
                     className="pl-10"
                   />
                 </div>
                 <Select value={filterStatus} onValueChange={setFilterStatus}>
-                  <SelectTrigger className="w-full md:w-[200px]">
+                  <SelectTrigger className="w-[180px]">
+                    <Filter className="h-4 w-4 mr-2" />
                     <SelectValue placeholder="Status" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Semua Status</SelectItem>
-                    <SelectItem value="completed">Berhasil</SelectItem>
-                    <SelectItem value="pending">Pending</SelectItem>
-                    <SelectItem value="refunded">Refund</SelectItem>
-                    <SelectItem value="failed">Gagal</SelectItem>
+                    <SelectItem value="PENDING">Menunggu</SelectItem>
+                    <SelectItem value="SUCCESS">Berhasil</SelectItem>
+                    <SelectItem value="FAILED">Gagal</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={sortBy} onValueChange={setSortBy}>
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Urutkan" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="newest">Terbaru</SelectItem>
+                    <SelectItem value="oldest">Terlama</SelectItem>
+                    <SelectItem value="amount-high">Nominal Tertinggi</SelectItem>
+                    <SelectItem value="amount-low">Nominal Terendah</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 animate-fadeSlide delay-100">
-            <CardHeader>
-              <CardTitle className="text-xl font-bold">
-                Daftar Transaksi
-              </CardTitle>
-              <CardDescription>
-                Riwayat lengkap transaksi pembelian kursus
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>ID Transaksi</TableHead>
-                      <TableHead>Kursus</TableHead>
-                      <TableHead>Tanggal</TableHead>
-                      <TableHead>Metode</TableHead>
-                      <TableHead>Jumlah</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="text-right">Aksi</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredTransactions.map((trx) => (
-                      <TableRow key={trx.id} className="table-row">
-                        <TableCell className="font-mono text-sm">
-                          {trx.id}
-                        </TableCell>
-                        <TableCell>
-                          <div>
-                            <p className="font-medium text-gray-900 dark:text-white">
-                              {trx.courseName}
-                            </p>
-                            <p className="text-xs text-gray-500 dark:text-gray-400">
-                              Progress: {trx.progress}%
-                            </p>
+          {/* Transactions List */}
+          {filteredTransactions.length > 0 ? (
+            <div className="space-y-4">
+              {filteredTransactions.map((transaction) => {
+                const statusConfig = getStatusConfig(transaction.status);
+                const StatusIcon = statusConfig.icon;
+                return (
+                  <Card 
+                    key={transaction.id} 
+                    className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700"
+                  >
+                    <CardContent className="p-6">
+                      <div className="flex flex-col lg:flex-row gap-6">
+                        <div className="w-full lg:w-40 h-24 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-700 flex-shrink-0">
+                          {transaction.course.thumbnail ? (
+                            <img 
+                              src={transaction.course.thumbnail} 
+                              alt={transaction.course.title} 
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center">
+                              <BookOpen className="h-8 w-8 text-gray-400" />
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
+                            <div className="flex-1">
+                              <h3 className="font-semibold text-gray-900 dark:text-white text-lg line-clamp-1 mb-1">
+                                {transaction.course.title}
+                              </h3>
+                              <p className="text-sm text-gray-600 dark:text-gray-400">
+                                oleh {transaction.course.mentor?.user?.full_name || "Instruktur"}
+                              </p>
+                            </div>
+                            <Badge className={`${statusConfig.color} border`}>
+                              <StatusIcon className={`h-3 w-3 mr-1 ${statusConfig.iconColor}`} />
+                              {statusConfig.label}
+                            </Badge>
                           </div>
-                        </TableCell>
-                        <TableCell className="text-sm">
-                          {new Date(trx.date).toLocaleDateString("id-ID", {
-                            day: "2-digit",
-                            month: "short",
-                            year: "numeric",
-                          })}
-                        </TableCell>
-                        <TableCell className="text-sm">
-                          {trx.paymentMethod}
-                        </TableCell>
-                        <TableCell className="font-semibold">
-                          {formatCurrency(trx.amount)}
-                        </TableCell>
-                        <TableCell>{getStatusBadge(trx.status)}</TableCell>
-                        <TableCell className="text-right">
-                          {getActionButton(trx)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-
-              {filteredTransactions.length === 0 && (
-                <div className="text-center py-12">
-                  <div className="flex flex-col items-center gap-4">
-                    <div className="h-20 w-20 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
-                      <CreditCard className="h-10 w-10 text-gray-400" />
-                    </div>
-                    <div>
-                      <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-                        Tidak ada transaksi
-                      </h3>
-                      <p className="text-gray-600 dark:text-gray-400">
-                        Belum ada transaksi yang sesuai dengan pencarian
-                      </p>
-                    </div>
+                          
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm mb-4">
+                            <div>
+                              <p className="text-gray-500 dark:text-gray-400 text-xs">Order ID</p>
+                              <p className="font-medium font-mono text-xs truncate text-gray-900 dark:text-white">{transaction.order_id}</p>
+                            </div>
+                            <div>
+                              <p className="text-gray-500 dark:text-gray-400 text-xs">Tanggal</p>
+                              <p className="font-medium text-gray-900 dark:text-white">{formatDate(transaction.created_at)}</p>
+                            </div>
+                            <div>
+                              <p className="text-gray-500 dark:text-gray-400 text-xs">Metode</p>
+                              <p className="font-medium text-gray-900 dark:text-white">{getPaymentMethodLabel(transaction.payment_method)}</p>
+                            </div>
+                            <div>
+                              <p className="text-gray-500 dark:text-gray-400 text-xs">Total</p>
+                              <p className="font-bold text-[#005EB8] text-lg">
+                                {formatCurrency(transaction.total_amount).replace('IDR', 'Rp')}
+                              </p>
+                            </div>
+                          </div>
+                          
+                          <div className="flex flex-wrap gap-2">
+                            <Link href={`/user/transaction/${transaction.id}`}>
+                              <Button variant="outline" size="sm" className="border-gray-300 dark:border-gray-600">
+                                <ExternalLink className="h-4 w-4 mr-1" />
+                                Detail
+                              </Button>
+                            </Link>
+                            {transaction.status === "PENDING" && transaction.payment_url && (
+                              <a href={transaction.payment_url} target="_blank" rel="noopener noreferrer">
+                                <Button size="sm" className="bg-[#005EB8] hover:bg-[#004A93]">
+                                  <CreditCard className="h-4 w-4 mr-1" />
+                                  Bayar Sekarang
+                                </Button>
+                              </a>
+                            )}
+                            {(transaction.status === "SUCCESS" || transaction.status === "PAID") && (
+                              <Link href={`/user/courses/${transaction.course.id}/player`}>
+                                <Button size="sm" className="bg-[#008A00] hover:bg-[#007800]">
+                                  <BookOpen className="h-4 w-4 mr-1" />
+                                  Akses Kursus
+                                </Button>
+                              </Link>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          ) : (
+            <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
+              <CardContent className="p-12 text-center">
+                <div className="flex flex-col items-center gap-4">
+                  <div className="h-20 w-20 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+                    <Receipt className="h-10 w-10 text-gray-400" />
                   </div>
+                  <div>
+                    <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+                      {searchTerm || filterStatus !== "all" ? "Tidak ada transaksi" : "Belum ada transaksi"}
+                    </h3>
+                    <p className="text-gray-600 dark:text-gray-400 mb-6">
+                      {searchTerm || filterStatus !== "all" ? "Coba ubah filter pencarian Anda" : "Mulai belajar dengan membeli kursus"}
+                    </p>
+                  </div>
+                  {!searchTerm && filterStatus === "all" && (
+                    <Link href="/courses">
+                      <Button className="bg-[#005EB8] hover:bg-[#004A93]">
+                        Jelajahi Kursus
+                      </Button>
+                    </Link>
+                  )}
                 </div>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card className="rounded-lg border bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-[#005EB8]/20 animate-fadeIn">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-xl font-bold">
-                <Receipt className="h-6 w-6 text-[#005EB8]" />
-                Kebijakan Refund
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <p className="text-gray-600 dark:text-gray-400">
-                Anda dapat mengajukan refund dengan syarat berikut:
-              </p>
-              <ul className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
-                <li className="flex items-start gap-2">
-                  <CheckCircle className="h-5 w-5 text-[#008A00] flex-shrink-0 mt-0.5" />
-                  <span>Maksimal 30 hari setelah pembelian</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <CheckCircle className="h-5 w-5 text-[#008A00] flex-shrink-0 mt-0.5" />
-                  <span>Progress kursus maksimal 20%</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <CheckCircle className="h-5 w-5 text-[#008A00] flex-shrink-0 mt-0.5" />
-                  <span>Maksimal 5 materi yang sudah diakses</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <CheckCircle className="h-5 w-5 text-[#008A00] flex-shrink-0 mt-0.5" />
-                  <span>Proses refund memakan waktu 5-7 hari kerja</span>
-                </li>
-              </ul>
-              <Card className="rounded-lg border bg-[#F4B400]/10 border-[#F4B400]/20">
-                <CardContent className="p-4">
-                  <p className="text-sm text-gray-700 dark:text-gray-300">
-                    <strong>Catatan:</strong> Setelah refund disetujui, akses ke
-                    kursus akan dicabut dan sertifikat (jika ada) akan
-                    dibatalkan.
-                  </p>
-                </CardContent>
-              </Card>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </UserLayout>
     </ProtectedRoute>

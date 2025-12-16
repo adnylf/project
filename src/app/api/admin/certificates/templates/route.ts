@@ -1,95 +1,57 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { verifyToken } from '@/lib/auth';
+import { getAuthUser, hasRole, unauthorizedResponse, forbiddenResponse } from '@/lib/auth';
+import { UserRole } from '@prisma/client';
 
-/**
- * GET /api/admin/certificates/templates
- * Get all certificate templates
- */
+// GET /api/admin/certificates/templates - List certificate templates
 export async function GET(request: NextRequest) {
   try {
-    const token = request.headers.get('authorization')?.replace('Bearer ', '');
-    if (!token) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const authUser = getAuthUser(request);
+    if (!authUser) return unauthorizedResponse();
+    // Allow both ADMIN and MENTOR to read templates
+    if (!hasRole(authUser, [UserRole.ADMIN, UserRole.MENTOR])) return forbiddenResponse();
 
-    const decoded = await verifyToken(token);
-    if (!decoded || decoded.role !== 'admin') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
-
-    // FIXED: Use correct model name
-    const templates = await prisma.certificateTemplate.findMany({
-      orderBy: { createdAt: 'desc' },
-      include: {
-        _count: {
-          select: {
-            Certificate: true, // FIXED: Match your schema's relation name
-          },
-        },
-      },
+    // Certificate templates stored in system settings
+    const templates = await prisma.systemSetting.findMany({
+      where: { category: 'certificate_template' },
+      orderBy: { key: 'asc' },
     });
 
-    return NextResponse.json({
-      success: true,
-      data: templates,
-    });
+    return NextResponse.json({ templates });
   } catch (error) {
-    console.error('Get templates error:', error);
-    return NextResponse.json({ error: 'Failed to fetch templates' }, { status: 500 });
+    console.error('Get certificate templates error:', error);
+    return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 });
   }
 }
 
-/**
- * POST /api/admin/certificates/templates
- * Create new certificate template
- */
+// POST /api/admin/certificates/templates - Create certificate template
 export async function POST(request: NextRequest) {
   try {
-    const token = request.headers.get('authorization')?.replace('Bearer ', '');
-    if (!token) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const decoded = await verifyToken(token);
-    if (!decoded || decoded.role !== 'admin') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
+    const authUser = getAuthUser(request);
+    if (!authUser) return unauthorizedResponse();
+    if (!hasRole(authUser, [UserRole.ADMIN])) return forbiddenResponse();
 
     const body = await request.json();
-    const { name, description, design, variables, isDefault } = body;
+    const { name, content, is_default } = body;
 
-    if (!name || !design) {
-      return NextResponse.json({ error: 'Name and design are required' }, { status: 400 });
+    if (!name || !content) {
+      return NextResponse.json({ error: 'Nama dan konten template wajib diisi' }, { status: 400 });
     }
 
-    if (isDefault) {
-      await prisma.certificateTemplate.updateMany({
-        where: { isDefault: true },
-        data: { isDefault: false },
-      });
-    }
-
-    const template = await prisma.certificateTemplate.create({
+    // Store template as system setting
+    const template = await prisma.systemSetting.create({
       data: {
-        name,
-        description,
-        design,
-        variables: variables || {},
-        isDefault: isDefault || false,
+        key: `certificate_template_${Date.now()}`,
+        value: JSON.stringify({ name, content, is_default: is_default || false }),
+        type: 'json',
+        category: 'certificate_template',
+        is_public: false,
       },
     });
 
-    return NextResponse.json(
-      {
-        success: true,
-        data: template,
-        message: 'Template created successfully',
-      },
-      { status: 201 }
-    );
+    return NextResponse.json({ message: 'Template berhasil dibuat', template }, { status: 201 });
   } catch (error) {
-    console.error('Create template error:', error);
-    return NextResponse.json({ error: 'Failed to create template' }, { status: 500 });
+    console.error('Create certificate template error:', error);
+    return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 });
   }
 }

@@ -1,73 +1,95 @@
-import { NextRequest } from "next/server";
-import { resetPasswordSchema } from "@/lib/validation";
-import authService from "@/services/auth.service";
-import {
-  successResponse,
-  validationErrorResponse,
-  errorResponse,
-} from "@/utils/response.util";
-import { validateData } from "@/utils/validation.util";
-import { errorHandler } from "@/middlewares/error.middleware";
-import { corsMiddleware } from "@/middlewares/cors.middleware";
-import { loggingMiddleware } from "@/middlewares/logging.middleware";
-import { rateLimit } from "@/middlewares/ratelimit.middleware";
-import { HTTP_STATUS } from "@/lib/constants";
+import { NextRequest, NextResponse } from 'next/server';
+import prisma from '@/lib/prisma';
+import { hashPassword } from '@/lib/auth';
+import { resetPasswordSchema } from '@/lib/validation';
 
-async function handler(request: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
-    // Parse request body
-    let body;
-    try {
-      body = await request.json();
-    } catch {
-      return errorResponse(
-        "Invalid JSON in request body",
-        HTTP_STATUS.BAD_REQUEST
-      );
-    }
-
+    const body = await request.json();
+    
     // Validate input
-    const validation = await validateData(resetPasswordSchema, body);
-    if (!validation.success) {
-      return validationErrorResponse(validation.errors);
-    }
-
-    // Check token format
-    if (!validation.data.token || validation.data.token.length < 16) {
-      return errorResponse(
-        "Invalid reset token format",
-        HTTP_STATUS.BAD_REQUEST
+    const result = resetPasswordSchema.safeParse(body);
+    if (!result.success) {
+      return NextResponse.json(
+        { error: 'Validasi gagal', details: result.error.flatten().fieldErrors },
+        { status: 400 }
       );
     }
 
-    // Reset password
-    await authService.resetPassword(
-      validation.data.token,
-      validation.data.password
-    );
+    const { token, password } = result.data;
 
-    return successResponse(
-      null,
-      "Password has been reset successfully. You can now login with your new password."
-    );
-  } catch (error) {
-    if (error instanceof Error) {
-      return errorResponse(error.message, HTTP_STATUS.BAD_REQUEST);
+    // Find token
+    const verificationToken = await prisma.verificationToken.findUnique({
+      where: { token },
+      include: { user: true },
+    });
+
+    if (!verificationToken) {
+      return NextResponse.json(
+        { error: 'Token tidak valid' },
+        { status: 400 }
+      );
     }
-    return errorResponse(
-      "Failed to reset password",
-      HTTP_STATUS.INTERNAL_SERVER_ERROR
+
+    // Check if token is expired
+    if (verificationToken.expires_at < new Date()) {
+      return NextResponse.json(
+        { error: 'Token sudah kadaluarsa' },
+        { status: 400 }
+      );
+    }
+
+    // Check if token is already used
+    if (verificationToken.used_at) {
+      return NextResponse.json(
+        { error: 'Token sudah digunakan' },
+        { status: 400 }
+      );
+    }
+
+    // Check token type
+    if (verificationToken.type !== 'PASSWORD_RESET') {
+      return NextResponse.json(
+        { error: 'Token tidak valid' },
+        { status: 400 }
+      );
+    }
+
+    // Hash new password
+    const hashedPassword = await hashPassword(password);
+
+    // Update password and mark token as used
+    await prisma.$transaction([
+      prisma.user.update({
+        where: { id: verificationToken.user_id },
+        data: { password: hashedPassword },
+      }),
+      prisma.verificationToken.update({
+        where: { id: verificationToken.id },
+        data: { used_at: new Date() },
+      }),
+    ]);
+
+    // Log activity
+    await prisma.activityLog.create({
+      data: {
+        user_id: verificationToken.user_id,
+        action: 'RESET_PASSWORD',
+        entity_type: 'user',
+        entity_id: verificationToken.user_id,
+        ip_address: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || null,
+        user_agent: request.headers.get('user-agent') || null,
+      },
+    });
+
+    return NextResponse.json({
+      message: 'Password berhasil direset',
+    });
+  } catch (error) {
+    console.error('Reset password error:', error);
+    return NextResponse.json(
+      { error: 'Terjadi kesalahan server' },
+      { status: 500 }
     );
   }
 }
-
-export const POST = errorHandler(
-  loggingMiddleware(
-    corsMiddleware(
-      rateLimit({
-        windowMs: 15 * 60 * 1000,
-        maxRequests: 20,
-      })(handler)
-    )
-  )
-);
