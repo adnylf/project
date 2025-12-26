@@ -17,8 +17,6 @@ import {
 } from "@/components/ui/select";
 import ProtectedRoute from "@/components/auth/protected-route";
 
-const API_BASE_URL = 'http://localhost:3000/api';
-
 interface Course {
   id: string;
   title: string;
@@ -103,7 +101,7 @@ export default function UserCourses() {
           return;
         }
 
-        const response = await fetch(`${API_BASE_URL}/users/enrollments`, {
+        const response = await fetch(`/api/users/enrollments?recalculate=true`, {
           headers: {
             Authorization: `Bearer ${token}`,
           },

@@ -30,8 +30,6 @@ import {
 } from "@/components/ui/select";
 import ProtectedRoute from "@/components/auth/protected-route";
 
-const API_BASE_URL = "http://localhost:3000/api";
-
 interface Course {
   id: string;
   title: string;
@@ -134,7 +132,7 @@ export default function UserWishlist() {
           return;
         }
 
-        const response = await fetch(`${API_BASE_URL}/wishlist`, {
+        const response = await fetch(`/api/wishlist`, {
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -165,7 +163,7 @@ export default function UserWishlist() {
       const token = getAuthToken();
 
       const response = await fetch(
-        `${API_BASE_URL}/wishlist?course_id=${deleteTarget.course_id}`,
+        `/api/wishlist?course_id=${deleteTarget.course_id}`,
         {
           method: "DELETE",
           headers: {

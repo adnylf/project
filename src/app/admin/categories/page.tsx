@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -16,21 +16,22 @@ import {
   Eye,
   EyeOff,
   BookOpen,
+  AlertCircle,
+  X,
 } from 'lucide-react';
-import Link from 'next/link';
 import AdminLayout from '@/components/admin/admin-layout';
 import ProtectedRoute from '@/components/auth/protected-route';
 import SweetAlert, { AlertType } from '@/components/ui/sweet-alert';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { CategoryDialog } from '@/components/modal/categories-modal';
-
-const API_BASE_URL = 'http://localhost:3000/api';
+import Pagination from '@/components/ui/pagination'; // Import komponen pagination
 
 interface Category {
   id: string;
@@ -38,8 +39,8 @@ interface Category {
   slug: string;
   description: string | null;
   parent_id: string | null;
-  order: number;
   is_active: boolean;
+  order: number;
   created_at: string;
   updated_at: string;
   parent?: {
@@ -59,10 +60,23 @@ interface CategoryForm {
   is_active: boolean;
 }
 
+interface PaginationData {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
 export default function AdminCategories() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [pagination, setPagination] = useState<PaginationData>({
+    page: 1,
+    limit: 10, // Changed to 10 items per page
+    total: 0,
+    totalPages: 0,
+  });
   
   // Dialog states
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -100,7 +114,7 @@ export default function AdminCategories() {
   }, []);
 
   // Fetch categories
-  const fetchCategories = useCallback(async () => {
+  const fetchCategories = useCallback(async (page: number = 1) => {
     try {
       setLoading(true);
       const token = getAuthToken();
@@ -114,18 +128,35 @@ export default function AdminCategories() {
         return;
       }
 
-      const response = await fetch(`${API_BASE_URL}/admin/categories`, {
+      const params = new URLSearchParams({
+        page: page.toString(),
+        limit: pagination.limit.toString(),
+      });
+
+      if (searchTerm) {
+        params.append('search', searchTerm);
+      }
+
+      const response = await fetch(`/api/admin/categories?${params.toString()}`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
       });
 
       if (!response.ok) {
-        throw new Error('Gagal mengambil data kategori');
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Gagal mengambil data kategori');
       }
 
       const data = await response.json();
       setCategories(data.categories || []);
+      
+      // Update pagination state
+      setPagination(prev => ({
+        ...prev,
+        total: data.pagination?.total || data.categories?.length || 0,
+        totalPages: data.pagination?.totalPages || 1,
+      }));
     } catch (err) {
       setAlertConfig({
         type: "error",
@@ -136,16 +167,16 @@ export default function AdminCategories() {
     } finally {
       setLoading(false);
     }
-  }, [getAuthToken]);
+  }, [getAuthToken, searchTerm, pagination.limit]);
 
   useEffect(() => {
-    fetchCategories();
-  }, [fetchCategories]);
+    fetchCategories(pagination.page);
+  }, [fetchCategories, pagination.page]);
 
-  // Filter categories
+  // Filter categories locally (if needed for search)
   const filteredCategories = categories.filter((category) =>
     category.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (category.description?.toLowerCase().includes(searchTerm.toLowerCase()))
+    (category.description?.toLowerCase().includes(searchTerm.toLowerCase()) || '')
   );
 
   // Get parent categories (categories without parent)
@@ -158,7 +189,7 @@ export default function AdminCategories() {
       name: '',
       description: '',
       parent_id: '',
-      order: categories.length,
+      order: 0,
       is_active: true,
     });
     setDialogOpen(true);
@@ -207,8 +238,8 @@ export default function AdminCategories() {
       };
 
       const url = editingCategory
-        ? `${API_BASE_URL}/admin/categories/${editingCategory.id}`
-        : `${API_BASE_URL}/admin/categories`;
+        ? `/api/admin/categories/${editingCategory.id}`
+        : `/api/admin/categories`;
 
       const response = await fetch(url, {
         method: editingCategory ? 'PUT' : 'POST',
@@ -224,7 +255,7 @@ export default function AdminCategories() {
         throw new Error(errorData.error || 'Gagal menyimpan kategori');
       }
 
-      await fetchCategories();
+      await fetchCategories(pagination.page);
       setDialogOpen(false);
       
       setAlertConfig({
@@ -250,7 +281,7 @@ export default function AdminCategories() {
     try {
       const token = getAuthToken();
 
-      const response = await fetch(`${API_BASE_URL}/admin/categories/${category.id}`, {
+      const response = await fetch(`/api/admin/categories/${category.id}`, {
         method: 'PUT',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -260,7 +291,8 @@ export default function AdminCategories() {
       });
 
       if (!response.ok) {
-        throw new Error('Gagal mengubah status kategori');
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Gagal mengubah status kategori');
       }
 
       setCategories((prev) =>
@@ -299,7 +331,7 @@ export default function AdminCategories() {
       setDeleting(true);
       const token = getAuthToken();
 
-      const response = await fetch(`${API_BASE_URL}/admin/categories/${categoryToDelete.id}`, {
+      const response = await fetch(`/api/admin/categories/${categoryToDelete.id}`, {
         method: 'DELETE',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -322,6 +354,9 @@ export default function AdminCategories() {
       
       setShowDeleteAlert(false);
       setCategoryToDelete(null);
+      
+      // Refresh data after deletion
+      fetchCategories(pagination.page);
     } catch (err) {
       setAlertConfig({
         type: "error",
@@ -334,15 +369,20 @@ export default function AdminCategories() {
     }
   };
 
+  // Handle page change
+  const handlePageChange = (newPage: number) => {
+    setPagination(prev => ({ ...prev, page: newPage }));
+  };
+
   // Stats
   const stats = {
-    total: categories.length,
+    total: pagination.total,
     active: categories.filter((c) => c.is_active).length,
     inactive: categories.filter((c) => !c.is_active).length,
     withCourses: categories.filter((c) => (c._count?.courses || 0) > 0).length,
   };
 
-  if (loading) {
+  if (loading && categories.length === 0) {
     return (
       <ProtectedRoute allowedRoles={['ADMIN']}>
         <AdminLayout>
@@ -456,21 +496,37 @@ export default function AdminCategories() {
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
               <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-3">
-                <FolderTree className="h-8 w-8 text-[#005EB8]" />
+                  <FolderTree className="h-8 w-8 text-[#005EB8]" />
                 Manajemen Kategori
               </h1>
               <p className="text-gray-600 dark:text-gray-400">
                 Kelola kategori kursus platform
               </p>
             </div>
-            <Button
-              onClick={openCreateDialog}
-              className="bg-[#005EB8] hover:bg-[#004A93] text-white"
-            >
-              <Plus className="h-5 w-5 mr-2" />
-              Tambah Kategori
-            </Button>
+            <div className="flex items-center gap-4">
+              <Button
+                onClick={openCreateDialog}
+                className="bg-[#005EB8] hover:bg-[#004A93] text-white"
+              >
+                <Plus className="h-5 w-5 mr-2" />
+                Tambah Kategori
+              </Button>
+            </div>
           </div>
+
+          {showAlert && alertConfig.type === "error" && (
+            <Card className="rounded-lg border bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800">
+              <CardContent className="p-4 flex justify-between items-center">
+                <div className="flex items-center gap-3">
+                  <AlertCircle className="h-5 w-5 text-[#D93025]" />
+                  <p className="text-[#D93025] dark:text-red-400">{alertConfig.message}</p>
+                </div>
+                <button onClick={() => setShowAlert(false)} className="text-[#D93025] dark:text-red-400 hover:text-[#B71C1C] dark:hover:text-red-300">
+                  <X className="h-5 w-5" />
+                </button>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Stats Cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -531,64 +587,67 @@ export default function AdminCategories() {
             </Card>
           </div>
 
-          {/* Search */}
-          <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
-            <CardContent className="p-6">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                <Input
-                  type="search"
-                  placeholder="Cari kategori berdasarkan nama atau deskripsi..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 border-gray-300 dark:border-gray-600 focus:border-[#005EB8] focus:ring-[#005EB8] dark:bg-gray-800"
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Categories Table */}
-          <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
-            <CardHeader>
-              <CardTitle className="text-gray-900 dark:text-white text-xl font-bold">Daftar Kategori</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {filteredCategories.length === 0 ? (
-                <div className="text-center py-12">
-                  <FolderTree className="h-16 w-16 text-gray-400 dark:text-gray-600 mx-auto mb-4" />
-                  <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-                    {searchTerm ? "Kategori tidak ditemukan" : "Belum ada kategori"}
-                  </h3>
-                  <p className="text-gray-600 dark:text-gray-400 mb-6">
-                    {searchTerm ? "Coba ubah kata kunci pencarian Anda" : "Mulai dengan menambahkan kategori pertama"}
-                  </p>
-                  <Button onClick={openCreateDialog} className="bg-[#005EB8] hover:bg-[#004A93] text-white">
-                    <Plus className="h-4 w-4 mr-2" />
-                    Tambah Kategori
-                  </Button>
+          {/* Categories Table Card */}
+          <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 border-gray-200 dark:border-gray-700 overflow-hidden">
+            <CardHeader className="pb-4 border-b border-gray-200 dark:border-gray-700">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div>
+                  <CardTitle className="text-xl font-bold flex items-center gap-2 text-gray-900 dark:text-white">
+                    <FolderTree className="h-5 w-5 text-[#005EB8]" />
+                    Daftar Kategori
+                  </CardTitle>
+                  <CardDescription className="mt-1">
+                    {pagination.total} kategori ditemukan
+                  </CardDescription>
                 </div>
-              ) : (
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              {/* Search */}
+              <div className="p-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                  <Input
+                    type="search"
+                    placeholder="Cari kategori berdasarkan nama atau deskripsi..."
+                    value={searchTerm}
+                    onChange={(e) => {
+                      setSearchTerm(e.target.value);
+                      setPagination(prev => ({ ...prev, page: 1 }));
+                    }}
+                    className="pl-10 h-10 bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600"
+                  />
+                </div>
+              </div>
+
+              {/* Table */}
+              {loading && categories.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12">
+                  <Loader2 className="h-12 w-12 animate-spin text-[#005EB8] mb-4" />
+                  <span className="text-gray-600 dark:text-gray-400">Memuat data kategori...</span>
+                </div>
+              ) : filteredCategories.length > 0 ? (
                 <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b border-gray-200 dark:border-gray-700">
-                        <th className="text-left py-4 px-4 font-semibold text-gray-900 dark:text-white">Nama</th>
-                        <th className="text-left py-4 px-4 font-semibold text-gray-900 dark:text-white">Slug</th>
-                        <th className="text-left py-4 px-4 font-semibold text-gray-900 dark:text-white">Parent</th>
-                        <th className="text-center py-4 px-4 font-semibold text-gray-900 dark:text-white">Kursus</th>
-                        <th className="text-center py-4 px-4 font-semibold text-gray-900 dark:text-white">Status</th>
-                        <th className="text-center py-4 px-4 font-semibold text-gray-900 dark:text-white">Aksi</th>
-                      </tr>
-                    </thead>
-                    <tbody>
+                  <Table className="min-w-full">
+                    <TableHeader>
+                      <TableRow className="bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                        <TableHead className="font-semibold text-gray-700 dark:text-gray-300 px-4 py-3">Nama</TableHead>
+                        <TableHead className="font-semibold text-gray-700 dark:text-gray-300 px-4 py-3">Slug</TableHead>
+                        <TableHead className="font-semibold text-gray-700 dark:text-gray-300 px-4 py-3">Parent</TableHead>
+                        <TableHead className="font-semibold text-gray-700 dark:text-gray-300 px-4 py-3 text-center">Kursus</TableHead>
+                        <TableHead className="font-semibold text-gray-700 dark:text-gray-300 px-4 py-3 text-center">Status</TableHead>
+                        <TableHead className="font-semibold text-gray-700 dark:text-gray-300 px-4 py-3 text-center">Aksi</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
                       {filteredCategories.map((category) => (
-                        <tr
+                        <TableRow
                           key={category.id}
-                          className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                          className="hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors"
                         >
-                          <td className="py-4 px-4">
+                          <TableCell className="px-4 py-3">
                             <div className="flex items-center gap-2">
-                              {category.parent && (
+                              {category.parent_id && (
                                 <ChevronRight className="h-4 w-4 text-gray-400" />
                               )}
                               <div>
@@ -602,13 +661,13 @@ export default function AdminCategories() {
                                 )}
                               </div>
                             </div>
-                          </td>
-                          <td className="py-4 px-4">
+                          </TableCell>
+                          <TableCell className="px-4 py-3">
                             <code className="text-sm bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded border dark:border-gray-700">
                               {category.slug}
                             </code>
-                          </td>
-                          <td className="py-4 px-4">
+                          </TableCell>
+                          <TableCell className="px-4 py-3">
                             {category.parent ? (
                               <Badge className="bg-[#005EB8]/10 text-[#005EB8] border border-[#005EB8]/20 pointer-events-none">
                                 {category.parent.name}
@@ -616,60 +675,85 @@ export default function AdminCategories() {
                             ) : (
                               <span className="text-gray-400 dark:text-gray-500">—</span>
                             )}
-                          </td>
-                          <td className="py-4 px-4 text-center">
-                            <Badge className="bg-[#005EB8] text-white border border-[#005EB8] pointer-events-none">
+                          </TableCell>
+                          <TableCell className="px-4 py-3 text-center">
+                            <Badge className="bg-[#005EB8]/10 text-[#005EB8] border border-[#005EB8]/20 pointer-events-none">
                               {category._count?.courses || 0}
                             </Badge>
-                          </td>
-                          <td className="py-4 px-4 text-center">
-                            {/* Button Eye Aktif/Tidak Aktif */}
+                          </TableCell>
+                          <TableCell className="px-4 py-3 text-center">
                             <Button
                               variant="outline"
                               size="sm"
                               onClick={() => toggleActive(category)}
-                              className={
+                              className={`h-8 w-8 p-0 ${
                                 category.is_active
                                   ? "border-[#008A00] text-[#008A00] hover:bg-[#008A00]/10 dark:border-[#008A00] dark:text-[#008A00]"
                                   : "border-[#D93025] text-[#D93025] hover:bg-[#D93025]/10 dark:border-[#D93025] dark:text-[#D93025]"
-                              }
+                              }`}
                             >
                               {category.is_active ? (
-                                <Eye className="h-5 w-5" />
+                                <Eye className="h-4 w-4" />
                               ) : (
-                                <EyeOff className="h-5 w-5" />
+                                <EyeOff className="h-4 w-4" />
                               )}
                             </Button>
-                          </td>
-                          <td className="py-4 px-4">
+                          </TableCell>
+                          <TableCell className="px-4 py-3">
                             <div className="flex items-center justify-center gap-2">
                               <Button
                                 variant="outline"
                                 size="sm"
                                 onClick={() => openEditDialog(category)}
-                                className="border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10"
+                                className="h-8 w-8 p-0 border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10 dark:border-[#005EB8] dark:text-[#005EB8]"
                               >
                                 <Edit className="h-4 w-4" />
                               </Button>
                               <Button
                                 variant="outline"
                                 size="sm"
-                                className="border-[#D93025] text-[#D93025] hover:bg-[#D93025]/10"
+                                className="h-8 w-8 p-0 border-[#D93025] text-[#D93025] hover:bg-[#D93025]/10 dark:border-[#D93025] dark:text-[#D93025]"
                                 onClick={() => openDeleteDialog(category)}
                                 disabled={(category._count?.courses || 0) > 0}
                               >
                                 <Trash2 className="h-4 w-4" />
                               </Button>
                             </div>
-                          </td>
-                        </tr>
+                          </TableCell>
+                        </TableRow>
                       ))}
-                    </tbody>
-                  </table>
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <FolderTree className="h-16 w-16 text-gray-400 dark:text-gray-600 mx-auto mb-4" />
+                  <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+                    {searchTerm ? "Kategori tidak ditemukan" : "Belum ada kategori"}
+                  </h3>
+                  <p className="text-gray-600 dark:text-gray-400 mb-6">
+                    {searchTerm ? "Coba ubah kata kunci pencarian Anda" : "Mulai dengan menambahkan kategori pertama"}
+                  </p>
+                  <Button onClick={openCreateDialog} className="bg-[#005EB8] hover:bg-[#004A93] text-white">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Tambah Kategori
+                  </Button>
                 </div>
               )}
             </CardContent>
           </Card>
+
+          {/* Pagination */}
+          {pagination.totalPages > 1 && (
+            <Pagination
+              currentPage={pagination.page}
+              totalPages={pagination.totalPages}
+              totalItems={pagination.total}
+              itemsPerPage={pagination.limit}
+              onPageChange={handlePageChange}
+              loading={loading}
+            />
+          )}
 
           {/* Category Dialog (Create/Edit) */}
           <CategoryDialog

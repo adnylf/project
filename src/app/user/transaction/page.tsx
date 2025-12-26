@@ -1,10 +1,18 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import {
   Receipt,
   Search,
@@ -13,14 +21,14 @@ import {
   XCircle,
   AlertCircle,
   CreditCard,
-  Calendar,
   ExternalLink,
   Loader2,
   BookOpen,
   Filter,
-  TrendingUp,
   DollarSign,
-  BarChart3,
+  Eye,
+  ArrowUpDown,
+  ChevronRight,
 } from "lucide-react";
 import Link from "next/link";
 import UserLayout from "@/components/user/user-layout";
@@ -32,8 +40,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import ProtectedRoute from "@/components/auth/protected-route";
-
-const API_BASE_URL = "http://localhost:3000/api";
 
 type TransactionStatus = "PENDING" | "PAID" | "SUCCESS" | "FAILED" | "CANCELLED" | "REFUNDED";
 
@@ -77,7 +83,15 @@ const formatCurrency = (amount: number) => {
 const formatDate = (dateString: string) => {
   return new Date(dateString).toLocaleDateString("id-ID", {
     day: "numeric",
-    month: "long",
+    month: "short",
+    year: "numeric",
+  });
+};
+
+const formatDateTime = (dateString: string) => {
+  return new Date(dateString).toLocaleDateString("id-ID", {
+    day: "numeric",
+    month: "short",
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
@@ -87,40 +101,40 @@ const formatDate = (dateString: string) => {
 const getStatusConfig = (status: TransactionStatus) => {
   const configs = {
     PENDING: {
-      label: "Menunggu Pembayaran",
+      label: "Menunggu",
       icon: Clock,
-      color: "bg-[#F4B400]/10 text-[#F4B400] border-[#F4B400]/20",
+      color: "bg-[#F4B400]/10 text-[#F4B400] border border-[#F4B400]/20 pointer-events-none",
       iconColor: "text-[#F4B400]",
     },
     PAID: {
       label: "Dibayar",
       icon: CheckCircle2,
-      color: "bg-[#008A00]/10 text-[#008A00] border-[#008A00]/20",
+      color: "bg-[#008A00]/10 text-[#008A00] border border-[#008A00]/20 pointer-events-none",
       iconColor: "text-[#008A00]",
     },
     SUCCESS: {
       label: "Berhasil",
       icon: CheckCircle2,
-      color: "bg-[#008A00]/10 text-[#008A00] border-[#008A00]/20",
+      color: "bg-[#008A00]/10 text-[#008A00] border border-[#008A00]/20 pointer-events-none",
       iconColor: "text-[#008A00]",
     },
     FAILED: {
       label: "Gagal",
       icon: XCircle,
-      color: "bg-[#D93025]/10 text-[#D93025] border-[#D93025]/20",
+      color: "bg-[#D93025]/10 text-[#D93025] border border-[#D93025]/20 pointer-events-none",
       iconColor: "text-[#D93025]",
     },
     CANCELLED: {
       label: "Dibatalkan",
       icon: XCircle,
-      color: "bg-gray-100 text-gray-800 border-gray-200",
-      iconColor: "text-gray-600",
+      color: "bg-gray-100 text-gray-600 border border-gray-300 pointer-events-none dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600",
+      iconColor: "text-gray-500",
     },
     REFUNDED: {
-      label: "Dikembalikan",
+      label: "Refund",
       icon: AlertCircle,
-      color: "bg-purple-100 text-purple-800 border-purple-200",
-      iconColor: "text-purple-600",
+      color: "bg-gray-100 text-gray-600 border border-gray-300 pointer-events-none dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600",
+      iconColor: "text-gray-500",
     },
   };
   return configs[status] || configs.PENDING;
@@ -130,9 +144,9 @@ const getPaymentMethodLabel = (method: string) => {
   const labels: Record<string, string> = {
     MIDTRANS: "Midtrans",
     E_WALLET: "E-Wallet",
-    VIRTUAL_ACCOUNT: "Virtual Account",
+    VIRTUAL_ACCOUNT: "VA",
     QRIS: "QRIS",
-    BANK_TRANSFER: "Transfer Bank",
+    BANK_TRANSFER: "Transfer",
   };
   return labels[method] || method;
 };
@@ -162,7 +176,7 @@ export default function UserTransactions() {
           return;
         }
 
-        const response = await fetch(`${API_BASE_URL}/payments`, {
+        const response = await fetch(`/api/payments`, {
           headers: { Authorization: `Bearer ${token}` },
         });
 
@@ -209,7 +223,10 @@ export default function UserTransactions() {
       <ProtectedRoute allowedRoles={["STUDENT"]}>
         <UserLayout>
           <div className="flex items-center justify-center min-h-[400px]">
-            <Loader2 className="h-12 w-12 animate-spin text-[#005EB8]" />
+            <div className="text-center">
+              <Loader2 className="h-12 w-12 animate-spin text-[#005EB8] mx-auto mb-4" />
+              <p className="text-gray-600 dark:text-gray-400">Memuat transaksi...</p>
+            </div>
           </div>
         </UserLayout>
       </ProtectedRoute>
@@ -220,27 +237,31 @@ export default function UserTransactions() {
     <ProtectedRoute allowedRoles={["STUDENT"]}>
       <UserLayout>
         <div className="space-y-8">
+          {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
               <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-3">
-                <Receipt className="h-8 w-8 text-[#005EB8]" />
+                  <Receipt className="h-8 w-8 text-[#005EB8]" />
                 Riwayat Transaksi
               </h1>
-              <p className="text-gray-600 dark:text-gray-400">Lihat semua transaksi pembelian kursus Anda</p>
+              <p className="text-gray-600 dark:text-gray-400">
+                Lihat semua transaksi pembelian kursus Anda
+              </p>
             </div>
           </div>
 
           {error && (
             <Card className="rounded-lg border bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800">
-              <CardContent className="p-4">
-                <p className="text-red-600 dark:text-red-400">{error}</p>
+              <CardContent className="p-4 flex items-center gap-3">
+                <AlertCircle className="h-5 w-5 text-[#D93025]" />
+                <p className="text-[#D93025] dark:text-[#D93025]">{error}</p>
               </CardContent>
             </Card>
           )}
 
           {/* Stats Cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
+            <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 border-gray-200 dark:border-gray-700">
               <CardContent className="p-5">
                 <div className="flex items-center gap-3">
                   <div className="p-3 rounded-xl bg-[#005EB8]/10">
@@ -253,7 +274,7 @@ export default function UserTransactions() {
                 </div>
               </CardContent>
             </Card>
-            <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
+            <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 border-gray-200 dark:border-gray-700">
               <CardContent className="p-5">
                 <div className="flex items-center gap-3">
                   <div className="p-3 rounded-xl bg-[#008A00]/10">
@@ -266,7 +287,7 @@ export default function UserTransactions() {
                 </div>
               </CardContent>
             </Card>
-            <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
+            <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 border-gray-200 dark:border-gray-700">
               <CardContent className="p-5">
                 <div className="flex items-center gap-3">
                   <div className="p-3 rounded-xl bg-[#F4B400]/10">
@@ -279,7 +300,7 @@ export default function UserTransactions() {
                 </div>
               </CardContent>
             </Card>
-            <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
+            <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 border-gray-200 dark:border-gray-700">
               <CardContent className="p-5">
                 <div className="flex items-center gap-3">
                   <div className="p-3 rounded-xl bg-[#D93025]/10">
@@ -287,8 +308,8 @@ export default function UserTransactions() {
                   </div>
                   <div>
                     <p className="text-sm text-gray-500 dark:text-gray-400">Total Belanja</p>
-                    <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                      {formatCurrency(stats.totalSpent).replace('IDR', 'Rp')}
+                    <p className="text-xl font-bold text-gray-900 dark:text-white">
+                      {formatCurrency(stats.totalSpent).replace('Rp', 'Rp ')}
                     </p>
                   </div>
                 </div>
@@ -296,167 +317,225 @@ export default function UserTransactions() {
             </Card>
           </div>
 
-          {/* Filters */}
-          <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
-            <CardContent className="p-6">
-              <div className="flex flex-col md:flex-row gap-4">
-                <div className="flex-1 relative">
-                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                  <Input 
-                    type="search" 
-                    placeholder="Cari order ID atau nama kursus..." 
-                    value={searchTerm} 
-                    onChange={(e) => setSearchTerm(e.target.value)} 
-                    className="pl-10"
-                  />
+          {/* Table Card */}
+          <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 border-gray-200 dark:border-gray-700 overflow-hidden">
+            <CardHeader className="pb-4 border-b border-gray-200 dark:border-gray-700">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div>
+                  <CardTitle className="text-xl font-bold flex items-center gap-2 text-gray-900 dark:text-white">
+                    <Receipt className="h-5 w-5 text-[#005EB8]" />
+                    Daftar Transaksi
+                  </CardTitle>
+                  <CardDescription className="mt-1">
+                    {filteredTransactions.length} transaksi ditemukan
+                  </CardDescription>
                 </div>
-                <Select value={filterStatus} onValueChange={setFilterStatus}>
-                  <SelectTrigger className="w-[180px]">
-                    <Filter className="h-4 w-4 mr-2" />
-                    <SelectValue placeholder="Status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Semua Status</SelectItem>
-                    <SelectItem value="PENDING">Menunggu</SelectItem>
-                    <SelectItem value="SUCCESS">Berhasil</SelectItem>
-                    <SelectItem value="FAILED">Gagal</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select value={sortBy} onValueChange={setSortBy}>
-                  <SelectTrigger className="w-[180px]">
-                    <SelectValue placeholder="Urutkan" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="newest">Terbaru</SelectItem>
-                    <SelectItem value="oldest">Terlama</SelectItem>
-                    <SelectItem value="amount-high">Nominal Tertinggi</SelectItem>
-                    <SelectItem value="amount-low">Nominal Terendah</SelectItem>
-                  </SelectContent>
-                </Select>
               </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              {/* Filters */}
+              <div className="p-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50">
+                <div className="flex flex-col md:flex-row gap-3">
+                  <div className="flex-1 relative">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                    <Input 
+                      type="search" 
+                      placeholder="Cari order ID atau nama kursus..." 
+                      value={searchTerm} 
+                      onChange={(e) => setSearchTerm(e.target.value)} 
+                      className="pl-10 h-10 bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600"
+                    />
+                  </div>
+                  <Select value={filterStatus} onValueChange={setFilterStatus}>
+                    <SelectTrigger className="w-full md:w-[160px] h-10 bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600">
+                      <Filter className="h-4 w-4 mr-2 text-gray-400" />
+                      <SelectValue placeholder="Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Semua Status</SelectItem>
+                      <SelectItem value="PENDING">Menunggu</SelectItem>
+                      <SelectItem value="SUCCESS">Berhasil</SelectItem>
+                      <SelectItem value="PAID">Dibayar</SelectItem>
+                      <SelectItem value="FAILED">Gagal</SelectItem>
+                      <SelectItem value="CANCELLED">Dibatalkan</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value={sortBy} onValueChange={setSortBy}>
+                    <SelectTrigger className="w-full md:w-[160px] h-10 bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600">
+                      <ArrowUpDown className="h-4 w-4 mr-2 text-gray-400" />
+                      <SelectValue placeholder="Urutkan" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="newest">Terbaru</SelectItem>
+                      <SelectItem value="oldest">Terlama</SelectItem>
+                      <SelectItem value="amount-high">Nominal ↓</SelectItem>
+                      <SelectItem value="amount-low">Nominal ↑</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Table */}
+              {filteredTransactions.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <Table className="min-w-full">
+                    <TableHeader>
+                      <TableRow className="bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                        <TableHead className="font-semibold text-gray-700 dark:text-gray-300 w-[120px] px-4 py-3">
+                          Order ID
+                        </TableHead>
+                        <TableHead className="font-semibold text-gray-700 dark:text-gray-300 px-4 py-3 min-w-[180px]">
+                          Kursus
+                        </TableHead>
+                        <TableHead className="font-semibold text-gray-700 dark:text-gray-300 w-[110px] px-4 py-3">
+                          Tanggal
+                        </TableHead>
+                        <TableHead className="font-semibold text-gray-700 dark:text-gray-300 w-[100px] px-4 py-3">
+                          Metode
+                        </TableHead>
+                        <TableHead className="font-semibold text-gray-700 dark:text-gray-300 w-[120px] px-4 py-3 text-right">
+                          Total
+                        </TableHead>
+                        <TableHead className="font-semibold text-gray-700 dark:text-gray-300 w-[120px] px-4 py-3 text-center">
+                          Status
+                        </TableHead>
+                        <TableHead className="font-semibold text-gray-700 dark:text-gray-300 w-[130px] px-4 py-3 text-center">
+                          Aksi
+                        </TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredTransactions.map((transaction) => {
+                        const statusConfig = getStatusConfig(transaction.status);
+                        const StatusIcon = statusConfig.icon;
+                        return (
+                          <TableRow 
+                            key={transaction.id} 
+                            className="hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors"
+                          >
+                            <TableCell className="px-4 py-3">
+                              <div className="font-mono text-xs text-gray-600 dark:text-gray-400 truncate" title={transaction.order_id}>
+                                {transaction.order_id}
+                              </div>
+                            </TableCell>
+                            <TableCell className="px-4 py-3">
+                              <div className="flex items-center gap-3 min-w-0">
+                                <div className="w-12 h-9 rounded-md overflow-hidden bg-gray-100 dark:bg-gray-700 flex-shrink-0">
+                                  {transaction.course.thumbnail ? (
+                                    <img 
+                                      src={transaction.course.thumbnail} 
+                                      alt={transaction.course.title} 
+                                      className="w-full h-full object-cover"
+                                    />
+                                  ) : (
+                                    <div className="w-full h-full flex items-center justify-center">
+                                      <BookOpen className="h-4 w-4 text-gray-400" />
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <p className="font-medium text-gray-900 dark:text-white text-sm truncate" title={transaction.course.title}>
+                                    {transaction.course.title}
+                                  </p>
+                                  <p className="text-xs text-gray-500 dark:text-gray-400 truncate" title={transaction.course.mentor?.user?.full_name || "Instruktur"}>
+                                    {transaction.course.mentor?.user?.full_name || "Instruktur"}
+                                  </p>
+                                </div>
+                              </div>
+                            </TableCell>
+                            <TableCell className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
+                              {formatDate(transaction.created_at)}
+                            </TableCell>
+                            <TableCell className="px-4 py-3">
+                              <div className="flex justify-start">
+                                <Badge className="bg-gray-100 text-gray-800 border border-gray-300 pointer-events-none dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600 text-xs px-2 py-1">
+                                  {getPaymentMethodLabel(transaction.payment_method)}
+                                </Badge>
+                              </div>
+                            </TableCell>
+                            <TableCell className="px-4 py-3 text-right font-semibold text-[#005EB8] whitespace-nowrap">
+                              {formatCurrency(transaction.total_amount).replace('Rp', 'Rp ')}
+                            </TableCell>
+                            <TableCell className="px-4 py-3">
+                              <div className="flex justify-center">
+                                <Badge className={`${statusConfig.color} text-xs px-3 py-1.5`}>
+                                  <StatusIcon className={`h-3 w-3 mr-1.5 ${statusConfig.iconColor}`} />
+                                  {statusConfig.label}
+                                </Badge>
+                              </div>
+                            </TableCell>
+                            <TableCell className="px-4 py-3">
+                              <div className="flex items-center justify-center gap-2">
+                                {/* Button Ikon Mata - Style diubah seperti button Lihat Semua di dashboard */}
+                                <Link href={`/user/transaction/${transaction.id}`}>
+                                  <Button 
+                                    variant="outline" 
+                                    size="sm"
+                                    className="h-8 w-8 p-0 border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10 dark:border-[#005EB8] dark:text-[#005EB8]"
+                                  >
+                                    <Eye className="h-4 w-4" />
+                                  </Button>
+                                </Link>
+                                {transaction.status === "PENDING" && transaction.payment_url && (
+                                  <a href={transaction.payment_url} target="_blank" rel="noopener noreferrer">
+                                    <Button 
+                                      size="sm" 
+                                      className="h-8 bg-[#005EB8] hover:bg-[#004A93] text-white text-xs px-3"
+                                    >
+                                      <CreditCard className="h-3 w-3 mr-1.5" />
+                                      Bayar
+                                    </Button>
+                                  </a>
+                                )}
+                                {/* Button Akses - Style diubah seperti button Lanjut Belajar di dashboard */}
+                                {(transaction.status === "SUCCESS" || transaction.status === "PAID") && (
+                                  <Link href={`/user/courses/${transaction.course.id}/player`}>
+                                    <Button 
+                                      size="sm" 
+                                      className="h-8 bg-[#005EB8] hover:bg-[#004A93] text-white text-xs px-3"
+                                    >
+                                      <BookOpen className="h-3 w-3 mr-1.5" />
+                                      Akses
+                                    </Button>
+                                  </Link>
+                                )}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : (
+                <div className="p-12 text-center">
+                  <div className="flex flex-col items-center gap-4">
+                    <div className="h-20 w-20 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+                      <Receipt className="h-10 w-10 text-gray-400" />
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+                        {searchTerm || filterStatus !== "all" ? "Tidak ada transaksi" : "Belum ada transaksi"}
+                      </h3>
+                      <p className="text-gray-600 dark:text-gray-400 mb-6">
+                        {searchTerm || filterStatus !== "all" 
+                          ? "Coba ubah filter pencarian Anda" 
+                          : "Mulai belajar dengan membeli kursus"}
+                      </p>
+                    </div>
+                    {!searchTerm && filterStatus === "all" && (
+                      <Link href="/courses">
+                        <Button className="bg-[#005EB8] hover:bg-[#004A93] text-white">
+                          <BookOpen className="h-4 w-4 mr-2" />
+                          Jelajahi Kursus
+                        </Button>
+                      </Link>
+                    )}
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
-
-          {/* Transactions List */}
-          {filteredTransactions.length > 0 ? (
-            <div className="space-y-4">
-              {filteredTransactions.map((transaction) => {
-                const statusConfig = getStatusConfig(transaction.status);
-                const StatusIcon = statusConfig.icon;
-                return (
-                  <Card 
-                    key={transaction.id} 
-                    className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700"
-                  >
-                    <CardContent className="p-6">
-                      <div className="flex flex-col lg:flex-row gap-6">
-                        <div className="w-full lg:w-40 h-24 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-700 flex-shrink-0">
-                          {transaction.course.thumbnail ? (
-                            <img 
-                              src={transaction.course.thumbnail} 
-                              alt={transaction.course.title} 
-                              className="w-full h-full object-cover"
-                            />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center">
-                              <BookOpen className="h-8 w-8 text-gray-400" />
-                            </div>
-                          )}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
-                            <div className="flex-1">
-                              <h3 className="font-semibold text-gray-900 dark:text-white text-lg line-clamp-1 mb-1">
-                                {transaction.course.title}
-                              </h3>
-                              <p className="text-sm text-gray-600 dark:text-gray-400">
-                                oleh {transaction.course.mentor?.user?.full_name || "Instruktur"}
-                              </p>
-                            </div>
-                            <Badge className={`${statusConfig.color} border`}>
-                              <StatusIcon className={`h-3 w-3 mr-1 ${statusConfig.iconColor}`} />
-                              {statusConfig.label}
-                            </Badge>
-                          </div>
-                          
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm mb-4">
-                            <div>
-                              <p className="text-gray-500 dark:text-gray-400 text-xs">Order ID</p>
-                              <p className="font-medium font-mono text-xs truncate text-gray-900 dark:text-white">{transaction.order_id}</p>
-                            </div>
-                            <div>
-                              <p className="text-gray-500 dark:text-gray-400 text-xs">Tanggal</p>
-                              <p className="font-medium text-gray-900 dark:text-white">{formatDate(transaction.created_at)}</p>
-                            </div>
-                            <div>
-                              <p className="text-gray-500 dark:text-gray-400 text-xs">Metode</p>
-                              <p className="font-medium text-gray-900 dark:text-white">{getPaymentMethodLabel(transaction.payment_method)}</p>
-                            </div>
-                            <div>
-                              <p className="text-gray-500 dark:text-gray-400 text-xs">Total</p>
-                              <p className="font-bold text-[#005EB8] text-lg">
-                                {formatCurrency(transaction.total_amount).replace('IDR', 'Rp')}
-                              </p>
-                            </div>
-                          </div>
-                          
-                          <div className="flex flex-wrap gap-2">
-                            <Link href={`/user/transaction/${transaction.id}`}>
-                              <Button variant="outline" size="sm" className="border-gray-300 dark:border-gray-600">
-                                <ExternalLink className="h-4 w-4 mr-1" />
-                                Detail
-                              </Button>
-                            </Link>
-                            {transaction.status === "PENDING" && transaction.payment_url && (
-                              <a href={transaction.payment_url} target="_blank" rel="noopener noreferrer">
-                                <Button size="sm" className="bg-[#005EB8] hover:bg-[#004A93]">
-                                  <CreditCard className="h-4 w-4 mr-1" />
-                                  Bayar Sekarang
-                                </Button>
-                              </a>
-                            )}
-                            {(transaction.status === "SUCCESS" || transaction.status === "PAID") && (
-                              <Link href={`/user/courses/${transaction.course.id}/player`}>
-                                <Button size="sm" className="bg-[#008A00] hover:bg-[#007800]">
-                                  <BookOpen className="h-4 w-4 mr-1" />
-                                  Akses Kursus
-                                </Button>
-                              </Link>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
-          ) : (
-            <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
-              <CardContent className="p-12 text-center">
-                <div className="flex flex-col items-center gap-4">
-                  <div className="h-20 w-20 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
-                    <Receipt className="h-10 w-10 text-gray-400" />
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-                      {searchTerm || filterStatus !== "all" ? "Tidak ada transaksi" : "Belum ada transaksi"}
-                    </h3>
-                    <p className="text-gray-600 dark:text-gray-400 mb-6">
-                      {searchTerm || filterStatus !== "all" ? "Coba ubah filter pencarian Anda" : "Mulai belajar dengan membeli kursus"}
-                    </p>
-                  </div>
-                  {!searchTerm && filterStatus === "all" && (
-                    <Link href="/courses">
-                      <Button className="bg-[#005EB8] hover:bg-[#004A93]">
-                        Jelajahi Kursus
-                      </Button>
-                    </Link>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          )}
         </div>
       </UserLayout>
     </ProtectedRoute>

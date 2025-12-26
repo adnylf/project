@@ -103,7 +103,7 @@ export default function NavbarUser({ toggleSidebar }: NavbarUserProps) {
       }
 
       // Send logout request to backend
-      const response = await fetch("http://localhost:3000/api/auth/logout", {
+      const response = await fetch("/api/auth/logout", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

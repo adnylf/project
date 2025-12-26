@@ -3,8 +3,8 @@ export const appConfig = {
   name: 'E-Learning Platform',
   description: 'Platform pembelajaran online inklusif untuk semua',
   version: '1.0.0',
-  url: process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
-  apiUrl: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api',
+  url: process.env.NEXT_PUBLIC_APP_URL || '',
+  apiUrl: process.env.NEXT_PUBLIC_API_URL || '/api',
   
   // Environment
   env: process.env.NODE_ENV || 'development',

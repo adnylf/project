@@ -44,7 +44,6 @@ import {
 import MentorLayout from "@/components/mentor/mentor-layout";
 import ProtectedRoute from "@/components/auth/protected-route";
 import AvatarCropper from "@/components/modal/avatar-cropper";
-const API_BASE_URL = "http://localhost:3000/api";
 type MentorStatus = "PENDING" | "APPROVED" | "REJECTED";
 interface MentorProfile {
   id: string;
@@ -146,14 +145,14 @@ export default function MentorProfilePage() {
           setError("Silakan login terlebih dahulu");
           return;
         }
-        const response = await fetch(`${API_BASE_URL}/mentors/profile`, {
+        const response = await fetch(`/api/mentors/profile`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (response.status === 404) {
           // No profile yet - show apply form
           setHasProfile(false);
           // Get user info for phone
-          const userRes = await fetch(`${API_BASE_URL}/users/profile`, {
+          const userRes = await fetch(`/api/users/profile`, {
             headers: { Authorization: `Bearer ${token}` },
           });
           if (userRes.ok) {
@@ -248,7 +247,7 @@ export default function MentorProfilePage() {
       const file = new File([croppedBlob], 'avatar.jpg', { type: 'image/jpeg' });
       const uploadData = new FormData();
       uploadData.append("file", file);
-      const response = await fetch(`${API_BASE_URL}/users/profile/picture`, {
+      const response = await fetch(`/api/users/profile/picture`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
         body: uploadData,
@@ -294,7 +293,7 @@ export default function MentorProfilePage() {
       setSaving(true);
       setError(null);
       const token = getAuthToken();
-      const response = await fetch(`${API_BASE_URL}/mentors/apply`, {
+      const response = await fetch(`/api/mentors/apply`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -334,7 +333,7 @@ export default function MentorProfilePage() {
       setSaving(true);
       setError(null);
       const token = getAuthToken();
-      const response = await fetch(`${API_BASE_URL}/mentors/profile`, {
+      const response = await fetch(`/api/mentors/profile`, {
         method: "PUT",
         headers: {
           Authorization: `Bearer ${token}`,

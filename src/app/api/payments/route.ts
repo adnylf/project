@@ -51,8 +51,33 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Anda sudah terdaftar di kursus ini' }, { status: 400 });
     }
 
-    // If course is free, enroll directly
+    // If course is free, enroll directly and create transaction record
     if (course.is_free || course.price === 0) {
+      // Generate order ID for free transaction
+      const timestamp = Date.now();
+      const orderId = `FREE-${timestamp}-${course.id.substring(0, 8)}`;
+
+      // Create transaction record for free course
+      const transaction = await prisma.transaction.create({
+        data: {
+          user_id: authUser.userId,
+          course_id: course_id,
+          order_id: orderId,
+          amount: 0,
+          discount: 0,
+          total_amount: 0,
+          payment_method: 'FREE' as PaymentMethod,
+          status: TransactionStatus.SUCCESS,
+          paid_at: new Date(),
+          metadata: {
+            course_title: course.title,
+            mentor_name: course.mentor?.user?.full_name || 'Mentor',
+            is_free: true,
+          },
+        },
+      });
+
+      // Create enrollment
       const enrollment = await prisma.enrollment.create({
         data: {
           user_id: authUser.userId,
@@ -61,10 +86,17 @@ export async function POST(request: NextRequest) {
         },
       });
 
+      // Update course student count
+      await prisma.course.update({
+        where: { id: course_id },
+        data: { total_students: { increment: 1 } },
+      });
+
       return NextResponse.json({
         success: true,
         message: 'Berhasil mendaftar kursus gratis',
         enrollment,
+        transaction,
         is_free: true,
       });
     }
@@ -107,6 +139,9 @@ export async function POST(request: NextRequest) {
     const amount = course.discount_price || course.price;
     const discount = course.discount_price ? course.price - course.discount_price : 0;
 
+    // Get base URL for callbacks (must be absolute URL for Midtrans)
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || (process.env.NODE_ENV === 'development' ? 'http://localhost:3000' : '');
+
     // Create Midtrans transaction
     const midtransParams = {
       transaction_details: {
@@ -129,9 +164,9 @@ export async function POST(request: NextRequest) {
         },
       ],
       callbacks: {
-        finish: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/user/courses/${course.id}/success`,
-        error: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/user/courses/${course.id}/failed`,
-        pending: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/user/courses/${course.id}/pending`,
+        finish: `${appUrl}/user/courses/${course.id}/success`,
+        error: `${appUrl}/user/courses/${course.id}/failed`,
+        pending: `${appUrl}/user/courses/${course.id}/pending`,
       },
     };
 

@@ -29,8 +29,12 @@ export async function POST(request: NextRequest) {
 
     const result = applyMentorSchema.safeParse(applyData);
     if (!result.success) {
+      const fieldErrors = result.error.flatten().fieldErrors;
+      const errorDetails = Object.entries(fieldErrors)
+        .map(([field, errors]) => `${field}: ${errors?.join(', ')}`)
+        .join('; ');
       return NextResponse.json(
-        { error: 'Validasi gagal', details: result.error.flatten().fieldErrors },
+        { error: `Validasi gagal: ${errorDetails}`, details: fieldErrors },
         { status: 400 }
       );
     }

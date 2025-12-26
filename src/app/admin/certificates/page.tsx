@@ -1,11 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import {
   Award,
@@ -14,7 +12,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Plus,
-  Upload,
   FileText,
   Trash2,
   Eye,
@@ -23,20 +20,18 @@ import {
   XCircle,
   AlertCircle,
   Code,
-  Download,
   Edit,
 } from "lucide-react";
 import AdminLayout from "@/components/admin/admin-layout";
 import ProtectedRoute from "@/components/auth/protected-route";
 import SweetAlert, { AlertType } from "@/components/ui/sweet-alert";
+import { CertificateTemplateModal } from "@/components/admin/certificate-modal";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
 import {
   Select,
   SelectContent,
@@ -44,14 +39,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs";
-
-const API_BASE_URL = "http://localhost:3000/api";
+import Pagination from "@/components/ui/pagination"; // Import komponen pagination
 
 interface Certificate {
   id: string;
@@ -71,39 +59,12 @@ interface Template {
   created_at: string;
 }
 
-interface ParsedTemplate {
-  name: string;
-  content: string;
-  is_default: boolean;
-}
-
 interface Pagination {
   page: number;
   limit: number;
   total: number;
   totalPages: number;
 }
-
-const formatDate = (dateString: string) => {
-  return new Date(dateString).toLocaleDateString("id-ID", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-};
-
-const getStatusBadge = (status: string) => {
-  switch (status) {
-    case "ISSUED":
-      return <Badge className="bg-[#008A00] text-white border border-[#008A00] pointer-events-none"><CheckCircle className="h-3 w-3 mr-1" />Terbit</Badge>;
-    case "PENDING":
-      return <Badge className="bg-[#F4B400] text-[#1A1A1A] border border-[#F4B400] pointer-events-none"><Clock className="h-3 w-3 mr-1" />Pending</Badge>;
-    case "REVOKED":
-      return <Badge className="bg-[#D93025] text-white border border-[#D93025] pointer-events-none"><XCircle className="h-3 w-3 mr-1" />Dicabut</Badge>;
-    default:
-      return <Badge className="bg-gray-100 text-gray-800 border border-gray-300 pointer-events-none">{status}</Badge>;
-  }
-};
 
 const DEFAULT_TEMPLATE = `<!DOCTYPE html>
 <html>
@@ -143,7 +104,6 @@ export default function AdminCertificatesPage() {
   const [activeTab, setActiveTab] = useState("certificates");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
 
   // Certificates state
   const [certificates, setCertificates] = useState<Certificate[]>([]);
@@ -154,12 +114,19 @@ export default function AdminCertificatesPage() {
   // Templates state
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loadingTemplates, setLoadingTemplates] = useState(false);
-  const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
-  const [editingTemplate, setEditingTemplate] = useState<Template | null>(null);
-  const [templateForm, setTemplateForm] = useState({ name: "", content: DEFAULT_TEMPLATE, is_default: false });
+  
+  // Modal states
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalType, setModalType] = useState<"create" | "edit" | "preview">("create");
+  const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
+  
+  // Template form state
+  const [templateForm, setTemplateForm] = useState({
+    name: "",
+    content: DEFAULT_TEMPLATE,
+    is_default: false,
+  });
   const [saving, setSaving] = useState(false);
-  const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
-  const [templateToDelete, setTemplateToDelete] = useState<Template | null>(null);
   
   // SweetAlert states
   const [showAlert, setShowAlert] = useState(false);
@@ -173,8 +140,6 @@ export default function AdminCertificatesPage() {
     message: "",
   });
   const [showDeleteAlert, setShowDeleteAlert] = useState(false);
-  
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const getAuthToken = useCallback(() => typeof window !== "undefined" ? localStorage.getItem("token") || localStorage.getItem("accessToken") : null, []);
 
@@ -189,7 +154,7 @@ export default function AdminCertificatesPage() {
       });
       if (filterStatus !== "all") params.append("status", filterStatus);
 
-      const response = await fetch(`${API_BASE_URL}/admin/certificates?${params}`, {
+      const response = await fetch(`/api/admin/certificates?${params}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -214,7 +179,7 @@ export default function AdminCertificatesPage() {
     try {
       setLoadingTemplates(true);
       const token = getAuthToken();
-      const response = await fetch(`${API_BASE_URL}/admin/certificates/templates`, {
+      const response = await fetch(`/api/admin/certificates/templates`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -234,8 +199,31 @@ export default function AdminCertificatesPage() {
     fetchTemplates();
   }, [fetchCertificates, fetchTemplates]);
 
-  // Parse template value
-  const parseTemplate = (template: Template): ParsedTemplate => {
+  // Format date
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString("id-ID", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+  };
+
+  // Get status badge
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case "ISSUED":
+        return <Badge className="bg-[#008A00] text-white border border-[#008A00] pointer-events-none"><CheckCircle className="h-3 w-3 mr-1" />Terbit</Badge>;
+      case "PENDING":
+        return <Badge className="bg-[#F4B400] text-[#1A1A1A] border border-[#F4B400] pointer-events-none"><Clock className="h-3 w-3 mr-1" />Pending</Badge>;
+      case "REVOKED":
+        return <Badge className="bg-[#D93025] text-white border border-[#D93025] pointer-events-none"><XCircle className="h-3 w-3 mr-1" />Dicabut</Badge>;
+      default:
+        return <Badge className="bg-gray-100 text-gray-800 border border-gray-300 pointer-events-none">{status}</Badge>;
+    }
+  };
+
+  // Parse template
+  const parseTemplate = (template: Template) => {
     try {
       return JSON.parse(template.value);
     } catch {
@@ -251,27 +239,50 @@ export default function AdminCertificatesPage() {
     const reader = new FileReader();
     reader.onload = (event) => {
       const content = event.target?.result as string;
-      setTemplateForm(prev => ({ ...prev, content, name: file.name.replace(".html", "") }));
+      setTemplateForm(prev => ({ 
+        ...prev, 
+        content, 
+        name: file.name.replace(".html", "").replace(".htm", "") 
+      }));
     };
     reader.readAsText(file);
   };
 
-  // Open create template dialog
-  const openCreateTemplate = () => {
-    setEditingTemplate(null);
+  // Open create modal
+  const openCreateModal = () => {
+    setSelectedTemplate(null);
+    setModalType("create");
     setTemplateForm({ name: "", content: DEFAULT_TEMPLATE, is_default: false });
-    setTemplateDialogOpen(true);
+    setModalOpen(true);
   };
 
-  // Open edit template dialog
-  const openEditTemplate = (template: Template) => {
+  // Open edit modal
+  const openEditModal = (template: Template) => {
     const parsed = parseTemplate(template);
-    setEditingTemplate(template);
-    setTemplateForm({ name: parsed.name, content: parsed.content, is_default: parsed.is_default });
-    setTemplateDialogOpen(true);
+    setSelectedTemplate(template);
+    setModalType("edit");
+    setTemplateForm({ 
+      name: parsed.name, 
+      content: parsed.content, 
+      is_default: parsed.is_default 
+    });
+    setModalOpen(true);
   };
 
-  // Save template
+  // Open preview modal
+  const openPreviewModal = (template: Template) => {
+    const parsed = parseTemplate(template);
+    setSelectedTemplate(template);
+    setModalType("preview");
+    setTemplateForm({ 
+      name: parsed.name, 
+      content: parsed.content, 
+      is_default: parsed.is_default 
+    });
+    setModalOpen(true);
+  };
+
+  // Handle save template
   const handleSaveTemplate = async () => {
     if (!templateForm.name.trim() || !templateForm.content.trim()) {
       setAlertConfig({
@@ -285,15 +296,14 @@ export default function AdminCertificatesPage() {
 
     try {
       setSaving(true);
-      setError(null);
       const token = getAuthToken();
 
-      const url = editingTemplate
-        ? `${API_BASE_URL}/admin/certificates/templates/${editingTemplate.id}`
-        : `${API_BASE_URL}/admin/certificates/templates`;
+      const url = modalType === "edit" && selectedTemplate
+        ? `/api/admin/certificates/templates/${selectedTemplate.id}`
+        : `/api/admin/certificates/templates`;
 
       const response = await fetch(url, {
-        method: editingTemplate ? "PUT" : "POST",
+        method: modalType === "edit" ? "PUT" : "POST",
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
@@ -309,11 +319,11 @@ export default function AdminCertificatesPage() {
       setAlertConfig({
         type: "success",
         title: "Berhasil",
-        message: editingTemplate ? "Template berhasil diperbarui" : "Template berhasil dibuat"
+        message: modalType === "edit" ? "Template berhasil diperbarui" : "Template berhasil dibuat"
       });
       setShowAlert(true);
       
-      setTemplateDialogOpen(false);
+      setModalOpen(false);
       fetchTemplates();
     } catch (err) {
       setAlertConfig({
@@ -329,12 +339,12 @@ export default function AdminCertificatesPage() {
 
   // Delete template
   const handleDeleteTemplate = async () => {
-    if (!templateToDelete) return;
+    if (!selectedTemplate) return;
 
     try {
       setSaving(true);
       const token = getAuthToken();
-      const response = await fetch(`${API_BASE_URL}/admin/certificates/templates/${templateToDelete.id}`, {
+      const response = await fetch(`/api/admin/certificates/templates/${selectedTemplate.id}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -349,7 +359,7 @@ export default function AdminCertificatesPage() {
       setShowAlert(true);
       
       setShowDeleteAlert(false);
-      setTemplateToDelete(null);
+      setSelectedTemplate(null);
       fetchTemplates();
     } catch (err) {
       setAlertConfig({
@@ -365,8 +375,21 @@ export default function AdminCertificatesPage() {
 
   // Open delete confirmation
   const openDeleteConfirmation = (template: Template) => {
-    setTemplateToDelete(template);
+    setSelectedTemplate(template);
     setShowDeleteAlert(true);
+  };
+
+  // Handle download template
+  const handleDownloadTemplate = () => {
+    const blob = new Blob([templateForm.content], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${templateForm.name || 'template'}.html`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   // Stats
@@ -398,10 +421,9 @@ export default function AdminCertificatesPage() {
           message="Tindakan ini tidak dapat dibatalkan. Template akan dihapus permanen."
           show={showDeleteAlert}
           onClose={() => setShowDeleteAlert(false)}
-          duration={0} // Tidak auto close untuk konfirmasi
+          duration={0}
           showCloseButton={true}
         >
-          {/* Tombol konfirmasi */}
           <div className="mt-6 flex gap-3">
             <button
               onClick={() => setShowDeleteAlert(false)}
@@ -448,11 +470,6 @@ export default function AdminCertificatesPage() {
           {error && (
             <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 text-[#D93025] flex items-center gap-2">
               <AlertCircle className="h-5 w-5" />{error}
-            </div>
-          )}
-          {success && (
-            <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4 text-[#008A00] flex items-center gap-2">
-              <CheckCircle className="h-5 w-5" />{success}
             </div>
           )}
 
@@ -521,91 +538,132 @@ export default function AdminCertificatesPage() {
 
             {/* Certificates Tab */}
             <TabsContent value="certificates" className="space-y-4">
-              {/* Filter */}
-              <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
-                <CardContent className="p-4">
-                  <div className="flex flex-col md:flex-row gap-4">
-                    <div className="flex-1 relative">
-                      <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                      <Input placeholder="Cari sertifikat..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-10" />
+              {/* Certificates Table Card */}
+              <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 border-gray-200 dark:border-gray-700 overflow-hidden">
+                <CardHeader className="pb-4 border-b border-gray-200 dark:border-gray-700">
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                    <div>
+                      <CardTitle className="text-xl font-bold flex items-center gap-2 text-gray-900 dark:text-white">
+                        <Award className="h-5 w-5 text-[#005EB8]" />
+                        Daftar Sertifikat
+                      </CardTitle>
+                      <CardDescription className="mt-1">
+                        Total {pagination.total} sertifikat
+                      </CardDescription>
                     </div>
-                    <Select value={filterStatus} onValueChange={setFilterStatus}>
-                      <SelectTrigger className="w-[180px]">
-                        <SelectValue placeholder="Status" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">Semua Status</SelectItem>
-                        <SelectItem value="ISSUED">Terbit</SelectItem>
-                        <SelectItem value="PENDING">Pending</SelectItem>
-                        <SelectItem value="REVOKED">Dicabut</SelectItem>
-                      </SelectContent>
-                    </Select>
                   </div>
-                </CardContent>
-              </Card>
-
-              {/* Certificates List */}
-              <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
-                <CardHeader>
-                  <CardTitle className="text-xl font-bold text-gray-900 dark:text-white">Daftar Sertifikat</CardTitle>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="p-0">
+                  {/* Filters */}
+                  <div className="p-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50">
+                    <div className="flex flex-col md:flex-row gap-3">
+                      <div className="flex-1 relative">
+                        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                        <Input 
+                          placeholder="Cari sertifikat..." 
+                          value={searchTerm} 
+                          onChange={(e) => setSearchTerm(e.target.value)} 
+                          className="pl-10 h-10 bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600" 
+                        />
+                      </div>
+                      <Select value={filterStatus} onValueChange={setFilterStatus}>
+                        <SelectTrigger className="w-full md:w-[180px] h-10 bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600">
+                          <SelectValue placeholder="Status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">Semua Status</SelectItem>
+                          <SelectItem value="ISSUED">Terbit</SelectItem>
+                          <SelectItem value="PENDING">Pending</SelectItem>
+                          <SelectItem value="REVOKED">Dicabut</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  {/* Table */}
                   {loading ? (
                     <div className="flex items-center justify-center py-12">
                       <Loader2 className="h-8 w-8 animate-spin text-[#005EB8]" />
                     </div>
                   ) : certificates.length === 0 ? (
                     <div className="text-center py-12">
-                      <Award className="h-16 w-16 text-gray-300 dark:text-gray-700 mx-auto mb-4" />
-                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Belum Ada Sertifikat</h3>
-                      <p className="text-gray-500 dark:text-gray-400">Sertifikat akan muncul setelah siswa menyelesaikan kursus</p>
+                      <div className="h-20 w-20 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center mx-auto mb-4">
+                        <Award className="h-10 w-10 text-gray-400 dark:text-gray-600" />
+                      </div>
+                      <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">Belum Ada Sertifikat</h3>
+                      <p className="text-gray-600 dark:text-gray-400">
+                        Sertifikat akan muncul setelah siswa menyelesaikan kursus
+                      </p>
                     </div>
                   ) : (
-                    <div className="space-y-3">
-                      {certificates.map((cert) => (
-                        <div key={cert.id} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-4">
-                              <div className="p-3 rounded-lg bg-[#005EB8]/10">
-                                <Award className="h-6 w-6 text-[#005EB8]" />
-                              </div>
-                              <div>
-                                <p className="font-medium text-gray-900 dark:text-white">{cert.user.full_name}</p>
-                                <p className="text-sm text-gray-500 dark:text-gray-400">{cert.course.title}</p>
-                                <p className="text-xs text-gray-400 mt-1">
-                                  No: {cert.certificate_number} • {formatDate(cert.created_at)}
-                                </p>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-3">
-                              {getStatusBadge(cert.status)}
-                              {cert.pdf_url && (
-                                <Button variant="outline" size="sm" asChild>
-                                  <a href={cert.pdf_url} target="_blank"><Download className="h-4 w-4" /></a>
-                                </Button>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      ))}
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full">
+                        <thead>
+                          <tr className="bg-gray-50 dark:bg-gray-800/50">
+                            <th className="font-semibold text-gray-700 dark:text-gray-300 text-sm w-[220px] px-4 py-3 text-left">Siswa</th>
+                            <th className="font-semibold text-gray-700 dark:text-gray-300 text-sm w-[200px] px-4 py-3 text-left">Kursus</th>
+                            <th className="font-semibold text-gray-700 dark:text-gray-300 text-sm w-[180px] px-4 py-3 text-left">No. Sertifikat</th>
+                            <th className="font-semibold text-gray-700 dark:text-gray-300 text-sm w-[110px] px-4 py-3 text-left">Tanggal</th>
+                            <th className="font-semibold text-gray-700 dark:text-gray-300 text-sm w-[110px] px-4 py-3 text-center">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {certificates.map((cert) => (
+                            <tr key={cert.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors border-t border-gray-100 dark:border-gray-800">
+                              <td className="px-4 py-3">
+                                <div className="flex items-center gap-3">
+                                  <div className="h-10 w-10 rounded-lg bg-[#005EB8]/10 flex items-center justify-center flex-shrink-0">
+                                    <Award className="h-5 w-5 text-[#005EB8]" />
+                                  </div>
+                                  <div className="min-w-0">
+                                    <p className="font-medium text-sm text-gray-900 dark:text-white truncate" title={cert.user.full_name}>
+                                      {cert.user.full_name}
+                                    </p>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 truncate" title={cert.user.email}>
+                                      {cert.user.email}
+                                    </p>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="px-4 py-3">
+                                <div className="min-w-0">
+                                  <p className="text-sm text-gray-900 dark:text-white truncate" title={cert.course.title}>
+                                    {cert.course.title}
+                                  </p>
+                                </div>
+                              </td>
+                              <td className="px-4 py-3">
+                                <div className="min-w-0">
+                                  <code className="text-sm bg-gray-100 dark:bg-gray-800 px-3 py-1 rounded border dark:border-gray-700 text-gray-600 dark:text-gray-400 break-all">
+                                    {cert.certificate_number}
+                                  </code>
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
+                                {formatDate(cert.created_at)}
+                              </td>
+                              <td className="px-4 py-3">
+                                <div className="flex justify-center">
+                                  {getStatusBadge(cert.status)}
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
                   )}
 
-                  {/* Pagination */}
+                  {/* Pagination - Diganti dengan komponen Pagination */}
                   {pagination.totalPages > 1 && (
-                    <div className="flex items-center justify-between mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
-                      <p className="text-sm text-gray-500 dark:text-gray-400">
-                        Halaman {pagination.page} dari {pagination.totalPages}
-                      </p>
-                      <div className="flex gap-2">
-                        <Button variant="outline" size="sm" disabled={pagination.page === 1} onClick={() => setPagination(p => ({ ...p, page: p.page - 1 }))}>
-                          <ChevronLeft className="h-4 w-4" />
-                        </Button>
-                        <Button variant="outline" size="sm" disabled={pagination.page === pagination.totalPages} onClick={() => setPagination(p => ({ ...p, page: p.page + 1 }))}>
-                          <ChevronRight className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
+                    <Pagination
+                      currentPage={pagination.page}
+                      totalPages={pagination.totalPages}
+                      totalItems={pagination.total}
+                      itemsPerPage={pagination.limit}
+                      onPageChange={(newPage) => setPagination(prev => ({ ...prev, page: newPage }))}
+                      loading={loading}
+                    />
                   )}
                 </CardContent>
               </Card>
@@ -620,7 +678,7 @@ export default function AdminCertificatesPage() {
                       <CardTitle className="text-xl font-bold text-gray-900 dark:text-white">Template Sertifikat</CardTitle>
                       <CardDescription>Upload dan kelola template HTML sertifikat</CardDescription>
                     </div>
-                    <Button onClick={openCreateTemplate} className="bg-[#005EB8] hover:bg-[#004A93] text-white">
+                    <Button onClick={openCreateModal} className="bg-[#005EB8] hover:bg-[#004A93] text-white">
                       <Plus className="h-4 w-4 mr-2" />
                       Tambah Template
                     </Button>
@@ -636,7 +694,7 @@ export default function AdminCertificatesPage() {
                       <FileText className="h-16 w-16 text-gray-300 dark:text-gray-700 mx-auto mb-4" />
                       <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Belum Ada Template</h3>
                       <p className="text-gray-500 dark:text-gray-400 mb-4">Buat template sertifikat pertama Anda</p>
-                      <Button onClick={openCreateTemplate} className="bg-[#005EB8] hover:bg-[#004A93] text-white">
+                      <Button onClick={openCreateModal} className="bg-[#005EB8] hover:bg-[#004A93] text-white">
                         <Plus className="h-4 w-4 mr-2" />
                         Buat Template
                       </Button>
@@ -660,16 +718,16 @@ export default function AdminCertificatesPage() {
                                 <Button 
                                   variant="outline" 
                                   size="sm" 
-                                  onClick={() => { setTemplateForm(prev => ({ ...prev, content: parsed.content })); setPreviewDialogOpen(true); }}
-                                  className="border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10 dark:border-[#005EB8] dark:text-[#005EB8]"
+                                  onClick={() => openPreviewModal(template)}
+                                  className="border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10"
                                 >
                                   <Eye className="h-4 w-4 mr-1" />Preview
                                 </Button>
                                 <Button 
                                   variant="outline" 
                                   size="sm" 
-                                  onClick={() => openEditTemplate(template)}
-                                  className="border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10 dark:border-[#005EB8] dark:text-[#005EB8]"
+                                  onClick={() => openEditModal(template)}
+                                  className="border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10"
                                 >
                                   <Edit className="h-4 w-4 mr-1" />Edit
                                 </Button>
@@ -677,7 +735,7 @@ export default function AdminCertificatesPage() {
                                   variant="outline" 
                                   size="sm" 
                                   onClick={() => openDeleteConfirmation(template)}
-                                  className="border-[#D93025] text-[#D93025] hover:bg-[#D93025]/10 dark:border-[#D93025] dark:text-[#D93025]"
+                                  className="border-[#D93025] text-[#D93025] hover:bg-[#D93025]/10"
                                 >
                                   <Trash2 className="h-4 w-4" />
                                 </Button>
@@ -696,7 +754,9 @@ export default function AdminCertificatesPage() {
                         <Code className="h-4 w-4" />
                         Variabel Template
                       </h4>
-                      <p className="text-sm text-[#005EB8]/80 dark:text-[#005EB8] mb-2">Gunakan variabel berikut dalam template HTML:</p>
+                      <p className="text-sm text-[#005EB8]/80 dark:text-[#005EB8] mb-2">
+                        Gunakan variabel berikut dalam template HTML:
+                      </p>
                       <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm">
                         <code className="bg-white/50 dark:bg-gray-800 px-2 py-1 rounded text-[#005EB8]">{"{{STUDENT_NAME}}"}</code>
                         <code className="bg-white/50 dark:bg-gray-800 px-2 py-1 rounded text-[#005EB8]">{"{{COURSE_TITLE}}"}</code>
@@ -713,54 +773,19 @@ export default function AdminCertificatesPage() {
           </Tabs>
         </div>
 
-        {/* Template Dialog */}
-        <Dialog open={templateDialogOpen} onOpenChange={setTemplateDialogOpen}>
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>{editingTemplate ? "Edit Template" : "Buat Template Baru"}</DialogTitle>
-              <DialogDescription>Upload file HTML atau edit langsung di editor</DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Nama Template *</Label>
-                  <Input value={templateForm.name} onChange={(e) => setTemplateForm(prev => ({ ...prev, name: e.target.value }))} placeholder="Contoh: Template Default" />
-                </div>
-                <div className="space-y-2">
-                  <Label>Upload File HTML</Label>
-                  <Input ref={fileInputRef} type="file" accept=".html,.htm" onChange={handleFileUpload} />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label>Konten HTML *</Label>
-                <Textarea value={templateForm.content} onChange={(e) => setTemplateForm(prev => ({ ...prev, content: e.target.value }))} rows={15} className="font-mono text-sm" placeholder="Paste konten HTML di sini..." />
-              </div>
-              <div className="flex items-center gap-2">
-                <input type="checkbox" id="is_default" checked={templateForm.is_default} onChange={(e) => setTemplateForm(prev => ({ ...prev, is_default: e.target.checked }))} className="rounded" />
-                <Label htmlFor="is_default">Jadikan template default</Label>
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setTemplateDialogOpen(false)}>Batal</Button>
-              <Button onClick={handleSaveTemplate} disabled={saving} className="bg-[#005EB8] hover:bg-[#004A93] text-white">
-                {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <></>}
-                {editingTemplate ? "Simpan Perubahan" : "Buat Template"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        {/* Preview Dialog */}
-        <Dialog open={previewDialogOpen} onOpenChange={setPreviewDialogOpen}>
-          <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Preview Template</DialogTitle>
-            </DialogHeader>
-            <div className="border rounded-lg p-4 bg-white">
-              <iframe srcDoc={templateForm.content.replace(/\{\{STUDENT_NAME\}\}/g, "John Doe").replace(/\{\{COURSE_TITLE\}\}/g, "Web Development").replace(/\{\{MENTOR_NAME\}\}/g, "Jane Smith").replace(/\{\{ISSUED_DATE\}\}/g, formatDate(new Date().toISOString())).replace(/\{\{CERTIFICATE_NUMBER\}\}/g, "CERT-2024-001").replace(/\{\{SIGNATURE_IMAGE\}\}/g, "")} className="w-full h-[600px] border-0" />
-            </div>
-          </DialogContent>
-        </Dialog>
+        {/* Certificate Template Modal */}
+        <CertificateTemplateModal
+          open={modalOpen}
+          onOpenChange={setModalOpen}
+          type={modalType}
+          template={selectedTemplate}
+          templateForm={templateForm}
+          loading={saving}
+          onFormChange={(field, value) => setTemplateForm(prev => ({ ...prev, [field]: value }))}
+          onFileUpload={handleFileUpload}
+          onSave={handleSaveTemplate}
+          onDownload={modalType === "preview" ? handleDownloadTemplate : undefined}
+        />
       </AdminLayout>
     </ProtectedRoute>
   );

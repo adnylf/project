@@ -40,8 +40,6 @@ import {
 import AdminLayout from "@/components/admin/admin-layout";
 import ProtectedRoute from "@/components/auth/protected-route";
 
-const API_BASE_URL = "http://localhost:3000/api";
-
 interface SystemSetting {
   id: string;
   key: string;
@@ -145,7 +143,7 @@ export default function AdminSettings() {
       setSettingsLoading(true);
       setSettingsError(null);
       const token = getAuthToken();
-      const response = await fetch(`${API_BASE_URL}/admin/settings`, {
+      const response = await fetch(`/api/admin/settings`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!response.ok) throw new Error("Gagal memuat pengaturan");
@@ -163,7 +161,7 @@ export default function AdminSettings() {
     try {
       setStatsLoading(true);
       const token = getAuthToken();
-      const response = await fetch(`${API_BASE_URL}/admin/stats?period=30`, {
+      const response = await fetch(`/api/admin/stats?period=30`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (response.ok) {
@@ -197,7 +195,7 @@ export default function AdminSettings() {
     try {
       setPasswordLoading(true);
       const token = getAuthToken();
-      const response = await fetch(`${API_BASE_URL}/auth/change-password`, {
+      const response = await fetch(`/api/auth/change-password`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
         body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
@@ -223,7 +221,7 @@ export default function AdminSettings() {
     try {
       setSavingKey(setting.key);
       const token = getAuthToken();
-      const response = await fetch(`${API_BASE_URL}/admin/settings`, {
+      const response = await fetch(`/api/admin/settings`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
         body: JSON.stringify({ key: setting.key, value: newValue, type: setting.type, category: setting.category, is_public: setting.is_public }),
@@ -246,7 +244,7 @@ export default function AdminSettings() {
     try {
       setAddingNew(true);
       const token = getAuthToken();
-      const response = await fetch(`${API_BASE_URL}/admin/settings`, {
+      const response = await fetch(`/api/admin/settings`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
         body: JSON.stringify({

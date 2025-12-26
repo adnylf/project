@@ -19,8 +19,6 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 
-const API_BASE_URL = "http://localhost:3000/api";
-
 interface CourseReviewFormProps {
   courseId: string;
   courseTitle: string;
@@ -68,14 +66,14 @@ export default function CourseReviewForm({
         const token = getAuthToken();
         if (!token) return;
 
-        const response = await fetch(`${API_BASE_URL}/courses/${courseId}/reviews?limit=100`, {
+        const response = await fetch(`/api/courses/${courseId}/reviews?limit=100`, {
           headers: { Authorization: `Bearer ${token}` },
         });
 
         if (response.ok) {
           const data = await response.json();
           // Get current user id from token
-          const userResponse = await fetch(`${API_BASE_URL}/users/profile`, {
+          const userResponse = await fetch(`/api/users/profile`, {
             headers: { Authorization: `Bearer ${token}` },
           });
           if (userResponse.ok) {
@@ -116,8 +114,8 @@ export default function CourseReviewForm({
       const token = getAuthToken();
 
       const url = existingReview 
-        ? `${API_BASE_URL}/users/reviews/${existingReview.id}`
-        : `${API_BASE_URL}/courses/${courseId}/reviews`;
+        ? `/api/users/reviews/${existingReview.id}`
+        : `/api/courses/${courseId}/reviews`;
       
       const method = existingReview ? "PUT" : "POST";
 

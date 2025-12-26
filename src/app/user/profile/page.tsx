@@ -37,8 +37,6 @@ import {
 import ProtectedRoute from "@/components/auth/protected-route";
 import AvatarCropper from "@/components/modal/avatar-cropper";
 
-const API_BASE_URL = "http://localhost:3000/api";
-
 type DisabilityType = "BUTA_WARNA" | "DISLEKSIA" | "KOGNITIF" | "LOW_VISION" | "MENTOR" | "MOTORIK" | "TUNARUNGU" | null;
 
 interface UserProfile {
@@ -133,7 +131,7 @@ export default function UserProfile() {
           return;
         }
 
-        const response = await fetch(`${API_BASE_URL}/users/profile`, {
+        const response = await fetch(`/api/users/profile`, {
           headers: { Authorization: `Bearer ${token}` },
         });
 
@@ -216,7 +214,7 @@ export default function UserProfile() {
       const uploadData = new FormData();
       uploadData.append("file", file);
 
-      const response = await fetch(`${API_BASE_URL}/users/profile/picture`, {
+      const response = await fetch(`/api/users/profile/picture`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
         body: uploadData,
@@ -245,7 +243,7 @@ export default function UserProfile() {
       setError(null);
 
       const token = getAuthToken();
-      const response = await fetch(`${API_BASE_URL}/users/profile`, {
+      const response = await fetch(`/api/users/profile`, {
         method: "PUT",
         headers: {
           Authorization: `Bearer ${token}`,

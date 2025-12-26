@@ -110,3 +110,105 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 });
   }
 }
+
+// POST /api/enrollments/[enrollmentId]/progress - Recalculate progress (force sync)
+export async function POST(request: NextRequest, { params }: RouteParams) {
+  try {
+    const authUser = getAuthUser(request);
+    if (!authUser) return unauthorizedResponse();
+
+    const { enrollmentId } = params;
+
+    const enrollment = await prisma.enrollment.findUnique({
+      where: { id: enrollmentId },
+      include: {
+        course: {
+          include: {
+            sections: {
+              include: { materials: true },
+            },
+          },
+        },
+        progress_records: true,
+      },
+    });
+
+    if (!enrollment) {
+      return NextResponse.json({ error: 'Enrollment tidak ditemukan' }, { status: 404 });
+    }
+
+    // Check if user is the owner or admin
+    if (enrollment.user_id !== authUser.userId && authUser.role !== 'ADMIN') {
+      return NextResponse.json({ error: 'Tidak diizinkan' }, { status: 403 });
+    }
+
+    // Calculate total materials
+    const totalMaterials = enrollment.course.sections.reduce(
+      (sum, s) => sum + s.materials.length, 0
+    );
+
+    // Count completed materials from progress_records
+    const completedMaterials = enrollment.progress_records.filter(p => p.is_completed).length;
+
+    // Calculate new progress percentage
+    const progressPercent = totalMaterials > 0 
+      ? Math.round((completedMaterials / totalMaterials) * 100)
+      : 0;
+
+    const isCompleted = progressPercent >= 100;
+
+    // Update enrollment
+    const updatedEnrollment = await prisma.enrollment.update({
+      where: { id: enrollmentId },
+      data: {
+        progress: progressPercent,
+        status: isCompleted ? 'COMPLETED' : enrollment.status === 'COMPLETED' ? 'ACTIVE' : enrollment.status,
+        completed_at: isCompleted ? (enrollment.completed_at || new Date()) : null,
+        last_accessed_at: new Date(),
+      },
+    });
+
+    // Auto-generate certificate if 100% completed and no certificate exists
+    if (isCompleted) {
+      const existingCertificate = await prisma.certificate.findFirst({
+        where: {
+          user_id: enrollment.user_id,
+          course_id: enrollment.course_id,
+        },
+      });
+
+      if (!existingCertificate) {
+        const timestamp = Date.now().toString(36).toUpperCase();
+        const random = Math.random().toString(36).substring(2, 6).toUpperCase();
+        const certificateNumber = `CERT-${timestamp}-${random}`;
+
+        const certificate = await prisma.certificate.create({
+          data: {
+            user_id: enrollment.user_id,
+            course_id: enrollment.course_id,
+            certificate_number: certificateNumber,
+            status: 'ISSUED',
+            issued_at: new Date(),
+          },
+        });
+
+        await prisma.enrollment.update({
+          where: { id: enrollmentId },
+          data: { certificate_id: certificate.id },
+        });
+      }
+    }
+
+    return NextResponse.json({
+      message: 'Progress berhasil dihitung ulang',
+      old_progress: enrollment.progress,
+      new_progress: progressPercent,
+      total_materials: totalMaterials,
+      completed_materials: completedMaterials,
+      is_completed: isCompleted,
+    });
+  } catch (error) {
+    console.error('Recalculate progress error:', error);
+    return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 });
+  }
+}

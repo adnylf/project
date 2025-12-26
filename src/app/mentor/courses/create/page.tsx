@@ -30,8 +30,6 @@ import {
 } from '@/components/ui/select';
 import ImageCropper from '@/components/modal/image-cropper';
 
-const API_BASE_URL = 'http://localhost:3000/api';
-
 interface Category {
   id: string;
   name: string;
@@ -97,7 +95,7 @@ export default function CreateCourse() {
     const fetchCategories = async () => {
       try {
         setLoadingCategories(true);
-        const response = await fetch(`${API_BASE_URL}/courses/categories`);
+        const response = await fetch(`/api/courses/categories`);
         
         if (!response.ok) {
           throw new Error('Gagal mengambil kategori');
@@ -220,7 +218,7 @@ export default function CreateCourse() {
           uploadFormData.append('file', formData.thumbnail);
           uploadFormData.append('type', 'courses'); // Save to uploads/images/courses/
           
-          const uploadResponse = await fetch(`${API_BASE_URL}/uploads/images`, {
+          const uploadResponse = await fetch(`/api/uploads/images`, {
             method: 'POST',
             headers: {
               'Authorization': `Bearer ${token}`,
@@ -292,7 +290,7 @@ export default function CreateCourse() {
         return;
       }
 
-      const response = await fetch(`${API_BASE_URL}/courses`, {
+      const response = await fetch(`/api/courses`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

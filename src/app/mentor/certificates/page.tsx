@@ -34,14 +34,6 @@ import {
 import MentorLayout from "@/components/mentor/mentor-layout";
 import ProtectedRoute from "@/components/auth/protected-route";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
   Select,
   SelectContent,
   SelectItem,
@@ -55,8 +47,7 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs";
 import Link from "next/link";
-
-const API_BASE_URL = "http://localhost:3000/api";
+import { CertificateTemplateModal } from "@/components/admin/certificate-modal";
 
 interface Certificate {
   id: string;
@@ -129,8 +120,9 @@ export default function MentorCertificatesPage() {
   const [templates, setTemplates] = useState<Template[]>([]);
   const [uploadingSignature, setUploadingSignature] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
-  const [previewContent, setPreviewContent] = useState("");
+  const [previewModalOpen, setPreviewModalOpen] = useState(false);
+  const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
+  const [templateForm, setTemplateForm] = useState({ name: "", content: "", is_default: false });
   const signatureInputRef = useRef<HTMLInputElement>(null);
 
   const getAuthToken = useCallback(() => typeof window !== "undefined" ? localStorage.getItem("token") || localStorage.getItem("accessToken") : null, []);
@@ -143,7 +135,7 @@ export default function MentorCertificatesPage() {
         const token = getAuthToken();
 
         // Fetch mentor's courses
-        const coursesRes = await fetch(`${API_BASE_URL}/mentors/courses`, {
+        const coursesRes = await fetch(`/api/mentors/courses`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (coursesRes.ok) {
@@ -152,7 +144,7 @@ export default function MentorCertificatesPage() {
         }
 
         // Fetch certificates for mentor's courses
-        const certsRes = await fetch(`${API_BASE_URL}/mentor/certificates`, {
+        const certsRes = await fetch(`/api/mentor/certificates`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (certsRes.ok) {
@@ -161,7 +153,7 @@ export default function MentorCertificatesPage() {
         }
 
         // Fetch available templates
-        const templatesRes = await fetch(`${API_BASE_URL}/admin/certificates/templates`, {
+        const templatesRes = await fetch(`/api/admin/certificates/templates`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (templatesRes.ok) {
@@ -170,7 +162,7 @@ export default function MentorCertificatesPage() {
         }
 
         // Fetch mentor config
-        const configRes = await fetch(`${API_BASE_URL}/mentor/certificates/config`, {
+        const configRes = await fetch(`/api/mentor/certificates/config`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (configRes.ok) {
@@ -218,7 +210,7 @@ export default function MentorCertificatesPage() {
       const formData = new FormData();
       formData.append("file", file);
 
-      const response = await fetch(`${API_BASE_URL}/mentor/certificates/signature`, {
+      const response = await fetch(`/api/mentor/certificates/signature`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
         body: formData,
@@ -247,7 +239,7 @@ export default function MentorCertificatesPage() {
       setError(null);
       const token = getAuthToken();
 
-      const response = await fetch(`${API_BASE_URL}/mentor/certificates/config`, {
+      const response = await fetch(`/api/mentor/certificates/config`, {
         method: "PUT",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -273,15 +265,14 @@ export default function MentorCertificatesPage() {
   // Preview certificate
   const handlePreview = (template: Template) => {
     const parsed = parseTemplate(template);
-    const content = parsed.content
-      .replace(/\{\{STUDENT_NAME\}\}/g, "Nama Siswa")
-      .replace(/\{\{COURSE_TITLE\}\}/g, "Judul Kursus")
-      .replace(/\{\{MENTOR_NAME\}\}/g, "Nama Mentor")
-      .replace(/\{\{ISSUED_DATE\}\}/g, formatDate(new Date().toISOString()))
-      .replace(/\{\{CERTIFICATE_NUMBER\}\}/g, "CERT-2024-001")
-      .replace(/\{\{SIGNATURE_IMAGE\}\}/g, config.signature_url ? `<img src="${config.signature_url}" alt="Signature" style="max-height:60px;"/>` : "");
-    setPreviewContent(content);
-    setPreviewDialogOpen(true);
+    setSelectedTemplate(template);
+    setTemplateForm({
+      name: parsed.name,
+      content: parsed.content
+        .replace(/\{\{SIGNATURE_IMAGE\}\}/g, config.signature_url ? `<img src="${config.signature_url}" alt="Signature" style="max-height:60px;"/>` : ""),
+      is_default: parsed.is_default,
+    });
+    setPreviewModalOpen(true);
   };
 
   // Stats
@@ -398,89 +389,144 @@ export default function MentorCertificatesPage() {
 
             {/* Certificates Tab */}
             <TabsContent value="certificates" className="space-y-4">
-              {/* Filter */}
-              <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
-                <CardContent className="p-4">
-                  <div className="flex flex-col md:flex-row gap-4">
-                    <div className="flex-1 relative">
-                      <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                      <Input placeholder="Cari siswa atau nomor sertifikat..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-10" />
+              {/* Certificates Table Card */}
+              <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 border-gray-200 dark:border-gray-700 overflow-hidden">
+                <CardHeader className="pb-4 border-b border-gray-200 dark:border-gray-700">
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                    <div>
+                      <CardTitle className="text-xl font-bold flex items-center gap-2 text-gray-900 dark:text-white">
+                        <Award className="h-5 w-5 text-[#005EB8]" />
+                        Sertifikat Kursus Anda
+                      </CardTitle>
+                      <CardDescription className="mt-1">
+                        {filteredCertificates.length} sertifikat ditemukan
+                      </CardDescription>
                     </div>
-                    <Select value={filterCourse} onValueChange={setFilterCourse}>
-                      <SelectTrigger className="w-[200px]">
-                        <SelectValue placeholder="Kursus" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">Semua Kursus</SelectItem>
-                        {courses.map(course => (
-                          <SelectItem key={course.id} value={course.id}>{course.title}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Select value={filterStatus} onValueChange={setFilterStatus}>
-                      <SelectTrigger className="w-[150px]">
-                        <SelectValue placeholder="Status" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">Semua Status</SelectItem>
-                        <SelectItem value="ISSUED">Terbit</SelectItem>
-                        <SelectItem value="PENDING">Pending</SelectItem>
-                        <SelectItem value="REVOKED">Dicabut</SelectItem>
-                      </SelectContent>
-                    </Select>
                   </div>
-                </CardContent>
-              </Card>
-
-              {/* Certificates List */}
-              <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
-                <CardHeader>
-                  <CardTitle className="text-xl font-bold text-gray-900 dark:text-white">Sertifikat Kursus Anda</CardTitle>
-                  <CardDescription>Sertifikat yang diterbitkan untuk siswa yang menyelesaikan kursus</CardDescription>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="p-0">
+                  {/* Filters */}
+                  <div className="p-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50">
+                    <div className="flex flex-col md:flex-row gap-3">
+                      <div className="flex-1 relative">
+                        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                        <Input 
+                          placeholder="Cari siswa atau nomor sertifikat..." 
+                          value={searchTerm} 
+                          onChange={(e) => setSearchTerm(e.target.value)} 
+                          className="pl-10 h-10 bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600" 
+                        />
+                      </div>
+                      <Select value={filterCourse} onValueChange={setFilterCourse}>
+                        <SelectTrigger className="w-full md:w-[200px] h-10 bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600">
+                          <BookOpen className="h-4 w-4 mr-2 text-gray-400" />
+                          <SelectValue placeholder="Kursus" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">Semua Kursus</SelectItem>
+                          {courses.map(course => (
+                            <SelectItem key={course.id} value={course.id}>{course.title}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Select value={filterStatus} onValueChange={setFilterStatus}>
+                        <SelectTrigger className="w-full md:w-[160px] h-10 bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600">
+                          <SelectValue placeholder="Status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">Semua Status</SelectItem>
+                          <SelectItem value="ISSUED">Terbit</SelectItem>
+                          <SelectItem value="PENDING">Pending</SelectItem>
+                          <SelectItem value="REVOKED">Dicabut</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  {/* Table */}
                   {filteredCertificates.length === 0 ? (
                     <div className="text-center py-12">
-                      <Award className="h-16 w-16 text-gray-300 dark:text-gray-700 mx-auto mb-4" />
-                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Belum Ada Sertifikat</h3>
-                      <p className="text-gray-500 dark:text-gray-400">Sertifikat akan muncul setelah siswa menyelesaikan kursus Anda</p>
+                      <div className="h-20 w-20 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center mx-auto mb-4">
+                        <Award className="h-10 w-10 text-gray-400 dark:text-gray-600" />
+                      </div>
+                      <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">Belum Ada Sertifikat</h3>
+                      <p className="text-gray-600 dark:text-gray-400">
+                        Sertifikat akan muncul setelah siswa menyelesaikan kursus Anda
+                      </p>
                     </div>
                   ) : (
-                    <div className="space-y-3">
-                      {filteredCertificates.map((cert) => (
-                        <div key={cert.id} className="border rounded-lg p-4 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors border-gray-200 dark:border-gray-700">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-4">
-                              <Avatar className="h-12 w-12">
-                                <AvatarImage src={cert.user.avatar_url} />
-                                <AvatarFallback className="bg-[#005EB8] text-white">
-                                  {cert.user.full_name.charAt(0).toUpperCase()}
-                                </AvatarFallback>
-                              </Avatar>
-                              <div>
-                                <p className="font-medium text-gray-900 dark:text-white">{cert.user.full_name}</p>
-                                <p className="text-sm text-gray-500 dark:text-gray-400">{cert.course.title}</p>
-                                <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                                  No: {cert.certificate_number} • {formatDate(cert.created_at)}
-                                </p>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-3">
-                              {getStatusBadge(cert.status)}
-                              {/* Button Detail - Style diubah seperti button Lihat Semua di dashboard */}
-                              <Link href={`/mentor/certificates/${cert.id}`}>
-                                <Button 
-                                  variant="outline" 
-                                  size="sm" 
-                                  className="border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10 dark:border-[#005EB8] dark:text-[#005EB8]"
-                                >
-                                  <Eye className="h-4 w-4 mr-1" />Detail
-                                </Button>
-                              </Link>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full table-fixed">
+                        <thead>
+                          <tr className="bg-gray-50 dark:bg-gray-800/50">
+                            <th className="font-semibold text-gray-700 dark:text-gray-300 text-sm w-[25%] px-4 py-3 text-left">Siswa</th>
+                            <th className="font-semibold text-gray-700 dark:text-gray-300 text-sm w-[20%] px-4 py-3 text-left">Kursus</th>
+                            <th className="font-semibold text-gray-700 dark:text-gray-300 text-sm w-[20%] px-4 py-3 text-left">No. Sertifikat</th>
+                            <th className="font-semibold text-gray-700 dark:text-gray-300 text-sm w-[12%] px-4 py-3 text-left">Tanggal</th>
+                            <th className="font-semibold text-gray-700 dark:text-gray-300 text-sm w-[13%] px-4 py-3 text-center">Status</th>
+                            <th className="font-semibold text-gray-700 dark:text-gray-300 text-sm w-[10%] px-4 py-3 text-center">Aksi</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filteredCertificates.map((cert) => (
+                            <tr key={cert.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors border-t border-gray-100 dark:border-gray-800">
+                              <td className="px-4 py-3">
+                                <div className="flex items-center gap-3">
+                                  <Avatar className="h-10 w-10 flex-shrink-0">
+                                    <AvatarImage src={cert.user.avatar_url} />
+                                    <AvatarFallback className="bg-[#005EB8] text-white">
+                                      {cert.user.full_name.charAt(0).toUpperCase()}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <div className="min-w-0">
+                                    <p className="font-medium text-sm text-gray-900 dark:text-white truncate" title={cert.user.full_name}>
+                                      {cert.user.full_name}
+                                    </p>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 truncate" title={cert.user.email}>
+                                      {cert.user.email}
+                                    </p>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="px-4 py-3">
+                                <div className="min-w-0">
+                                  <p className="text-sm text-gray-900 dark:text-white truncate" title={cert.course.title}>
+                                    {cert.course.title}
+                                  </p>
+                                </div>
+                              </td>
+                              <td className="px-4 py-3">
+                                <div className="min-w-0 break-all whitespace-normal">
+                                  <code className="text-xs bg-gray-100 dark:bg-gray-800 px-3 py-1 rounded border dark:border-gray-700 text-gray-600 dark:text-gray-400">
+                                    {cert.certificate_number}
+                                  </code>
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
+                                {formatDate(cert.created_at)}
+                              </td>
+                              <td className="px-4 py-3">
+                                <div className="flex justify-center">
+                                  {getStatusBadge(cert.status)}
+                                </div>
+                              </td>
+                              <td className="px-4 py-3">
+                                <div className="flex justify-center">
+                                  <Link href={`/mentor/certificates/${cert.id}`}>
+                                    <Button 
+                                      variant="outline" 
+                                      size="sm" 
+                                      className="h-8 w-8 p-0 border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10 dark:border-[#005EB8] dark:text-[#005EB8]"
+                                    >
+                                      <Eye className="h-4 w-4" />
+                                    </Button>
+                                  </Link>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
                   )}
                 </CardContent>
@@ -617,17 +663,18 @@ export default function MentorCertificatesPage() {
           </Tabs>
         </div>
 
-        {/* Preview Dialog */}
-        <Dialog open={previewDialogOpen} onOpenChange={setPreviewDialogOpen}>
-          <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Preview Template</DialogTitle>
-            </DialogHeader>
-            <div className="border rounded-lg p-4 bg-white dark:bg-gray-800">
-              <iframe srcDoc={previewContent} className="w-full h-[600px] border-0" />
-            </div>
-          </DialogContent>
-        </Dialog>
+        {/* Preview Modal - using shared component */}
+        <CertificateTemplateModal
+          open={previewModalOpen}
+          onOpenChange={setPreviewModalOpen}
+          type="preview"
+          template={selectedTemplate}
+          templateForm={templateForm}
+          loading={false}
+          onFormChange={() => {}}
+          onFileUpload={() => {}}
+          onSave={() => {}}
+        />
       </MentorLayout>
     </ProtectedRoute>
   );

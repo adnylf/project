@@ -24,8 +24,6 @@ import {
 import UserLayout from "@/components/user/user-layout";
 import ProtectedRoute from "@/components/auth/protected-route";
 
-const API_BASE_URL = "http://localhost:3000/api";
-
 interface PasswordStrength {
   score: number;
   label: string;
@@ -110,7 +108,7 @@ export default function UserSettings() {
         return;
       }
 
-      const response = await fetch(`${API_BASE_URL}/auth/change-password`, {
+      const response = await fetch(`/api/auth/change-password`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,

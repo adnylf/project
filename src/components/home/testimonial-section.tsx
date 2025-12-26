@@ -6,11 +6,21 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Marquee } from "@/components/ui/marquee";
 import { 
   Star, 
-  MessageCircle, 
-  ArrowRight 
+  Quote, 
+  ArrowRight,
+  MessageSquare
 } from "lucide-react";
 
-const testimonials = [
+interface Testimonial {
+  id: number;
+  name: string;
+  role: string;
+  rating: number;
+  text: string;
+  avatar?: string;
+}
+
+const testimonials: Testimonial[] = [
   {
     id: 1,
     name: "Ahmad Rizki",
@@ -29,7 +39,7 @@ const testimonials = [
     id: 3,
     name: "Budi Santoso",
     role: "Pengguna Disabilitas Motorik",
-    rating: 4,
+    rating: 5,
     text: "Navigasi keyboard yang intuitif memudahkan saya mengoperasikan platform tanpa kesulitan.",
   },
   {
@@ -50,7 +60,7 @@ const testimonials = [
     id: 6,
     name: "Diana Putri",
     role: "Pengguna Tunarungu",
-    rating: 4,
+    rating: 5,
     text: "Interpreter bahasa isyarat dalam video membuat pemahaman materi menjadi lebih baik.",
   },
   {
@@ -69,24 +79,32 @@ const testimonials = [
   },
 ];
 
-function TestimonialCard({
-  testimonial,
-}: {
-  testimonial: (typeof testimonials)[0];
-}) {
+function TestimonialCard({ testimonial }: { testimonial: Testimonial }) {
+  const getAvatarColor = (name: string) => {
+    const colors = [
+      'bg-[#005EB8]',
+      'bg-[#008A00]',
+      'bg-[#F4B400]',
+      'bg-[#D93025]',
+      'bg-[#673AB7]',
+    ];
+    const index = name.charCodeAt(0) % colors.length;
+    return colors[index];
+  };
+
   return (
-    <Card className="h-full rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 mx-2">
-      <CardContent className="p-4 sm:p-6 space-y-4 h-full flex flex-col">
-        {/* Quote Icon & Rating */}
+    <Card className="h-full rounded-lg border bg-white dark:bg-gray-800 shadow-sm hover:shadow-md transition-all duration-300 border-gray-200 dark:border-gray-700 mx-2">
+      <CardContent className="p-5 space-y-4 h-full flex flex-col">
+        {/* Header */}
         <div className="flex justify-between items-start">
-          <MessageCircle className="h-6 w-6 sm:h-8 sm:w-8 text-primary/20 rotate-180" />
-          <div className="flex items-center gap-1">
+          <Quote className="h-6 w-6 text-[#005EB8]/20" />
+          <div className="flex items-center gap-0.5">
             {[...Array(5)].map((_, i) => (
               <Star
                 key={i}
-                className={`h-3 w-3 sm:h-4 sm:w-4 ${
+                className={`h-3.5 w-3.5 ${
                   i < testimonial.rating
-                    ? "text-yellow-400 fill-yellow-400"
+                    ? "text-[#F4B400] fill-[#F4B400]"
                     : "text-gray-300"
                 }`}
               />
@@ -94,21 +112,21 @@ function TestimonialCard({
           </div>
         </div>
 
-        {/* Testimonial Text */}
-        <p className="text-gray-700 dark:text-gray-300 leading-relaxed text-sm sm:text-base line-clamp-4 flex-grow">
+        {/* Text */}
+        <p className="text-gray-600 dark:text-gray-300 leading-relaxed text-sm flex-grow">
           "{testimonial.text}"
         </p>
 
         {/* User Info */}
-        <div className="flex items-center gap-3 pt-2">
-          <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-full bg-blue-500 flex items-center justify-center text-white font-semibold text-xs sm:text-sm flex-shrink-0">
+        <div className="flex items-center gap-3 pt-2 border-t border-gray-100 dark:border-gray-700">
+          <div className={`h-10 w-10 rounded-full ${getAvatarColor(testimonial.name)} flex items-center justify-center text-white font-semibold text-sm flex-shrink-0`}>
             {testimonial.name.charAt(0)}
           </div>
           <div className="min-w-0">
-            <h4 className="font-semibold text-gray-900 dark:text-white text-sm sm:text-base truncate">
+            <h4 className="font-semibold text-gray-900 dark:text-white text-sm truncate">
               {testimonial.name}
             </h4>
-            <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 truncate">
+            <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
               {testimonial.role}
             </p>
           </div>
@@ -119,59 +137,55 @@ function TestimonialCard({
 }
 
 export default function TestimonialSection() {
-  // Split testimonials into two columns for desktop
   const firstColumn = testimonials.slice(0, Math.ceil(testimonials.length / 2));
   const secondColumn = testimonials.slice(Math.ceil(testimonials.length / 2));
 
   return (
-    <section className="py-12 sm:py-16 lg:py-20 bg-white dark:bg-gray-900">
+    <section className="py-16 lg:py-20 bg-white dark:bg-gray-900">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12 items-center">
           {/* Left Side - Text Content */}
-          <div className="space-y-6 lg:space-y-8">
-            <div className="inline-block">
-              <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary text-sm font-medium">
-                <Star className="h-4 w-4" />
-                Ulasan Pengguna Disabilitas
-              </span>
-            </div>
+          <div className="space-y-6">
+            {/* Badge */}
+            <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#F4B400]/10 text-[#F4B400] text-sm font-medium">
+              <MessageSquare className="h-4 w-4" />
+              Ulasan Pengguna
+            </span>
 
-            <h2 className="text-2xl sm:text-3xl lg:text-5xl font-bold text-gray-900 dark:text-white leading-tight">
+            {/* Heading */}
+            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-gray-900 dark:text-white leading-tight">
               Apa Kata Mereka Tentang{" "}
-              <span className="text-primary">Pengalaman Belajar</span>
+              <span className="text-[#005EB8]">Pengalaman Belajar</span>
             </h2>
 
-            <p className="text-base sm:text-lg text-gray-600 dark:text-gray-400 leading-relaxed">
-              Dengarkan langsung dari komunitas disabilitas yang telah merasakan
-              manfaat platform pembelajaran inklusif kami. Setiap cerita adalah
-              bukti komitmen kami terhadap aksesibilitas.
+            {/* Description */}
+            <p className="text-lg text-gray-600 dark:text-gray-400 leading-relaxed">
+              Dengarkan langsung dari komunitas yang telah merasakan manfaat platform pembelajaran inklusif kami. Setiap cerita adalah bukti komitmen kami.
             </p>
 
-            <div className="pt-4">
-              <Link href="/courses" className="block w-full sm:w-auto">
-                <NeuButton className="group flex items-center justify-center gap-2 w-full sm:w-auto">
+            {/* CTA */}
+            <div className="pt-2">
+              <Link href="/courses">
+                <NeuButton className="group flex items-center justify-center gap-2">
                   Lihat Semua Kursus
-                  <ArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-1" />
+                  <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
                 </NeuButton>
               </Link>
             </div>
           </div>
 
-          {/* Right Side - Two Column Marquee Testimonials */}
-          <div className="relative h-[400px] sm:h-[500px] lg:h-[600px] overflow-hidden">
-            {/* Mobile & Tablet: Single Column */}
+          {/* Right Side - Testimonials Marquee */}
+          <div className="relative h-[400px] sm:h-[500px] lg:h-[550px] overflow-hidden">
+            {/* Mobile: Single Column */}
             <div className="block lg:hidden h-full">
               <Marquee
                 vertical
                 pauseOnHover
                 repeat={4}
-                className="[--duration:80s] h-full"
+                className="[--duration:60s] h-full"
               >
                 {testimonials.map((testimonial) => (
-                  <div
-                    key={`mobile-${testimonial.id}`}
-                    className="mb-4 sm:mb-6 px-2"
-                  >
+                  <div key={`mobile-${testimonial.id}`} className="mb-4 px-1">
                     <TestimonialCard testimonial={testimonial} />
                   </div>
                 ))}
@@ -180,33 +194,31 @@ export default function TestimonialSection() {
 
             {/* Desktop: Two Columns */}
             <div className="hidden lg:flex gap-4 h-full">
-              {/* First Column - Moves Up */}
               <div className="flex-1 h-full overflow-hidden">
                 <Marquee
                   vertical
                   pauseOnHover
                   repeat={3}
-                  className="[--duration:100s]"
+                  className="[--duration:80s]"
                 >
                   {firstColumn.map((testimonial) => (
-                    <div key={`first-${testimonial.id}`} className="mb-6">
+                    <div key={`first-${testimonial.id}`} className="mb-4">
                       <TestimonialCard testimonial={testimonial} />
                     </div>
                   ))}
                 </Marquee>
               </div>
 
-              {/* Second Column - Moves Down (reverse) */}
               <div className="flex-1 h-full overflow-hidden">
                 <Marquee
                   vertical
                   reverse
                   pauseOnHover
                   repeat={3}
-                  className="[--duration:100s]"
+                  className="[--duration:80s]"
                 >
                   {secondColumn.map((testimonial) => (
-                    <div key={`second-${testimonial.id}`} className="mb-6">
+                    <div key={`second-${testimonial.id}`} className="mb-4">
                       <TestimonialCard testimonial={testimonial} />
                     </div>
                   ))}
@@ -215,8 +227,8 @@ export default function TestimonialSection() {
             </div>
 
             {/* Gradient Overlays */}
-            <div className="pointer-events-none absolute inset-x-0 top-0 h-20 sm:h-32 bg-gradient-to-b from-white dark:from-gray-900 to-transparent z-10" />
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-20 sm:h-32 bg-gradient-to-t from-white dark:from-gray-900 to-transparent z-10" />
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-white dark:from-gray-900 to-transparent z-10" />
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-white dark:from-gray-900 to-transparent z-10" />
           </div>
         </div>
       </div>

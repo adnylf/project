@@ -16,10 +16,9 @@ import {
   Loader2,
   X,
   Trash2,
-  BarChart3,
-  TrendingUp,
   AlertCircle,
   Shield,
+  Filter,
 } from 'lucide-react';
 import AdminLayout from '@/components/admin/admin-layout';
 import ProtectedRoute from "@/components/auth/protected-route";
@@ -53,6 +52,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import Pagination from '@/components/ui/pagination'; // Import komponen pagination
 
 // Client-side getCookie function
 function getCookieValue(name: string): string | null {
@@ -83,11 +83,18 @@ interface User {
   };
 }
 
+interface PaginationData {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
 export default function AdminUsers() {
   const [users, setUsers] = useState<User[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
-  const [filterRole, setFilterRole] = useState('STUDENT');
+  const [filterRole, setFilterRole] = useState('all'); // Default 'all' instead of 'STUDENT'
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState({
@@ -95,6 +102,12 @@ export default function AdminUsers() {
     active: 0,
     suspended: 0,
     inactive: 0,
+  });
+  const [pagination, setPagination] = useState<PaginationData>({
+    page: 1,
+    limit: 10, // Changed to 10 items per page
+    total: 0,
+    totalPages: 0,
   });
 
   // Dialog states
@@ -111,7 +124,7 @@ export default function AdminUsers() {
   }, []);
 
   // Fetch users
-  const fetchUsers = useCallback(async () => {
+  const fetchUsers = useCallback(async (page: number = 1) => {
     try {
       setIsLoading(true);
       setError(null);
@@ -124,8 +137,8 @@ export default function AdminUsers() {
       }
 
       const params = new URLSearchParams({
-        page: '1',
-        limit: '50',
+        page: page.toString(),
+        limit: pagination.limit.toString(), // Use dynamic limit
       });
 
       if (filterRole !== 'all') {
@@ -175,26 +188,33 @@ export default function AdminUsers() {
           suspended,
           inactive,
         });
+        
+        // Update pagination state
+        setPagination(prev => ({
+          ...prev,
+          total: result.pagination?.total || result.users.length,
+          totalPages: result.pagination?.totalPages || 1,
+        }));
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Terjadi kesalahan');
     } finally {
       setIsLoading(false);
     }
-  }, [getToken, filterStatus, filterRole, searchTerm]);
+  }, [getToken, filterStatus, filterRole, searchTerm, pagination.limit]);
 
   useEffect(() => {
-    fetchUsers();
-  }, [fetchUsers]);
+    fetchUsers(pagination.page);
+  }, [fetchUsers, pagination.page]);
 
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'ACTIVE':
-        return <Badge className="bg-[#008A00] text-white border border-[#008A00] pointer-events-none">Aktif</Badge>;
+        return <Badge className="bg-[#008A00]/10 text-[#008A00] border border-[#008A00]/20 pointer-events-none">Aktif</Badge>;
       case 'SUSPENDED':
-        return <Badge className="bg-[#F4B400] text-[#1A1A1A] border border-[#F4B400] pointer-events-none">Ditangguhkan</Badge>;
+        return <Badge className="bg-[#F4B400]/10 text-[#F4B400] border border-[#F4B400]/20 pointer-events-none">Ditangguhkan</Badge>;
       case 'INACTIVE':
-        return <Badge className="bg-gray-500 text-white border border-gray-500 pointer-events-none">Tidak Aktif</Badge>;
+        return <Badge className="bg-gray-100 text-gray-600 border border-gray-300 pointer-events-none dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600">Tidak Aktif</Badge>;
       default:
         return <Badge className="bg-gray-100 text-gray-800 border border-gray-300 pointer-events-none">Unknown</Badge>;
     }
@@ -203,11 +223,11 @@ export default function AdminUsers() {
   const getRoleBadge = (role: string) => {
     switch (role) {
       case 'ADMIN':
-        return <Badge className="bg-[#005EB8] text-white border border-[#005EB8] pointer-events-none">Admin</Badge>;
+        return <Badge className="bg-[#005EB8]/10 text-[#005EB8] border border-[#005EB8]/20 pointer-events-none">Admin</Badge>;
       case 'MENTOR':
-        return <Badge className="bg-[#008A00] text-white border border-[#008A00] pointer-events-none">Mentor</Badge>;
+        return <Badge className="bg-[#008A00]/10 text-[#008A00] border border-[#008A00]/20 pointer-events-none">Mentor</Badge>;
       case 'STUDENT':
-        return <Badge className="bg-[#F4B400] text-[#1A1A1A] border border-[#F4B400] pointer-events-none">Siswa</Badge>;
+        return <Badge className="bg-[#F4B400]/10 text-[#F4B400] border border-[#F4B400]/20 pointer-events-none">Siswa</Badge>;
       default:
         return <Badge className="bg-gray-100 text-gray-800 border border-gray-300 pointer-events-none">Unknown</Badge>;
     }
@@ -236,7 +256,7 @@ export default function AdminUsers() {
         throw new Error(result.error || 'Gagal mengaktifkan pengguna');
       }
 
-      fetchUsers();
+      fetchUsers(pagination.page);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Terjadi kesalahan');
     } finally {
@@ -267,7 +287,7 @@ export default function AdminUsers() {
         throw new Error(result.error || 'Gagal menangguhkan pengguna');
       }
 
-      fetchUsers();
+      fetchUsers(pagination.page);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Terjadi kesalahan');
     } finally {
@@ -307,7 +327,7 @@ export default function AdminUsers() {
 
       setDeleteDialogOpen(false);
       setUserToDelete(null);
-      fetchUsers();
+      fetchUsers(pagination.page);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Terjadi kesalahan');
     } finally {
@@ -315,7 +335,11 @@ export default function AdminUsers() {
     }
   };
 
-  // Filter users locally
+  const handlePageChange = (newPage: number) => {
+    setPagination(prev => ({ ...prev, page: newPage }));
+  };
+
+  // Filter users locally (if needed for search)
   const filteredUsers = users.filter((user) => {
     const matchesSearch = 
       user.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -341,25 +365,30 @@ export default function AdminUsers() {
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
               <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-3">
-                <Users className="h-8 w-8 text-[#005EB8]" />
+                  <Users className="h-8 w-8 text-[#005EB8]" />
                 Kelola Pengguna
               </h1>
               <p className="text-gray-600 dark:text-gray-400">
                 Manajemen akun pengguna (aktifkan, tangguhkan, hapus)
               </p>
             </div>
+            <Badge className="bg-[#005EB8] text-white border border-[#005EB8] pointer-events-none text-sm px-3 py-1">
+              {stats.total} Pengguna
+            </Badge>
           </div>
 
           {error && (
-            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 flex justify-between items-center">
-              <div className="flex items-center gap-3">
-                <AlertCircle className="h-5 w-5 text-[#D93025]" />
-                <p className="text-[#D93025] dark:text-[#D93025]">{error}</p>
-              </div>
-              <button onClick={() => setError(null)} className="text-[#D93025] dark:text-[#D93025] hover:text-[#B71C1C] dark:hover:text-[#B71C1C]">
-                <X className="h-5 w-5" />
-              </button>
-            </div>
+            <Card className="rounded-lg border bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800">
+              <CardContent className="p-4 flex justify-between items-center">
+                <div className="flex items-center gap-3">
+                  <AlertCircle className="h-5 w-5 text-[#D93025]" />
+                  <p className="text-[#D93025] dark:text-[#D93025]">{error}</p>
+                </div>
+                <button onClick={() => setError(null)} className="text-[#D93025] dark:text-[#D93025] hover:text-[#B71C1C] dark:hover:text-[#B71C1C]">
+                  <X className="h-5 w-5" />
+                </button>
+              </CardContent>
+            </Card>
           )}
 
           {/* Stats Cards */}
@@ -421,23 +450,44 @@ export default function AdminUsers() {
             </Card>
           </div>
 
-          {/* Search and Filter Section */}
-          <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
-            <CardContent className="p-6">
-              <div className="flex flex-col md:flex-row gap-4">
-                <div className="flex-1 relative">
-                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                  <Input
-                    type="search"
-                    placeholder="Cari nama atau email pengguna..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10 border-gray-300 dark:border-gray-600 focus:border-[#005EB8] focus:ring-[#005EB8] dark:focus:border-[#005EB8] dark:focus:ring-[#005EB8]"
-                  />
+          {/* Users Table Card */}
+          <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 border-gray-200 dark:border-gray-700 overflow-hidden">
+            <CardHeader className="pb-4 border-b border-gray-200 dark:border-gray-700">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div>
+                  <CardTitle className="text-xl font-bold flex items-center gap-2 text-gray-900 dark:text-white">
+                    <Users className="h-5 w-5 text-[#005EB8]" />
+                    Daftar Pengguna
+                  </CardTitle>
+                  <CardDescription className="mt-1">
+                    {pagination.total} pengguna ditemukan
+                  </CardDescription>
                 </div>
-                <div className="flex gap-2">
-                  <Select value={filterStatus} onValueChange={setFilterStatus}>
-                    <SelectTrigger className="w-[150px] border-gray-300 dark:border-gray-600 focus:border-[#005EB8] focus:ring-[#005EB8] dark:focus:border-[#005EB8] dark:focus:ring-[#005EB8]">
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              {/* Filters */}
+              <div className="p-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50">
+                <div className="flex flex-col md:flex-row gap-3">
+                  <div className="flex-1 relative">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                    <Input
+                      type="search"
+                      placeholder="Cari nama atau email pengguna..."
+                      value={searchTerm}
+                      onChange={(e) => {
+                        setSearchTerm(e.target.value);
+                        setPagination(prev => ({ ...prev, page: 1 }));
+                      }}
+                      className="pl-10 h-10 bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600"
+                    />
+                  </div>
+                  <Select value={filterStatus} onValueChange={(value) => {
+                    setFilterStatus(value);
+                    setPagination(prev => ({ ...prev, page: 1 }));
+                  }}>
+                    <SelectTrigger className="w-full md:w-[160px] h-10 bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600">
+                      <Filter className="h-4 w-4 mr-2 text-gray-400" />
                       <SelectValue placeholder="Status" />
                     </SelectTrigger>
                     <SelectContent>
@@ -448,8 +498,11 @@ export default function AdminUsers() {
                     </SelectContent>
                   </Select>
 
-                  <Select value={filterRole} onValueChange={setFilterRole}>
-                    <SelectTrigger className="w-[150px] border-gray-300 dark:border-gray-600 focus:border-[#005EB8] focus:ring-[#005EB8] dark:focus:border-[#005EB8] dark:focus:ring-[#005EB8]">
+                  <Select value={filterRole} onValueChange={(value) => {
+                    setFilterRole(value);
+                    setPagination(prev => ({ ...prev, page: 1 }));
+                  }}>
+                    <SelectTrigger className="w-full md:w-[160px] h-10 bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600">
                       <SelectValue placeholder="Role" />
                     </SelectTrigger>
                     <SelectContent>
@@ -461,41 +514,33 @@ export default function AdminUsers() {
                   </Select>
                 </div>
               </div>
-            </CardContent>
-          </Card>
 
-          {/* Users Table */}
-          <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
-            <CardHeader>
-              <CardTitle className="text-xl font-bold text-gray-900 dark:text-white">Daftar Pengguna</CardTitle>
-              <CardDescription>Kelola status dan informasi semua pengguna</CardDescription>
-            </CardHeader>
-            <CardContent>
+              {/* Table */}
               {isLoading ? (
                 <div className="flex flex-col items-center justify-center py-12">
                   <Loader2 className="h-12 w-12 animate-spin text-[#005EB8] mb-4" />
                   <span className="text-gray-600 dark:text-gray-400">Memuat data pengguna...</span>
                 </div>
-              ) : (
-                <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
-                  <Table>
+              ) : users.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <Table className="min-w-full">
                     <TableHeader>
-                      <TableRow className="bg-gray-50 dark:bg-gray-800">
-                        <TableHead className="font-semibold text-gray-900 dark:text-white">Nama</TableHead>
-                        <TableHead className="font-semibold text-gray-900 dark:text-white">Email</TableHead>
-                        <TableHead className="font-semibold text-gray-900 dark:text-white">Role</TableHead>
-                        <TableHead className="font-semibold text-gray-900 dark:text-white">Bergabung</TableHead>
-                        <TableHead className="font-semibold text-gray-900 dark:text-white">Login Terakhir</TableHead>
-                        <TableHead className="font-semibold text-gray-900 dark:text-white text-center">Kursus</TableHead>
-                        <TableHead className="font-semibold text-gray-900 dark:text-white text-center">Sertifikat</TableHead>
-                        <TableHead className="font-semibold text-gray-900 dark:text-white">Status</TableHead>
-                        <TableHead className="font-semibold text-gray-900 dark:text-white text-right">Aksi</TableHead>
+                      <TableRow className="bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                        <TableHead className="font-semibold text-gray-700 dark:text-gray-300 px-4 py-3">Nama</TableHead>
+                        <TableHead className="font-semibold text-gray-700 dark:text-gray-300 px-4 py-3">Email</TableHead>
+                        <TableHead className="font-semibold text-gray-700 dark:text-gray-300 px-4 py-3">Role</TableHead>
+                        <TableHead className="font-semibold text-gray-700 dark:text-gray-300 px-4 py-3">Bergabung</TableHead>
+                        <TableHead className="font-semibold text-gray-700 dark:text-gray-300 px-4 py-3">Login Terakhir</TableHead>
+                        <TableHead className="font-semibold text-gray-700 dark:text-gray-300 px-4 py-3 text-center">Kursus</TableHead>
+                        <TableHead className="font-semibold text-gray-700 dark:text-gray-300 px-4 py-3 text-center">Sertifikat</TableHead>
+                        <TableHead className="font-semibold text-gray-700 dark:text-gray-300 px-4 py-3 text-center">Status</TableHead>
+                        <TableHead className="font-semibold text-gray-700 dark:text-gray-300 px-4 py-3 text-center">Aksi</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {filteredUsers.map((user) => (
-                        <TableRow key={user.id} className="hover:bg-gray-50 dark:hover:bg-gray-800">
-                          <TableCell>
+                      {users.map((user) => (
+                        <TableRow key={user.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors">
+                          <TableCell className="px-4 py-3">
                             <div>
                               <p className="font-medium text-gray-900 dark:text-white">
                                 {user.full_name || '-'}
@@ -507,7 +552,7 @@ export default function AdminUsers() {
                               )}
                             </div>
                           </TableCell>
-                          <TableCell>
+                          <TableCell className="px-4 py-3">
                             <div className="text-sm">
                               <p className="text-gray-900 dark:text-white">{user.email}</p>
                               {user.email_verified && (
@@ -518,35 +563,31 @@ export default function AdminUsers() {
                               )}
                             </div>
                           </TableCell>
-                          <TableCell>{getRoleBadge(user.role)}</TableCell>
-                          <TableCell className="text-sm text-gray-600 dark:text-gray-400">
+                          <TableCell className="px-4 py-3">{getRoleBadge(user.role)}</TableCell>
+                          <TableCell className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
                             {formatDate(user.created_at)}
                           </TableCell>
-                          <TableCell className="text-sm text-gray-600 dark:text-gray-400">
+                          <TableCell className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
                             {formatDate(user.last_login)}
                           </TableCell>
-                          <TableCell className="text-center">
-                            <div className="flex flex-col items-center">
-                              <span className="font-medium text-gray-900 dark:text-white">
-                                {user._count?.enrollments || 0}
-                              </span>
-                            </div>
+                          <TableCell className="px-4 py-3 text-center">
+                            <span className="font-medium text-gray-900 dark:text-white">
+                              {user._count?.enrollments || 0}
+                            </span>
                           </TableCell>
-                          <TableCell className="text-center">
-                            <div className="flex flex-col items-center">
-                              <span className="font-medium text-gray-900 dark:text-white">
-                                {user._count?.certificates || 0}
-                              </span>
-                            </div>
+                          <TableCell className="px-4 py-3 text-center">
+                            <span className="font-medium text-gray-900 dark:text-white">
+                              {user._count?.certificates || 0}
+                            </span>
                           </TableCell>
-                          <TableCell>{getStatusBadge(user.status)}</TableCell>
-                          <TableCell className="text-right">
+                          <TableCell className="px-4 py-3 text-center">{getStatusBadge(user.status)}</TableCell>
+                          <TableCell className="px-4 py-3 text-center">
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
                                 <Button 
                                   variant="outline" 
                                   size="sm"
-                                  className="border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700"
+                                  className="h-8 w-8 p-0 border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10 dark:border-[#005EB8] dark:text-[#005EB8] dark:hover:bg-[#005EB8]/20"
                                 >
                                   <MoreHorizontal className="h-4 w-4" />
                                 </Button>
@@ -593,9 +634,7 @@ export default function AdminUsers() {
                     </TableBody>
                   </Table>
                 </div>
-              )}
-
-              {!isLoading && filteredUsers.length === 0 && (
+              ) : (
                 <div className="text-center py-12">
                   <div className="flex flex-col items-center gap-4">
                     <div className="h-20 w-20 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
@@ -613,6 +652,7 @@ export default function AdminUsers() {
                           setSearchTerm('');
                           setFilterStatus('all');
                           setFilterRole('all');
+                          setPagination(prev => ({ ...prev, page: 1 }));
                         }}
                         variant="outline"
                         className="border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10 dark:border-[#005EB8] dark:text-[#005EB8] dark:hover:bg-[#005EB8]/20"
@@ -625,6 +665,18 @@ export default function AdminUsers() {
               )}
             </CardContent>
           </Card>
+
+          {/* Pagination */}
+          {pagination.totalPages > 1 && (
+            <Pagination
+              currentPage={pagination.page}
+              totalPages={pagination.totalPages}
+              totalItems={pagination.total}
+              itemsPerPage={pagination.limit}
+              onPageChange={handlePageChange}
+              loading={isLoading}
+            />
+          )}
 
           {/* Delete Confirmation Dialog */}
           <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>

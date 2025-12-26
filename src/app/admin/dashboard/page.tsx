@@ -36,8 +36,6 @@ import Link from "next/link";
 import AdminLayout from "@/components/admin/admin-layout";
 import ProtectedRoute from "@/components/auth/protected-route";
 
-const API_BASE_URL = "http://localhost:3000/api";
-
 interface DashboardStats {
   total_users: number;
   total_mentors: number;
@@ -136,9 +134,9 @@ export default function AdminDashboardPage() {
       const headers = { Authorization: `Bearer ${token}` };
 
       const [dashboardRes, mentorsRes, coursesRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/admin/dashboard`, { headers }),
-        fetch(`${API_BASE_URL}/admin/mentors?status=PENDING&limit=5`, { headers }),
-        fetch(`${API_BASE_URL}/admin/courses?status=PENDING_REVIEW&limit=5`, { headers }),
+        fetch(`/api/admin/dashboard`, { headers }),
+        fetch(`/api/admin/mentors?status=PENDING&limit=5`, { headers }),
+        fetch(`/api/admin/courses?status=PENDING_REVIEW&limit=5`, { headers }),
       ]);
 
       if (dashboardRes.ok) {
@@ -220,7 +218,7 @@ export default function AdminDashboardPage() {
     <ProtectedRoute allowedRoles={["ADMIN"]}>
       <AdminLayout>
         <div className="space-y-8">
-          {/* Header - Diubah menjadi Card seperti User */}
+          {/* Header */}
           <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
             <CardContent className="p-6">
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -345,9 +343,9 @@ export default function AdminDashboardPage() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="space-y-3">
+                    <div className="divide-y divide-gray-200 dark:divide-gray-700">
                       {pendingMentors.slice(0, 3).map((mentor) => (
-                        <div key={mentor.id} className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                        <div key={mentor.id} className="flex items-center gap-3 p-3 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
                           {mentor.user.avatar_url ? (
                             <div className="relative w-10 h-10">
                               <Image 
@@ -395,9 +393,9 @@ export default function AdminDashboardPage() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="space-y-3">
+                    <div className="divide-y divide-gray-200 dark:divide-gray-700">
                       {pendingCourses.slice(0, 3).map((course) => (
-                        <div key={course.id} className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                        <div key={course.id} className="flex items-center gap-3 p-3 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
                           <div className="w-10 h-10 rounded-lg bg-[#008A00]/10 dark:bg-[#008A00]/20 flex items-center justify-center">
                             <BookOpen className="h-5 w-5 text-[#008A00]" />
                           </div>
@@ -429,18 +427,21 @@ export default function AdminDashboardPage() {
           <div className="grid lg:grid-cols-2 gap-6">
             {/* Users by Role */}
             <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
-              <CardHeader>
-                <CardTitle className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                  <Users className="h-5 w-5 text-[#005EB8]" />
-                  Distribusi Pengguna
-                </CardTitle>
+              <CardHeader className="pb-3 border-b">
+                <div>
+                  <CardTitle className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                    <Users className="h-5 w-5 text-[#005EB8]" />
+                    Distribusi Pengguna
+                  </CardTitle>
+                  <CardDescription>Distribusi pengguna berdasarkan peran</CardDescription>
+                </div>
               </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
+              <CardContent className="p-6">
+                <div className="divide-y divide-gray-200 dark:divide-gray-700">
                   {usersByRole.map((role) => {
                     const pct = totalUsers > 0 ? (role._count.id / totalUsers) * 100 : 0;
                     return (
-                      <div key={role.role}>
+                      <div key={role.role} className="py-4 first:pt-0 last:pb-0">
                         <div className="flex justify-between mb-1">
                           <span className="text-sm font-medium text-gray-900 dark:text-white flex items-center gap-2">
                             <span className={`w-3 h-3 rounded-full ${getRoleColor(role.role)}`} />
@@ -462,18 +463,21 @@ export default function AdminDashboardPage() {
 
             {/* Courses by Status */}
             <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
-              <CardHeader>
-                <CardTitle className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                  <BookOpen className="h-5 w-5 text-[#008A00]" />
-                  Status Kursus
-                </CardTitle>
+              <CardHeader className="pb-3 border-b">
+                <div>
+                  <CardTitle className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                    <BookOpen className="h-5 w-5 text-[#008A00]" />
+                    Status Kursus
+                  </CardTitle>
+                  <CardDescription>Status distribusi semua kursus</CardDescription>
+                </div>
               </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
+              <CardContent className="p-6">
+                <div className="divide-y divide-gray-200 dark:divide-gray-700">
                   {coursesByStatus.map((status) => {
                     const pct = totalCourses > 0 ? (status._count.id / totalCourses) * 100 : 0;
                     return (
-                      <div key={status.status}>
+                      <div key={status.status} className="py-4 first:pt-0 last:pb-0">
                         <div className="flex justify-between mb-1">
                           <span className="text-sm font-medium text-gray-900 dark:text-white flex items-center gap-2">
                             <span className={`w-3 h-3 rounded-full ${getStatusColor(status.status)}`} />
@@ -494,23 +498,25 @@ export default function AdminDashboardPage() {
 
           {/* Recent Activity */}
           <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
-            <CardHeader>
-              <CardTitle className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                <Activity className="h-5 w-5 text-[#008A00]" />
-                Pendaftaran Terbaru
-              </CardTitle>
-              <CardDescription>Siswa yang baru mendaftar ke kursus</CardDescription>
+            <CardHeader className="pb-3 border-b">
+              <div>
+                <CardTitle className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                  <Activity className="h-5 w-5 text-[#008A00]" />
+                  Pendaftaran Terbaru
+                </CardTitle>
+                <CardDescription>Siswa yang baru mendaftar ke kursus</CardDescription>
+              </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-0">
               {recentEnrollments.length === 0 ? (
                 <div className="text-center py-8">
                   <GraduationCap className="h-12 w-12 text-gray-300 dark:text-gray-700 mx-auto mb-3" />
                   <p className="text-gray-500 dark:text-gray-400">Belum ada pendaftaran</p>
                 </div>
               ) : (
-                <div className="space-y-3">
+                <div className="divide-y divide-gray-200 dark:divide-gray-700">
                   {recentEnrollments.slice(0, 5).map((enrollment) => (
-                    <div key={enrollment.id} className="flex items-center gap-4 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-750 transition-colors">
+                    <div key={enrollment.id} className="flex items-center gap-4 p-4 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
                       <div className="w-10 h-10 rounded-full bg-[#008A00]/10 dark:bg-[#008A00]/20 flex items-center justify-center">
                         <GraduationCap className="h-5 w-5 text-[#008A00]" />
                       </div>
@@ -531,14 +537,16 @@ export default function AdminDashboardPage() {
 
           {/* Quick Actions */}
           <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-xl font-bold text-gray-900 dark:text-white">
-                <Zap className="h-5 w-5 text-[#005EB8]" />
-                Aksi Cepat
-              </CardTitle>
-              <CardDescription>Kelola platform dengan cepat</CardDescription>
+            <CardHeader className="pb-3 border-b">
+              <div>
+                <CardTitle className="flex items-center gap-2 text-xl font-bold text-gray-900 dark:text-white">
+                  <Zap className="h-5 w-5 text-[#005EB8]" />
+                  Aksi Cepat
+                </CardTitle>
+                <CardDescription>Kelola platform dengan cepat</CardDescription>
+              </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="pt-6">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <Card className="rounded-lg border bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 transition-colors cursor-pointer">
                   <CardContent className="p-4">

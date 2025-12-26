@@ -12,11 +12,15 @@ import {
   XCircle,
   MoreHorizontal,
   BookOpen,
-  BarChart3,
   Loader2,
   Clock,
   Archive,
   Star,
+  Filter,
+  AlertCircle,
+  X,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import Link from 'next/link';
 import AdminLayout from '@/components/admin/admin-layout';
@@ -45,8 +49,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-
-const API_BASE_URL = 'http://localhost:3000/api';
+import Pagination from '@/components/ui/pagination'; // Import komponen pagination
 
 type CourseStatus = 'DRAFT' | 'PENDING_REVIEW' | 'PUBLISHED' | 'ARCHIVED';
 
@@ -79,6 +82,13 @@ interface Course {
   };
 }
 
+interface PaginationData {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
 export default function AdminCourses() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
@@ -86,6 +96,12 @@ export default function AdminCourses() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('PENDING_REVIEW');
   const [filterCategory, setFilterCategory] = useState('all');
+  const [pagination, setPagination] = useState<PaginationData>({
+    page: 1,
+    limit: 10, // Changed to 10 items per page
+    total: 0,
+    totalPages: 0,
+  });
 
   // Action states
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -117,7 +133,7 @@ export default function AdminCourses() {
   }, []);
 
   // Fetch courses
-  const fetchCourses = useCallback(async () => {
+  const fetchCourses = useCallback(async (page: number = 1) => {
     try {
       setLoading(true);
       setError(null);
@@ -129,7 +145,8 @@ export default function AdminCourses() {
       }
 
       const params = new URLSearchParams({
-        limit: '100',
+        page: page.toString(),
+        limit: pagination.limit.toString(),
       });
 
       // Add status filter
@@ -137,7 +154,7 @@ export default function AdminCourses() {
         params.append('status', filterStatus);
       }
 
-      const response = await fetch(`${API_BASE_URL}/admin/courses?${params.toString()}`, {
+      const response = await fetch(`/api/admin/courses?${params.toString()}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -148,17 +165,25 @@ export default function AdminCourses() {
       }
 
       const result = await response.json();
+      
       setCourses(result.courses || result.data || []);
+      
+      // Update pagination state
+      setPagination(prev => ({
+        ...prev,
+        total: result.pagination?.total || (result.courses?.length || result.data?.length || 0),
+        totalPages: result.pagination?.totalPages || 1,
+      }));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Terjadi kesalahan');
     } finally {
       setLoading(false);
     }
-  }, [getAuthToken, filterStatus]);
+  }, [getAuthToken, filterStatus, pagination.limit]);
 
   useEffect(() => {
-    fetchCourses();
-  }, [fetchCourses]);
+    fetchCourses(pagination.page);
+  }, [fetchCourses, pagination.page]);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('id-ID', {
@@ -180,13 +205,13 @@ export default function AdminCourses() {
   const getStatusBadge = (status: CourseStatus) => {
     switch (status) {
       case 'PUBLISHED':
-        return <Badge className="bg-[#008A00] text-white border border-[#008A00] pointer-events-none">Published</Badge>;
+        return <Badge className="bg-[#008A00]/10 text-[#008A00] border border-[#008A00]/20 pointer-events-none">Published</Badge>;
       case 'PENDING_REVIEW':
-        return <Badge className="bg-[#F4B400] text-[#1A1A1A] border border-[#F4B400] pointer-events-none">Menunggu Review</Badge>;
+        return <Badge className="bg-[#F4B400]/10 text-[#F4B400] border border-[#F4B400]/20 pointer-events-none">Menunggu Review</Badge>;
       case 'DRAFT':
-        return <Badge className="bg-gray-500 text-white border border-gray-500 pointer-events-none">Draft</Badge>;
+        return <Badge className="bg-gray-100 text-gray-600 border border-gray-300 pointer-events-none dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600">Draft</Badge>;
       case 'ARCHIVED':
-        return <Badge className="bg-gray-700 text-white border border-gray-700 pointer-events-none">Archived</Badge>;
+        return <Badge className="bg-gray-500/10 text-gray-500 border border-gray-500/20 pointer-events-none">Archived</Badge>;
       default:
         return <Badge className="bg-gray-100 text-gray-800 border border-gray-300 pointer-events-none">Unknown</Badge>;
     }
@@ -207,7 +232,7 @@ export default function AdminCourses() {
       setActionLoading(courseId);
       const token = getAuthToken();
       
-      const response = await fetch(`${API_BASE_URL}/admin/courses/${courseId}/approve`, {
+      const response = await fetch(`/api/admin/courses/${courseId}/approve`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -259,7 +284,7 @@ export default function AdminCourses() {
       setActionLoading(courseToReject);
       const token = getAuthToken();
       
-      const response = await fetch(`${API_BASE_URL}/admin/courses/${courseToReject}/reject`, {
+      const response = await fetch(`/api/admin/courses/${courseToReject}/reject`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -315,7 +340,7 @@ export default function AdminCourses() {
       setActionLoading(courseToDelete);
       const token = getAuthToken();
       
-      const response = await fetch(`${API_BASE_URL}/admin/courses/${courseToDelete}`, {
+      const response = await fetch(`/api/admin/courses/${courseToDelete}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -363,7 +388,11 @@ export default function AdminCourses() {
   // Get unique categories
   const categories = Array.from(new Set(courses.map(c => c.category?.name).filter((name): name is string => Boolean(name))));
 
-  if (loading) {
+  const handlePageChange = (newPage: number) => {
+    setPagination(prev => ({ ...prev, page: newPage }));
+  };
+
+  if (loading && courses.length === 0) {
     return (
       <ProtectedRoute allowedRoles={["ADMIN"]}>
         <AdminLayout>
@@ -492,19 +521,28 @@ export default function AdminCourses() {
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
               <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-3">
-                <BookOpen className="h-8 w-8 text-[#005EB8]" />
+                  <BookOpen className="h-8 w-8 text-[#005EB8]" />
                 Manajemen Kursus
               </h1>
               <p className="text-gray-600 dark:text-gray-400">
                 Manajemen dan approval kursus dari mentor
               </p>
             </div>
+            <Badge className="bg-[#005EB8] text-white border border-[#005EB8] pointer-events-none text-sm px-3 py-1">
+              {pagination.total} Kursus
+            </Badge>
           </div>
 
           {error && (
-            <Card className="rounded-lg border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-900/20">
-              <CardContent className="p-4">
-                <p className="text-red-600 dark:text-red-400">{error}</p>
+            <Card className="rounded-lg border bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800">
+              <CardContent className="p-4 flex justify-between items-center">
+                <div className="flex items-center gap-3">
+                  <AlertCircle className="h-5 w-5 text-[#D93025]" />
+                  <p className="text-[#D93025] dark:text-red-400">{error}</p>
+                </div>
+                <button onClick={() => setError(null)} className="text-[#D93025] dark:text-red-400 hover:text-[#B71C1C] dark:hover:text-red-300">
+                  <X className="h-5 w-5" />
+                </button>
               </CardContent>
             </Card>
           )}
@@ -557,7 +595,7 @@ export default function AdminCourses() {
               <CardContent className="p-5">
                 <div className="flex items-center gap-3">
                   <div className="p-3 rounded-xl bg-[#D93025]/10">
-                    <BarChart3 className="h-6 w-6 text-[#D93025]" />
+                    <XCircle className="h-6 w-6 text-[#D93025]" />
                   </div>
                   <div>
                     <p className="text-sm text-gray-500 dark:text-gray-400">Draft</p>
@@ -570,8 +608,8 @@ export default function AdminCourses() {
             <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 border-gray-200 dark:border-gray-700">
               <CardContent className="p-5">
                 <div className="flex items-center gap-3">
-                  <div className="p-3 rounded-xl bg-gray-700/10">
-                    <Archive className="h-6 w-6 text-gray-700 dark:text-gray-400" />
+                  <div className="p-3 rounded-xl bg-gray-500/10">
+                    <Archive className="h-6 w-6 text-gray-500" />
                   </div>
                   <div>
                     <p className="text-sm text-gray-500 dark:text-gray-400">Archived</p>
@@ -582,26 +620,47 @@ export default function AdminCourses() {
             </Card>
           </div>
 
-          {/* Search and Filter Section */}
-          <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
-            <CardContent className="p-6">
-              <div className="flex flex-col md:flex-row gap-4">
-                <div className="flex-1 relative">
-                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                  <Input
-                    type="search"
-                    placeholder="Cari kursus atau mentor..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10 border-gray-300 dark:border-gray-600 focus:border-[#005EB8] focus:ring-[#005EB8]"
-                  />
+          {/* Courses Table Card */}
+          <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 border-gray-200 dark:border-gray-700 overflow-hidden">
+            <CardHeader className="pb-4 border-b border-gray-200 dark:border-gray-700">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div>
+                  <CardTitle className="text-xl font-bold flex items-center gap-2 text-gray-900 dark:text-white">
+                    <BookOpen className="h-5 w-5 text-[#005EB8]" />
+                    Daftar Kursus
+                  </CardTitle>
+                  <CardDescription className="mt-1">
+                    {pagination.total} kursus ditemukan
+                  </CardDescription>
                 </div>
-                <div className="flex gap-2">
-                  <Select value={filterStatus} onValueChange={setFilterStatus}>
-                    <SelectTrigger className="w-[180px] border-gray-300 dark:border-gray-600 focus:border-[#005EB8] focus:ring-[#005EB8]">
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              {/* Filters */}
+              <div className="p-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50">
+                <div className="flex flex-col md:flex-row gap-3">
+                  <div className="flex-1 relative">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                    <Input
+                      type="search"
+                      placeholder="Cari kursus atau mentor..."
+                      value={searchTerm}
+                      onChange={(e) => {
+                        setSearchTerm(e.target.value);
+                        setPagination(prev => ({ ...prev, page: 1 }));
+                      }}
+                      className="pl-10 h-10 bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600"
+                    />
+                  </div>
+                  <Select value={filterStatus} onValueChange={(value) => {
+                    setFilterStatus(value);
+                    setPagination(prev => ({ ...prev, page: 1 }));
+                  }}>
+                    <SelectTrigger className="w-full md:w-[200px] h-10 bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600">
+                      <Filter className="h-4 w-4 mr-2 text-gray-400" />
                       <SelectValue placeholder="Status" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="min-w-[200px]">
                       <SelectItem value="all">Semua Status</SelectItem>
                       <SelectItem value="PENDING_REVIEW">Menunggu Review</SelectItem>
                       <SelectItem value="PUBLISHED">Published</SelectItem>
@@ -610,8 +669,11 @@ export default function AdminCourses() {
                     </SelectContent>
                   </Select>
 
-                  <Select value={filterCategory} onValueChange={setFilterCategory}>
-                    <SelectTrigger className="w-[150px] border-gray-300 dark:border-gray-600 focus:border-[#005EB8] focus:ring-[#005EB8]">
+                  <Select value={filterCategory} onValueChange={(value) => {
+                    setFilterCategory(value);
+                    setPagination(prev => ({ ...prev, page: 1 }));
+                  }}>
+                    <SelectTrigger className="w-full md:w-[160px] h-10 bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600">
                       <SelectValue placeholder="Kategori" />
                     </SelectTrigger>
                     <SelectContent>
@@ -623,138 +685,163 @@ export default function AdminCourses() {
                   </Select>
                 </div>
               </div>
-            </CardContent>
-          </Card>
 
-          {/* Courses Table */}
-          <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
-            <CardHeader>
-              <CardTitle className="text-xl font-bold text-gray-900 dark:text-white">
-                Daftar Kursus
-              </CardTitle>
-              <CardDescription>
-                Kelola persetujuan dan status semua kursus
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="border-b border-gray-200 dark:border-gray-700">
-                      <TableHead className="text-gray-900 dark:text-white font-semibold">Kursus</TableHead>
-                      <TableHead className="text-gray-900 dark:text-white font-semibold">Mentor</TableHead>
-                      <TableHead className="text-gray-900 dark:text-white font-semibold">Kategori</TableHead>
-                      <TableHead className="text-gray-900 dark:text-white font-semibold">Siswa</TableHead>
-                      <TableHead className="text-gray-900 dark:text-white font-semibold">Harga</TableHead>
-                      <TableHead className="text-gray-900 dark:text-white font-semibold">Rating</TableHead>
-                      <TableHead className="text-gray-900 dark:text-white font-semibold">Status</TableHead>
-                      <TableHead className="text-gray-900 dark:text-white font-semibold">Terakhir Diupdate</TableHead>
-                      <TableHead className="text-right text-gray-900 dark:text-white font-semibold">Aksi</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredCourses.map((course) => (
-                      <TableRow key={course.id} className="hover:bg-gray-50 dark:hover:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-                        <TableCell>
-                          <div>
-                            <p className="font-medium text-gray-900 dark:text-white">
-                              {course.title}
-                            </p>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-sm">
-                          <div className="font-medium text-gray-900 dark:text-white">
-                            {course.mentor.user.full_name}
-                          </div>
-                          <div className="text-xs text-gray-500 dark:text-gray-400">
-                            {course.mentor.user.email}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge className="bg-[#005EB8]/10 text-[#005EB8] border border-[#005EB8]/20 pointer-events-none text-xs">
-                            {course.category?.name || 'Tanpa Kategori'}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="font-medium text-gray-900 dark:text-white">
-                          {formatNumber(course._count?.enrollments || course.total_students || 0)}
-                        </TableCell>
-                        <TableCell className="font-semibold text-gray-900 dark:text-white">
-                          {course.is_free ? (
-                            <Badge className="bg-[#008A00] text-white border border-[#008A00] pointer-events-none">Gratis</Badge>
-                          ) : (
-                            formatCurrency(course.price)
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-1">
-                            <Star className="h-4 w-4 text-[#F4B400]" fill="currentColor" stroke="none" />
-                            <span className="font-medium text-gray-900 dark:text-white">{course.average_rating?.toFixed(1) || '0.0'}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>{getStatusBadge(course.status)}</TableCell>
-                        <TableCell className="text-sm text-gray-600 dark:text-gray-400">
-                          {new Date(course.updated_at).toLocaleDateString('id-ID')}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button 
-                                variant="outline" 
-                                size="sm" 
-                                disabled={actionLoading === course.id}
-                                className="border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
-                              >
-                                {actionLoading === course.id ? (
-                                  <Loader2 className="h-4 w-4 animate-spin" />
-                                ) : (
-                                  <MoreHorizontal className="h-4 w-4" />
-                                )}
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
-                              <DropdownMenuItem asChild>
-                                <Link href={`/courses/${course.slug || course.id}`} className="flex items-center gap-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
-                                  <Eye className="h-4 w-4" />
-                                  <span>Lihat Detail</span>
-                                </Link>
-                              </DropdownMenuItem>
-                              <DropdownMenuSeparator />
-                              {course.status === 'PENDING_REVIEW' && (
-                                <>
-                                  <DropdownMenuItem 
-                                    onClick={() => handleApproveCourse(course.id)}
-                                    className="text-[#008A00] dark:text-[#4CAF50] cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700"
+              {/* Table */}
+              {loading && courses.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12">
+                  <Loader2 className="h-12 w-12 animate-spin text-[#005EB8] mb-4" />
+                  <span className="text-gray-600 dark:text-gray-400">Memuat data kursus...</span>
+                </div>
+              ) : filteredCourses.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <Table className="min-w-full">
+                    <TableHeader>
+                      <TableRow className="bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                        <TableHead className="font-semibold text-gray-700 dark:text-gray-300 w-[220px] px-4 py-3">
+                          Kursus
+                        </TableHead>
+                        <TableHead className="font-semibold text-gray-700 dark:text-gray-300 w-[200px] px-4 py-3">
+                          Mentor
+                        </TableHead>
+                        <TableHead className="font-semibold text-gray-700 dark:text-gray-300 w-[130px] px-4 py-3">
+                          Kategori
+                        </TableHead>
+                        <TableHead className="font-semibold text-gray-700 dark:text-gray-300 w-[90px] px-4 py-3 text-center">
+                          Siswa
+                        </TableHead>
+                        <TableHead className="font-semibold text-gray-700 dark:text-gray-300 w-[120px] px-4 py-3 text-right">
+                          Harga
+                        </TableHead>
+                        <TableHead className="font-semibold text-gray-700 dark:text-gray-300 w-[90px] px-4 py-3 text-center">
+                          Rating
+                        </TableHead>
+                        <TableHead className="font-semibold text-gray-700 dark:text-gray-300 w-[140px] px-4 py-3 text-center">
+                          Status
+                        </TableHead>
+                        <TableHead className="font-semibold text-gray-700 dark:text-gray-300 w-[90px] px-4 py-3 text-center">
+                          Aksi
+                        </TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredCourses.map((course) => (
+                        <TableRow key={course.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors">
+                          <TableCell className="px-4 py-3">
+                            <div className="min-w-0">
+                              <p className="font-medium text-gray-900 dark:text-white truncate" title={course.title}>
+                                {course.title}
+                              </p>
+                            </div>
+                          </TableCell>
+                          <TableCell className="px-4 py-3">
+                            <div className="min-w-0">
+                              <div className="font-medium text-gray-900 dark:text-white text-sm truncate" title={course.mentor.user.full_name}>
+                                {course.mentor.user.full_name}
+                              </div>
+                              <div className="text-xs text-gray-500 dark:text-gray-400 truncate" title={course.mentor.user.email}>
+                                {course.mentor.user.email}
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell className="px-4 py-3">
+                            <Badge className="bg-[#005EB8]/10 text-[#005EB8] border border-[#005EB8]/20 pointer-events-none text-xs truncate max-w-[120px]" title={course.category?.name || 'Tanpa Kategori'}>
+                              {course.category?.name || 'Tanpa Kategori'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="px-4 py-3">
+                            <div className="flex justify-center">
+                              <span className="font-medium text-gray-900 dark:text-white">
+                                {formatNumber(course._count?.enrollments || course.total_students || 0)}
+                              </span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="px-4 py-3">
+                            <div className="flex justify-end">
+                              {course.is_free ? (
+                                <Badge className="bg-[#008A00]/10 text-[#008A00] border border-[#008A00]/20 pointer-events-none">
+                                  Gratis
+                                </Badge>
+                              ) : (
+                                <span className="font-semibold text-gray-900 dark:text-white whitespace-nowrap">
+                                  {formatCurrency(course.price)}
+                                </span>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell className="px-4 py-3">
+                            <div className="flex items-center gap-1 justify-center">
+                              <Star className="h-4 w-4 text-[#F4B400]" fill="currentColor" stroke="none" />
+                              <span className="font-medium text-gray-900 dark:text-white">
+                                {course.average_rating?.toFixed(1) || '0.0'}
+                              </span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="px-4 py-3">
+                            <div className="flex justify-center">
+                              {getStatusBadge(course.status)}
+                            </div>
+                          </TableCell>
+                          <TableCell className="px-4 py-3">
+                            <div className="flex items-center justify-center">
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button 
+                                    variant="outline" 
+                                    size="sm" 
+                                    disabled={actionLoading === course.id}
+                                    className="h-8 w-8 p-0 border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10 dark:border-[#005EB8] dark:text-[#005EB8]"
                                   >
-                                    <CheckCircle className="h-4 w-4 mr-2" />
-                                    Setujui
+                                    {actionLoading === course.id ? (
+                                      <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                      <MoreHorizontal className="h-4 w-4" />
+                                    )}
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+                                  <DropdownMenuItem asChild>
+                                    <Link href={`/courses/${course.slug || course.id}`} className="flex items-center gap-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
+                                      <Eye className="h-4 w-4" />
+                                      <span>Lihat Detail</span>
+                                    </Link>
                                   </DropdownMenuItem>
+                                  <DropdownMenuSeparator />
+                                  {course.status === 'PENDING_REVIEW' && (
+                                    <>
+                                      <DropdownMenuItem 
+                                        onClick={() => handleApproveCourse(course.id)}
+                                        className="text-[#008A00] dark:text-[#4CAF50] cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700"
+                                      >
+                                        <CheckCircle className="h-4 w-4 mr-2" />
+                                        Setujui
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem 
+                                        onClick={() => openRejectDialog(course.id)}
+                                        className="text-[#D93025] dark:text-[#F44336] cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700"
+                                      >
+                                        <XCircle className="h-4 w-4 mr-2" />
+                                        Tolak
+                                      </DropdownMenuItem>
+                                      <DropdownMenuSeparator />
+                                    </>
+                                  )}
                                   <DropdownMenuItem 
-                                    onClick={() => openRejectDialog(course.id)}
+                                    onClick={() => openDeleteDialog(course.id)}
                                     className="text-[#D93025] dark:text-[#F44336] cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700"
                                   >
                                     <XCircle className="h-4 w-4 mr-2" />
-                                    Tolak
+                                    Hapus
                                   </DropdownMenuItem>
-                                  <DropdownMenuSeparator />
-                                </>
-                              )}
-                              <DropdownMenuItem 
-                                onClick={() => openDeleteDialog(course.id)}
-                                className="text-[#D93025] dark:text-[#F44336] cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700"
-                              >
-                                <XCircle className="h-4 w-4 mr-2" />
-                                Hapus
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-
-              {filteredCourses.length === 0 && (
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : (
                 <div className="text-center py-12">
                   <div className="flex flex-col items-center gap-4">
                     <div className="h-20 w-20 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
@@ -764,15 +851,39 @@ export default function AdminCourses() {
                       <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
                         Tidak ada kursus ditemukan
                       </h3>
-                      <p className="text-gray-600 dark:text-gray-400">
+                      <p className="text-gray-600 dark:text-gray-400 mb-4">
                         Coba ubah filter atau kata kunci pencarian
                       </p>
+                      <Button 
+                        onClick={() => {
+                          setSearchTerm('');
+                          setFilterStatus('all');
+                          setFilterCategory('all');
+                          setPagination(prev => ({ ...prev, page: 1 }));
+                        }}
+                        variant="outline"
+                        className="border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10 dark:border-[#005EB8] dark:text-[#005EB8] dark:hover:bg-[#005EB8]/20"
+                      >
+                        Reset Filter
+                      </Button>
                     </div>
                   </div>
                 </div>
               )}
             </CardContent>
           </Card>
+
+          {/* Pagination */}
+          {pagination.totalPages > 1 && (
+            <Pagination
+              currentPage={pagination.page}
+              totalPages={pagination.totalPages}
+              totalItems={pagination.total}
+              itemsPerPage={pagination.limit}
+              onPageChange={handlePageChange}
+              loading={loading}
+            />
+          )}
         </div>
       </AdminLayout>
     </ProtectedRoute>

@@ -139,7 +139,7 @@ export async function POST(
       },
     });
 
-    // If passed, mark material as completed
+    // If passed, mark material as completed and update enrollment progress
     if (isPassed && enrollment) {
       await prisma.progress.upsert({
         where: {
@@ -160,6 +160,68 @@ export async function POST(
           completed_at: new Date(),
         },
       });
+
+      // Update enrollment progress percentage
+      const allMaterials = await prisma.material.findMany({
+        where: {
+          section: {
+            course_id: quiz.material.section.course.id,
+          },
+        },
+        select: { id: true },
+      });
+
+      const completedProgress = await prisma.progress.count({
+        where: {
+          enrollment_id: enrollment.id,
+          is_completed: true,
+        },
+      });
+
+      const overallProgress = allMaterials.length > 0 
+        ? Math.round((completedProgress / allMaterials.length) * 100)
+        : 0;
+
+      await prisma.enrollment.update({
+        where: { id: enrollment.id },
+        data: {
+          progress: overallProgress,
+          last_accessed_at: new Date(),
+          status: overallProgress === 100 ? 'COMPLETED' : 'ACTIVE',
+          completed_at: overallProgress === 100 ? new Date() : undefined,
+        },
+      });
+
+      // Auto-generate certificate when course is 100% completed
+      if (overallProgress === 100) {
+        const existingCertificate = await prisma.certificate.findFirst({
+          where: {
+            user_id: decoded.userId,
+            course_id: quiz.material.section.course.id,
+          },
+        });
+
+        if (!existingCertificate) {
+          const timestamp = Date.now().toString(36).toUpperCase();
+          const random = Math.random().toString(36).substring(2, 6).toUpperCase();
+          const certificateNumber = `CERT-${timestamp}-${random}`;
+
+          const certificate = await prisma.certificate.create({
+            data: {
+              user_id: decoded.userId,
+              course_id: quiz.material.section.course.id,
+              certificate_number: certificateNumber,
+              status: 'ISSUED',
+              issued_at: new Date(),
+            },
+          });
+
+          await prisma.enrollment.update({
+            where: { id: enrollment.id },
+            data: { certificate_id: certificate.id },
+          });
+        }
+      }
     }
 
     return NextResponse.json({

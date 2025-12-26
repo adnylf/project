@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -14,31 +14,18 @@ import {
   Clock,
   XCircle,
   AlertCircle,
-  BookOpen,
-  Calendar,
   Hash,
+  Calendar,
   User,
   Share2,
-  Linkedin,
-  Facebook,
-  Twitter,
-  Link as LinkIcon,
-  Copy,
   Printer,
-  ExternalLink,
 } from "lucide-react";
 import UserLayout from "@/components/user/user-layout";
 import ProtectedRoute from "@/components/auth/protected-route";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { PreviewCertificateModal } from "@/components/user/preview-certificate-modal";
+import { ShareCertificateModal } from "@/components/user/share-certificate-modal";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-
-const API_BASE_URL = "http://localhost:3000/api";
 
 interface Certificate {
   id: string;
@@ -95,10 +82,11 @@ export default function UserCertificateDetailPage() {
   const [certificate, setCertificate] = useState<Certificate | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
   const [previewContent, setPreviewContent] = useState("");
-  const [shareDialogOpen, setShareDialogOpen] = useState(false);
-  const [copied, setCopied] = useState(false);
+
+  // Modal states
+  const [previewModalOpen, setPreviewModalOpen] = useState(false);
+  const [shareModalOpen, setShareModalOpen] = useState(false);
 
   const getAuthToken = useCallback(() => typeof window !== "undefined" ? localStorage.getItem("token") || localStorage.getItem("accessToken") : null, []);
 
@@ -109,7 +97,7 @@ export default function UserCertificateDetailPage() {
         setLoading(true);
         const token = getAuthToken();
 
-        const response = await fetch(`${API_BASE_URL}/users/certificates/${certificateId}`, {
+        const response = await fetch(`/api/users/certificates/${certificateId}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
 
@@ -124,7 +112,7 @@ export default function UserCertificateDetailPage() {
         setCertificate(data.certificate);
 
         // Also fetch the preview HTML
-        const previewResponse = await fetch(`${API_BASE_URL}/users/certificates/${certificateId}/preview`, {
+        const previewResponse = await fetch(`/api/users/certificates/${certificateId}/preview`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (previewResponse.ok) {
@@ -147,47 +135,18 @@ export default function UserCertificateDetailPage() {
   const handlePreview = async () => {
     try {
       const token = getAuthToken();
-      const response = await fetch(`${API_BASE_URL}/users/certificates/${certificateId}/preview`, {
+      const response = await fetch(`/api/users/certificates/${certificateId}/preview`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
       if (response.ok) {
         const data = await response.json();
         setPreviewContent(data.html || "");
-        setPreviewDialogOpen(true);
+        setPreviewModalOpen(true);
       }
     } catch (err) {
       console.error("Preview error:", err);
     }
-  };
-
-  // Copy share link
-  const handleCopyLink = () => {
-    const shareUrl = `${window.location.origin}/certificates/verify/${certificate?.certificate_number}`;
-    navigator.clipboard.writeText(shareUrl);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  // Share to social media
-  const handleShare = (platform: string) => {
-    const shareUrl = `${window.location.origin}/certificates/verify/${certificate?.certificate_number}`;
-    const text = `Saya telah menyelesaikan kursus "${certificate?.course.title}" dan mendapatkan sertifikat!`;
-    
-    let url = "";
-    switch (platform) {
-      case "linkedin":
-        url = `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(shareUrl)}`;
-        break;
-      case "twitter":
-        url = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(shareUrl)}`;
-        break;
-      case "facebook":
-        url = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`;
-        break;
-    }
-    
-    if (url) window.open(url, "_blank", "width=600,height=400");
   };
 
   // Print certificate
@@ -195,12 +154,35 @@ export default function UserCertificateDetailPage() {
     if (previewContent) {
       const printWindow = window.open("", "_blank");
       if (printWindow) {
-        printWindow.document.write(previewContent);
+        printWindow.document.write(`
+          <!DOCTYPE html>
+          <html>
+            <head>
+              <title>Sertifikat - ${certificate?.certificate_number}</title>
+              <style>
+                body { margin: 0; padding: 0; }
+                @media print {
+                  @page { size: landscape; margin: 0; }
+                }
+              </style>
+            </head>
+            <body>
+              ${previewContent}
+              <script>
+                window.onload = function() {
+                  window.print();
+                  setTimeout(function() {
+                    window.close();
+                  }, 1000);
+                };
+              </script>
+            </body>
+          </html>
+        `);
         printWindow.document.close();
-        printWindow.focus();
-        printWindow.print();
       }
     } else {
+      // Jika previewContent belum dimuat, buka modal preview dulu
       handlePreview();
     }
   };
@@ -223,11 +205,16 @@ export default function UserCertificateDetailPage() {
         <UserLayout>
           <div className="flex flex-col items-center justify-center min-h-[400px]">
             <AlertCircle className="h-16 w-16 text-[#D93025] mb-4" />
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">{error || "Sertifikat tidak ditemukan"}</h2>
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
+              {error || "Sertifikat tidak ditemukan"}
+            </h2>
             <Link href="/user/certificates">
-              <Button variant="outline" className="mt-4 border-gray-300 dark:border-gray-600">
+              <Button 
+                variant="outline" 
+                className="mt-4 border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10 dark:border-[#005EB8] dark:text-[#005EB8]"
+              >
                 <ArrowLeft className="h-4 w-4 mr-2" />
-                Kembali
+                Kembali ke Daftar Sertifikat
               </Button>
             </Link>
           </div>
@@ -243,7 +230,6 @@ export default function UserCertificateDetailPage() {
           {/* Header */}
           <div className="flex items-center gap-4">
             <Link href="/user/certificates">
-              {/* Button Ikon Panah Kiri - Style diubah seperti button Lihat Semua di dashboard */}
               <Button 
                 variant="outline" 
                 size="icon" 
@@ -307,12 +293,16 @@ export default function UserCertificateDetailPage() {
                 <div className="text-center p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
                   <Calendar className="h-5 w-5 mx-auto mb-2 text-gray-400" />
                   <p className="text-xs text-gray-500 dark:text-gray-400">Tanggal Terbit</p>
-                  <p className="font-medium text-gray-900 dark:text-white">{certificate.issued_at ? formatDate(certificate.issued_at) : "-"}</p>
+                  <p className="font-medium text-gray-900 dark:text-white">
+                    {certificate.issued_at ? formatDate(certificate.issued_at) : "-"}
+                  </p>
                 </div>
                 <div className="text-center p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
                   <User className="h-5 w-5 mx-auto mb-2 text-gray-400" />
                   <p className="text-xs text-gray-500 dark:text-gray-400">Mentor</p>
-                  <p className="font-medium text-gray-900 dark:text-white">{certificate.course.mentor.user.full_name}</p>
+                  <p className="font-medium text-gray-900 dark:text-white">
+                    {certificate.course.mentor.user.full_name}
+                  </p>
                 </div>
               </div>
 
@@ -320,10 +310,16 @@ export default function UserCertificateDetailPage() {
               {certificate.status === "REVOKED" && (
                 <div className="bg-red-50 dark:bg-red-900/20 border border-[#D93025]/20 dark:border-[#D93025]/30 rounded-lg p-4 mb-8 text-center">
                   <XCircle className="h-8 w-8 text-[#D93025] mx-auto mb-2" />
-                  <h4 className="font-semibold text-[#D93025] dark:text-[#D93025] mb-1">Sertifikat Dicabut</h4>
-                  <p className="text-sm text-[#D93025]/80 dark:text-[#D93025]">{certificate.revoke_reason || "Hubungi admin untuk informasi lebih lanjut"}</p>
+                  <h4 className="font-semibold text-[#D93025] dark:text-[#D93025] mb-1">
+                    Sertifikat Dicabut
+                  </h4>
+                  <p className="text-sm text-[#D93025]/80 dark:text-[#D93025]">
+                    {certificate.revoke_reason || "Hubungi admin untuk informasi lebih lanjut"}
+                  </p>
                   {certificate.revoked_at && (
-                    <p className="text-xs text-[#D93025] mt-2">Dicabut pada: {formatDate(certificate.revoked_at)}</p>
+                    <p className="text-xs text-[#D93025] mt-2">
+                      Dicabut pada: {formatDate(certificate.revoked_at)}
+                    </p>
                   )}
                 </div>
               )}
@@ -332,41 +328,50 @@ export default function UserCertificateDetailPage() {
               {certificate.status === "PENDING" && (
                 <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-[#F4B400]/20 dark:border-[#F4B400]/30 rounded-lg p-4 mb-8 text-center">
                   <Clock className="h-8 w-8 text-[#F4B400] mx-auto mb-2" />
-                  <h4 className="font-semibold text-[#F4B400] dark:text-[#F4B400] mb-1">Sertifikat Dalam Proses</h4>
-                  <p className="text-sm text-[#F4B400]/80 dark:text-[#F4B400]">Sertifikat Anda sedang dalam proses pembuatan. Silakan cek kembali nanti.</p>
+                  <h4 className="font-semibold text-[#F4B400] dark:text-[#F4B400] mb-1">
+                    Sertifikat Dalam Proses
+                  </h4>
+                  <p className="text-sm text-[#F4B400]/80 dark:text-[#F4B400]">
+                    Sertifikat Anda sedang dalam proses pembuatan. Silakan cek kembali nanti.
+                  </p>
                 </div>
               )}
 
               {/* Action Buttons */}
               {certificate.status === "ISSUED" && (
                 <div className="flex flex-wrap justify-center gap-3">
-                  {/* Button Preview - Style diubah seperti button Lihat Semua di dashboard */}
                   <Button 
                     variant="outline" 
-                    onClick={handlePreview} 
+                    onClick={() => setPreviewModalOpen(true)} 
                     className="border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10 dark:border-[#005EB8] dark:text-[#005EB8]"
                   >
                     <Eye className="h-4 w-4 mr-2" />
                     Preview
                   </Button>
                   {certificate.pdf_url && (
-                    <Button className="bg-[#005EB8] hover:bg-[#004A93] text-white" asChild>
-                      <a href={certificate.pdf_url} target="_blank" download>
+                    <Button 
+                      className="bg-[#005EB8] hover:bg-[#004A93] text-white" 
+                      asChild
+                    >
+                      <a 
+                        href={certificate.pdf_url} 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        download
+                      >
                         <Download className="h-4 w-4 mr-2" />
                         Download PDF
                       </a>
                     </Button>
                   )}
-                  {/* Button Bagikan - Style diubah seperti button Lihat Semua di dashboard */}
                   <Button 
                     variant="outline" 
-                    onClick={() => setShareDialogOpen(true)} 
+                    onClick={() => setShareModalOpen(true)} 
                     className="border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10 dark:border-[#005EB8] dark:text-[#005EB8]"
                   >
                     <Share2 className="h-4 w-4 mr-2" />
                     Bagikan
                   </Button>
-                  {/* Button Cetak - Style diubah seperti button Lihat Semua di dashboard */}
                   <Button 
                     variant="outline" 
                     onClick={handlePrint} 
@@ -386,9 +391,14 @@ export default function UserCertificateDetailPage() {
               <div className="flex items-start gap-3">
                 <CheckCircle className="h-5 w-5 text-[#005EB8]" />
                 <div>
-                  <h4 className="font-semibold text-[#005EB8] dark:text-[#005EB8]">Verifikasi Sertifikat</h4>
+                  <h4 className="font-semibold text-[#005EB8] dark:text-[#005EB8]">
+                    Verifikasi Sertifikat
+                  </h4>
                   <p className="text-sm text-[#005EB8]/80 dark:text-[#005EB8]">
-                    Sertifikat ini dapat diverifikasi keasliannya melalui nomor sertifikat: <span className="font-mono font-bold text-gray-900 dark:text-white">{certificate.certificate_number}</span>
+                    Sertifikat ini dapat diverifikasi keasliannya melalui nomor sertifikat:{" "}
+                    <span className="font-mono font-bold text-gray-900 dark:text-white">
+                      {certificate.certificate_number}
+                    </span>
                   </p>
                 </div>
               </div>
@@ -396,75 +406,23 @@ export default function UserCertificateDetailPage() {
           </Card>
         </div>
 
-        {/* Preview Dialog */}
-        <Dialog open={previewDialogOpen} onOpenChange={setPreviewDialogOpen}>
-          <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Preview Sertifikat</DialogTitle>
-            </DialogHeader>
-            <div className="border rounded-lg p-4 bg-white">
-              <iframe srcDoc={previewContent} className="w-full h-[600px] border-0" />
-            </div>
-            <div className="flex justify-end gap-2">
-              {/* Button Cetak di dialog - Style diubah seperti button Lihat Semua di dashboard */}
-              <Button 
-                variant="outline" 
-                onClick={handlePrint} 
-                className="border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10 dark:border-[#005EB8] dark:text-[#005EB8]"
-              >
-                <Printer className="h-4 w-4 mr-2" />
-                Cetak
-              </Button>
-              {certificate.pdf_url && (
-                <Button className="bg-[#005EB8] hover:bg-[#004A93] text-white" asChild>
-                  <a href={certificate.pdf_url} target="_blank" download>
-                    <Download className="h-4 w-4 mr-2" />
-                    Download PDF
-                  </a>
-                </Button>
-              )}
-            </div>
-          </DialogContent>
-        </Dialog>
+        {/* Preview Modal */}
+        <PreviewCertificateModal
+          open={previewModalOpen}
+          onOpenChange={setPreviewModalOpen}
+          previewContent={previewContent}
+          pdfUrl={certificate.pdf_url}
+          onPrint={handlePrint}
+          certificateNumber={certificate.certificate_number}
+        />
 
-        {/* Share Dialog */}
-        <Dialog open={shareDialogOpen} onOpenChange={setShareDialogOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Bagikan Sertifikat</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <p className="text-gray-500 dark:text-gray-400">Bagikan pencapaian Anda ke media sosial</p>
-              
-              {/* Social Buttons */}
-              <div className="flex justify-center gap-4">
-                <Button variant="outline" size="lg" className="flex-1 border-gray-300 dark:border-gray-600" onClick={() => handleShare("linkedin")}>
-                  <Linkedin className="h-5 w-5 mr-2 text-[#0A66C2]" />
-                  LinkedIn
-                </Button>
-                <Button variant="outline" size="lg" className="flex-1 border-gray-300 dark:border-gray-600" onClick={() => handleShare("twitter")}>
-                  <Twitter className="h-5 w-5 mr-2 text-[#1DA1F2]" />
-                  Twitter
-                </Button>
-                <Button variant="outline" size="lg" className="flex-1 border-gray-300 dark:border-gray-600" onClick={() => handleShare("facebook")}>
-                  <Facebook className="h-5 w-5 mr-2 text-[#1877F2]" />
-                  Facebook
-                </Button>
-              </div>
-
-              {/* Copy Link */}
-              <div className="flex gap-2">
-                <div className="flex-1 p-3 bg-gray-100 dark:bg-gray-800 rounded-lg text-sm font-mono truncate text-gray-900 dark:text-gray-300">
-                  {`${typeof window !== "undefined" ? window.location.origin : ""}/certificates/verify/${certificate.certificate_number}`}
-                </div>
-                <Button variant="outline" onClick={handleCopyLink} className="border-gray-300 dark:border-gray-600">
-                  {copied ? <CheckCircle className="h-4 w-4 text-[#008A00]" /> : <Copy className="h-4 w-4" />}
-                </Button>
-              </div>
-              {copied && <p className="text-xs text-[#008A00] text-center">Link berhasil disalin!</p>}
-            </div>
-          </DialogContent>
-        </Dialog>
+        {/* Share Modal */}
+        <ShareCertificateModal
+          open={shareModalOpen}
+          onOpenChange={setShareModalOpen}
+          certificateNumber={certificate.certificate_number}
+          courseTitle={certificate.course.title}
+        />
       </UserLayout>
     </ProtectedRoute>
   );

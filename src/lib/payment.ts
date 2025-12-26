@@ -62,7 +62,7 @@ export async function createPayment(request: CreatePaymentRequest): Promise<Paym
       return {
         success: true,
         transactionId: `TXN-${Date.now()}`,
-        paymentUrl: `http://localhost:3000/payment/simulate?order_id=${request.orderId}`,
+        paymentUrl: `/payment/simulate?order_id=${request.orderId}`,
         expiredAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       };
     }

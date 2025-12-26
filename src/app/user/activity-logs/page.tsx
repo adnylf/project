@@ -11,8 +11,6 @@ import {
   Clock,
   Monitor,
   Globe,
-  ChevronLeft,
-  ChevronRight,
   Loader2,
   LogIn,
   LogOut,
@@ -33,6 +31,7 @@ import {
   TrendingUp,
   Award,
   Sparkles,
+  Mail,
 } from "lucide-react";
 import UserLayout from "@/components/user/user-layout";
 import {
@@ -43,8 +42,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import ProtectedRoute from "@/components/auth/protected-route";
-
-const API_BASE_URL = "http://localhost:3000/api";
+import Pagination from "@/components/ui/pagination";
 
 interface ActivityLog {
   id: string;
@@ -58,7 +56,7 @@ interface ActivityLog {
   created_at: string;
 }
 
-interface Pagination {
+interface PaginationData {
   page: number;
   limit: number;
   total: number;
@@ -73,6 +71,7 @@ const getActionConfig = (action: string) => {
     LOGIN: { icon: LogIn, color: "text-[#008A00]", bgColor: "bg-[#008A00]/10", label: "Login" },
     LOGOUT: { icon: LogOut, color: "text-gray-600", bgColor: "bg-gray-100", label: "Logout" },
     REGISTER: { icon: User, color: "text-[#005EB8]", bgColor: "bg-[#005EB8]/10", label: "Registrasi" },
+    RESEND_VERIFICATION: { icon: Mail, color: "text-purple-600", bgColor: "bg-purple-100", label: "Resend Verification" },
     PROFILE_UPDATE: { icon: Edit, color: "text-purple-600", bgColor: "bg-purple-100", label: "Update Profil" },
     PASSWORD_CHANGE: { icon: Settings, color: "text-orange-600", bgColor: "bg-orange-100", label: "Ubah Password" },
     COURSE_VIEW: { icon: Eye, color: "text-[#005EB8]", bgColor: "bg-[#005EB8]/10", label: "Lihat Kursus" },
@@ -110,7 +109,7 @@ const groupByDate = (activities: ActivityLog[]) => {
 
 export default function UserActivityLogs() {
   const [activities, setActivities] = useState<ActivityLog[]>([]);
-  const [pagination, setPagination] = useState<Pagination>({ page: 1, limit: 20, total: 0, totalPages: 0 });
+  const [pagination, setPagination] = useState<PaginationData>({ page: 1, limit: 20, total: 0, totalPages: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
@@ -123,7 +122,7 @@ export default function UserActivityLogs() {
       setLoading(true);
       const token = getAuthToken();
       if (!token) { setError("Silakan login terlebih dahulu"); return; }
-      const response = await fetch(`${API_BASE_URL}/users/activity?page=${page}&limit=20`, { headers: { Authorization: `Bearer ${token}` } });
+      const response = await fetch(`/api/users/activity?page=${page}&limit=20`, { headers: { Authorization: `Bearer ${token}` } });
       if (!response.ok) throw new Error("Gagal mengambil data aktivitas");
       const data = await response.json();
       setActivities(data.activities || []);
@@ -142,6 +141,10 @@ export default function UserActivityLogs() {
 
   const groupedActivities = groupByDate(filteredActivities);
   const uniqueActions = [...new Set(activities.map((a) => a.action))];
+
+  const handlePageChange = (newPage: number) => {
+    fetchActivities(newPage);
+  };
 
   if (loading) return (
     <ProtectedRoute allowedRoles={["STUDENT"]}>
@@ -256,11 +259,11 @@ export default function UserActivityLogs() {
                   />
                 </div>
                 <Select value={filterAction} onValueChange={setFilterAction}>
-                  <SelectTrigger className="w-[200px]">
+                  <SelectTrigger className="w-full md:w-[240px]">
                     <Filter className="h-4 w-4 mr-2" />
                     <SelectValue placeholder="Jenis Aktivitas" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="min-w-[240px]">
                     <SelectItem value="all">Semua Aktivitas</SelectItem>
                     {uniqueActions.map((action) => (
                       <SelectItem key={action} value={action}>
@@ -361,30 +364,15 @@ export default function UserActivityLogs() {
             </Card>
           )}
 
-          {/* Pagination */}
-          {pagination.totalPages > 1 && (
-            <div className="flex items-center justify-center gap-4">
-              <Button 
-                variant="outline" 
-                onClick={() => fetchActivities(pagination.page - 1)} 
-                disabled={pagination.page <= 1}
-                className="border-gray-300 dark:border-gray-600"
-              >
-                <ChevronLeft className="h-4 w-4 mr-1" />Sebelumnya
-              </Button>
-              <span className="text-sm text-gray-600 dark:text-gray-400">
-                Halaman {pagination.page} dari {pagination.totalPages}
-              </span>
-              <Button 
-                variant="outline" 
-                onClick={() => fetchActivities(pagination.page + 1)} 
-                disabled={pagination.page >= pagination.totalPages}
-                className="border-gray-300 dark:border-gray-600"
-              >
-                Selanjutnya<ChevronRight className="h-4 w-4 ml-1" />
-              </Button>
-            </div>
-          )}
+          {/* Pagination - Menggunakan komponen terpisah */}
+          <Pagination
+            currentPage={pagination.page}
+            totalPages={pagination.totalPages}
+            totalItems={pagination.total}
+            itemsPerPage={pagination.limit}
+            onPageChange={handlePageChange}
+            loading={loading}
+          />
         </div>
       </UserLayout>
     </ProtectedRoute>

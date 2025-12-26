@@ -21,23 +21,24 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Profil mentor tidak ditemukan' }, { status: 404 });
     }
 
-    // Get revenue by month
+    // Get revenue by month (include both PAID and SUCCESS status)
     const transactions = await prisma.transaction.findMany({
       where: {
         course: { mentor_id: mentorProfile.id },
-        status: 'PAID',
+        status: { in: ['PAID', 'SUCCESS'] },
       },
-      select: { total_amount: true, paid_at: true },
-      orderBy: { paid_at: 'desc' },
+      select: { total_amount: true, paid_at: true, created_at: true },
+      orderBy: { created_at: 'desc' },
     });
 
     const totalRevenue = transactions.reduce((sum, t) => sum + t.total_amount, 0);
 
-    // Group by month
+    // Group by month (use paid_at if available, otherwise created_at)
     const monthlyRevenue: Record<string, number> = {};
     transactions.forEach(t => {
-      if (t.paid_at) {
-        const key = `${t.paid_at.getFullYear()}-${String(t.paid_at.getMonth() + 1).padStart(2, '0')}`;
+      const date = t.paid_at || t.created_at;
+      if (date) {
+        const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
         monthlyRevenue[key] = (monthlyRevenue[key] || 0) + t.total_amount;
       }
     });

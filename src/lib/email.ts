@@ -16,15 +16,28 @@ interface SendResult {
   error?: string;
 }
 
+// Helper to get base URL for email links (must be absolute URL)
+function getBaseUrl(): string {
+  if (process.env.NEXT_PUBLIC_APP_URL) {
+    return process.env.NEXT_PUBLIC_APP_URL;
+  }
+  // Development fallback
+  if (process.env.NODE_ENV === 'development') {
+    return 'http://localhost:3000';
+  }
+  console.error('⚠️ NEXT_PUBLIC_APP_URL not set - email links will not work');
+  return '';
+}
+
 // Generate email verification link
 export function generateVerificationLink(token: string): string {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+  const baseUrl = getBaseUrl();
   return `${baseUrl}/auth/verify-email?token=${token}`;
 }
 
 // Generate password reset link
 export function generatePasswordResetLink(token: string): string {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+  const baseUrl = getBaseUrl();
   return `${baseUrl}/auth/reset-password?token=${token}`;
 }
 

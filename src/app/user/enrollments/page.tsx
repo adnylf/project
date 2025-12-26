@@ -29,8 +29,6 @@ import UserLayout from "@/components/user/user-layout";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import ProtectedRoute from "@/components/auth/protected-route";
 
-const API_BASE_URL = "http://localhost:3000/api";
-
 interface Enrollment {
   id: string;
   user_id: string;
@@ -107,7 +105,7 @@ export default function UserEnrollments() {
       const token = getAuthToken();
       if (!token) { setError("Silakan login terlebih dahulu"); return; }
       
-      let url = `${API_BASE_URL}/users/enrollments?page=${page}&limit=10`;
+      let url = `/api/users/enrollments?page=${page}&limit=10`;
       if (filterStatus !== "all") url += `&status=${filterStatus}`;
       
       const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +13,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
   Users,
   Search,
   Loader2,
@@ -21,7 +29,6 @@ import {
   Calendar,
   BookOpen,
   Mail,
-  User,
   GraduationCap,
   TrendingUp,
   Clock,
@@ -29,8 +36,7 @@ import {
 } from "lucide-react";
 import MentorLayout from "@/components/mentor/mentor-layout";
 import ProtectedRoute from "@/components/auth/protected-route";
-
-const API_BASE_URL = "http://localhost:3000/api";
+import Pagination from '@/components/ui/pagination'; // Import komponen pagination
 
 interface Student {
   id: string;
@@ -55,7 +61,7 @@ interface Course {
   title: string;
 }
 
-interface Pagination {
+interface PaginationData {
   page: number;
   limit: number;
   total: number;
@@ -88,7 +94,7 @@ export default function StudentsEnrolledPage() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [pagination, setPagination] = useState<Pagination>({
+  const [pagination, setPagination] = useState<PaginationData>({
     page: 1,
     limit: 10,
     total: 0,
@@ -104,7 +110,7 @@ export default function StudentsEnrolledPage() {
   const fetchCourses = useCallback(async () => {
     try {
       const token = getAuthToken();
-      const response = await fetch(`${API_BASE_URL}/mentors/courses`, {
+      const response = await fetch(`/api/mentors/courses`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (response.ok) {
@@ -132,7 +138,7 @@ export default function StudentsEnrolledPage() {
         limit: pagination.limit.toString(),
       });
 
-      const response = await fetch(`${API_BASE_URL}/mentors/students?${params}`, {
+      const response = await fetch(`/api/mentors/students?${params}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -181,6 +187,16 @@ export default function StudentsEnrolledPage() {
     return "bg-gray-300";
   };
 
+  const getStatusBadge = (progress: number) => {
+    if (progress >= 100) {
+      return <Badge className="bg-[#008A00]/10 text-[#008A00] border border-[#008A00]/20 pointer-events-none">Selesai</Badge>;
+    } else if (progress > 0) {
+      return <Badge className="bg-[#005EB8]/10 text-[#005EB8] border border-[#005EB8]/20 pointer-events-none">Berlangsung</Badge>;
+    } else {
+      return <Badge className="bg-gray-100 text-gray-600 border border-gray-300 pointer-events-none dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600">Belum Mulai</Badge>;
+    }
+  };
+
   if (loading && students.length === 0) {
     return (
       <ProtectedRoute allowedRoles={["MENTOR"]}>
@@ -200,7 +216,7 @@ export default function StudentsEnrolledPage() {
           {/* Header */}
           <div>
             <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-3">
-              <Users className="h-8 w-8 text-[#005EB8]" />
+                <Users className="h-8 w-8 text-[#005EB8]" />
               Siswa Terdaftar
             </h1>
             <p className="text-gray-600 dark:text-gray-400">
@@ -264,37 +280,6 @@ export default function StudentsEnrolledPage() {
             </Card>
           </div>
 
-          {/* Filters */}
-          <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
-            <CardContent className="p-6">
-              <div className="flex flex-col md:flex-row gap-4">
-                <div className="flex-1 relative">
-                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                  <Input
-                    placeholder="Cari nama, email, atau kursus..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10"
-                  />
-                </div>
-                <Select value={courseFilter} onValueChange={setCourseFilter}>
-                  <SelectTrigger className="w-full md:w-64">
-                    <Filter className="h-4 w-4 mr-2" />
-                    <SelectValue placeholder="Filter berdasarkan kursus" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Semua Kursus</SelectItem>
-                    {courses.map((course) => (
-                      <SelectItem key={course.id} value={course.id}>
-                        {course.title}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </CardContent>
-          </Card>
-
           {/* Error */}
           {error && (
             <Card className="rounded-lg border bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 border-red-200 dark:border-red-700">
@@ -304,168 +289,195 @@ export default function StudentsEnrolledPage() {
             </Card>
           )}
 
-          {/* Students List */}
-          <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
-            <CardHeader>
-              <CardTitle className="flex items-center justify-between text-gray-900 dark:text-white text-xl font-bold">
-                <span>Daftar Siswa</span>
-                <Badge className="bg-[#005EB8] text-white border border-[#005EB8] pointer-events-none">{filteredStudents.length} siswa</Badge>
-              </CardTitle>
+          {/* Students Table Card */}
+          <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 border-gray-200 dark:border-gray-700 overflow-hidden">
+            <CardHeader className="pb-4 border-b border-gray-200 dark:border-gray-700">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div>
+                  <CardTitle className="text-xl font-bold flex items-center gap-2 text-gray-900 dark:text-white">
+                    <Users className="h-5 w-5 text-[#005EB8]" />
+                    Daftar Siswa
+                  </CardTitle>
+                  <CardDescription className="mt-1">
+                    {filteredStudents.length} siswa ditemukan
+                  </CardDescription>
+                </div>
+              </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-0">
+              {/* Filters */}
+              <div className="p-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50">
+                <div className="flex flex-col md:flex-row gap-3">
+                  <div className="flex-1 relative">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                    <Input
+                      placeholder="Cari nama, email, atau kursus..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-10 h-10 bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600"
+                    />
+                  </div>
+                  <Select value={courseFilter} onValueChange={setCourseFilter}>
+                    <SelectTrigger className="w-full md:w-[200px] h-10 bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600">
+                      <Filter className="h-4 w-4 mr-2 text-gray-400" />
+                      <SelectValue placeholder="Filter kursus" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-[300px] w-full">
+                      <SelectItem value="all" className="truncate">
+                        Semua Kursus
+                      </SelectItem>
+                      {courses.map((course) => (
+                        <SelectItem key={course.id} value={course.id} className="truncate">
+                          {course.title}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Table */}
               {filteredStudents.length === 0 ? (
                 <div className="text-center py-12">
-                  <Users className="h-16 w-16 text-gray-300 dark:text-gray-700 mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Belum Ada Siswa</h3>
-                  <p className="text-gray-500 dark:text-gray-400">
+                  <div className="h-20 w-20 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center mx-auto mb-4">
+                    <Users className="h-10 w-10 text-gray-400 dark:text-gray-600" />
+                  </div>
+                  <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">Belum Ada Siswa</h3>
+                  <p className="text-gray-600 dark:text-gray-400 mb-4">
                     {searchTerm || courseFilter !== "all"
                       ? "Tidak ada siswa yang cocok dengan filter"
                       : "Siswa akan muncul setelah ada yang mendaftar kursus Anda"}
                   </p>
+                  {(searchTerm || courseFilter !== "all") && (
+                    <Button 
+                      variant="outline"
+                      onClick={() => {
+                        setSearchTerm("");
+                        setCourseFilter("all");
+                      }}
+                      className="border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10"
+                    >
+                      Reset Filter
+                    </Button>
+                  )}
                 </div>
               ) : (
-                <div className="space-y-4">
-                  {filteredStudents.map((student) => (
-                    <Card
-                      key={student.id}
-                      className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700"
-                    >
-                      <CardContent className="p-6">
-                        <div className="flex flex-col md:flex-row md:items-center gap-4">
-                          {/* Avatar & Info */}
-                          <div className="flex items-center gap-4 flex-1">
-                            <div className="relative">
-                              {student.user.avatar_url ? (
-                                <img
-                                  src={student.user.avatar_url}
-                                  alt={student.user.full_name}
-                                  className="w-12 h-12 rounded-full object-cover"
-                                />
-                              ) : (
-                                <div className="w-12 h-12 rounded-full bg-[#005EB8] flex items-center justify-center text-white font-semibold text-lg">
-                                  {student.user.full_name.charAt(0).toUpperCase()}
-                                </div>
-                              )}
-                              {student.progress >= 100 && (
-                                <div className="absolute -bottom-1 -right-1 bg-[#008A00] rounded-full p-0.5">
-                                  <GraduationCap className="h-3 w-3 text-white" />
-                                </div>
-                              )}
+                <div className="overflow-x-auto">
+                  <Table className="min-w-full">
+                    <TableHeader>
+                      <TableRow className="bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                        <TableHead className="font-semibold text-gray-700 dark:text-gray-300 w-[200px] px-4 py-3">
+                          Siswa
+                        </TableHead>
+                        <TableHead className="font-semibold text-gray-700 dark:text-gray-300 w-[200px] px-4 py-3">
+                          Email
+                        </TableHead>
+                        <TableHead className="font-semibold text-gray-700 dark:text-gray-300 w-[180px] px-4 py-3">
+                          Kursus
+                        </TableHead>
+                        <TableHead className="font-semibold text-gray-700 dark:text-gray-300 w-[150px] px-4 py-3">
+                          Progress
+                        </TableHead>
+                        <TableHead className="font-semibold text-gray-700 dark:text-gray-300 w-[120px] px-4 py-3">
+                          Terdaftar
+                        </TableHead>
+                        <TableHead className="font-semibold text-gray-700 dark:text-gray-300 w-[120px] px-4 py-3">
+                          Terakhir Aktif
+                        </TableHead>
+                        <TableHead className="font-semibold text-gray-700 dark:text-gray-300 w-[120px] px-4 py-3 text-center">
+                          Status
+                        </TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredStudents.map((student) => (
+                        <TableRow key={student.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors">
+                          <TableCell className="px-4 py-3">
+                            <div className="flex items-center gap-3">
+                              <div className="relative flex-shrink-0">
+                                {student.user.avatar_url ? (
+                                  <img
+                                    src={student.user.avatar_url}
+                                    alt={student.user.full_name}
+                                    className="w-10 h-10 rounded-full object-cover"
+                                  />
+                                ) : (
+                                  <div className="w-10 h-10 rounded-full bg-[#005EB8] flex items-center justify-center text-white font-semibold">
+                                    {student.user.full_name.charAt(0).toUpperCase()}
+                                  </div>
+                                )}
+                                {student.progress >= 100 && (
+                                  <div className="absolute -bottom-1 -right-1 bg-[#008A00] rounded-full p-0.5">
+                                    <GraduationCap className="h-3 w-3 text-white" />
+                                  </div>
+                                )}
+                              </div>
+                              <div className="min-w-0">
+                                <p className="font-medium text-gray-900 dark:text-white truncate" title={student.user.full_name}>
+                                  {student.user.full_name}
+                                </p>
+                              </div>
                             </div>
-                            <div className="flex-1 min-w-0">
-                              <h4 className="font-semibold text-gray-900 dark:text-white truncate">
-                                {student.user.full_name}
-                              </h4>
-                              <p className="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-1 truncate">
-                                <Mail className="h-3 w-3" />
+                          </TableCell>
+                          <TableCell className="px-4 py-3">
+                            <div className="min-w-0">
+                              <p className="text-sm text-gray-600 dark:text-gray-400 truncate flex items-center gap-1" title={student.user.email}>
                                 {student.user.email}
                               </p>
                             </div>
-                          </div>
-
-                          {/* Course */}
-                          <div className="md:w-48">
-                            <p className="text-sm text-gray-500 dark:text-gray-400">Kursus</p>
-                            <p className="font-medium text-gray-900 dark:text-white truncate flex items-center gap-1">
-                              <BookOpen className="h-3 w-3 flex-shrink-0" />
-                              {student.course.title}
-                            </p>
-                          </div>
-
-                          {/* Progress */}
-                          <div className="md:w-32">
-                            <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Progress</p>
+                          </TableCell>
+                          <TableCell className="px-4 py-3">
+                            <div className="min-w-0">
+                              <p className="text-sm text-gray-900 dark:text-white truncate flex items-center gap-1" title={student.course.title}>
+                                {student.course.title}
+                              </p>
+                            </div>
+                          </TableCell>
+                          <TableCell className="px-4 py-3">
                             <div className="flex items-center gap-2">
-                              <div className="flex-1 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                              <div className="flex-1 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden max-w-[80px]">
                                 <div
                                   className={`h-full ${getProgressColor(student.progress)} transition-all`}
                                   style={{ width: `${student.progress}%` }}
                                 />
                               </div>
-                              <span className="text-sm font-medium w-10 text-right text-gray-900 dark:text-white">{student.progress}%</span>
+                              <span className="text-sm font-medium text-gray-900 dark:text-white w-10 text-right">
+                                {student.progress}%
+                              </span>
                             </div>
-                          </div>
-
-                          {/* Dates */}
-                          <div className="md:w-36 text-sm">
-                            <div className="flex items-center gap-1 text-gray-500 dark:text-gray-400">
-                              <Calendar className="h-3 w-3" />
-                              Daftar: {formatDate(student.created_at)}
+                          </TableCell>
+                          <TableCell className="px-4 py-3">
+                            <div className="flex items-center gap-1 text-sm text-gray-600 dark:text-gray-400">
+                              {formatDate(student.created_at)}
                             </div>
-                            <div className="flex items-center gap-1 text-gray-500 dark:text-gray-400">
-                              <Clock className="h-3 w-3" />
-                              Aktif: {formatTimeAgo(student.last_accessed_at)}
+                          </TableCell>
+                          <TableCell className="px-4 py-3">
+                            <div className="flex items-center gap-1 text-sm text-gray-600 dark:text-gray-400">
+                              {formatTimeAgo(student.last_accessed_at)}
                             </div>
-                          </div>
-
-                          {/* Status Badge */}
-                          <div className="md:w-24">
-                            {student.progress >= 100 ? (
-                              <Badge className="bg-[#008A00] text-white border border-[#008A00] pointer-events-none">Selesai</Badge>
-                            ) : student.progress > 0 ? (
-                              <Badge className="bg-[#005EB8] text-white border border-[#005EB8] pointer-events-none">Berlangsung</Badge>
-                            ) : (
-                              <Badge className="bg-gray-100 text-gray-800 border border-gray-300 pointer-events-none dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600">Belum Mulai</Badge>
-                            )}
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
+                          </TableCell>
+                          <TableCell className="px-4 py-3">
+                            <div className="flex justify-center">
+                              {getStatusBadge(student.progress)}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
                 </div>
               )}
 
-              {/* Pagination */}
+              {/* Pagination - Diganti dengan komponen Pagination */}
               {pagination.totalPages > 1 && (
-                <div className="flex items-center justify-between mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
-                    Menampilkan {(pagination.page - 1) * pagination.limit + 1} -{" "}
-                    {Math.min(pagination.page * pagination.limit, pagination.total)} dari {pagination.total} siswa
-                  </p>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={pagination.page === 1 || loading}
-                      onClick={() => setPagination((prev) => ({ ...prev, page: prev.page - 1 }))}
-                      className="border-gray-300 dark:border-gray-600"
-                    >
-                      <ChevronLeft className="h-4 w-4" />
-                    </Button>
-                    <div className="flex items-center gap-1">
-                      {Array.from({ length: Math.min(5, pagination.totalPages) }, (_, i) => {
-                        let pageNum = i + 1;
-                        if (pagination.totalPages > 5) {
-                          if (pagination.page > 3) pageNum = pagination.page - 2 + i;
-                          if (pagination.page > pagination.totalPages - 2) pageNum = pagination.totalPages - 4 + i;
-                        }
-                        return (
-                          <Button
-                            key={pageNum}
-                            variant={pagination.page === pageNum ? "default" : "outline"}
-                            size="sm"
-                            className={pagination.page === pageNum 
-                              ? "bg-[#005EB8] hover:bg-[#004A93] text-white" 
-                              : "border-gray-300 dark:border-gray-600"
-                            }
-                            onClick={() => setPagination((prev) => ({ ...prev, page: pageNum }))}
-                          >
-                            {pageNum}
-                          </Button>
-                        );
-                      })}
-                    </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={pagination.page === pagination.totalPages || loading}
-                      onClick={() => setPagination((prev) => ({ ...prev, page: prev.page + 1 }))}
-                      className="border-gray-300 dark:border-gray-600"
-                    >
-                      <ChevronRight className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
+                <Pagination
+                  currentPage={pagination.page}
+                  totalPages={pagination.totalPages}
+                  totalItems={pagination.total}
+                  itemsPerPage={pagination.limit}
+                  onPageChange={(newPage) => setPagination(prev => ({ ...prev, page: newPage }))}
+                  loading={loading}
+                />
               )}
             </CardContent>
           </Card>

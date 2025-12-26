@@ -24,32 +24,37 @@ export async function GET(request: NextRequest) {
       case 'year': dateFrom.setFullYear(now.getFullYear() - 1); break;
     }
 
-    // Get paid transactions in period
+    // Get paid/success transactions in period (include both PAID and SUCCESS for free courses)
     const transactions = await prisma.transaction.findMany({
       where: {
-        status: TransactionStatus.PAID,
-        paid_at: { gte: dateFrom, lte: now },
+        status: { in: [TransactionStatus.PAID, TransactionStatus.SUCCESS] },
+        OR: [
+          { paid_at: { gte: dateFrom, lte: now } },
+          { created_at: { gte: dateFrom, lte: now }, paid_at: null },
+        ],
       },
       select: {
         amount: true,
         discount: true,
         total_amount: true,
         paid_at: true,
+        created_at: true,
         payment_method: true,
         course_id: true,
       },
-      orderBy: { paid_at: 'asc' },
+      orderBy: { created_at: 'asc' },
     });
 
     // Calculate totals
     const totalRevenue = transactions.reduce((sum, t) => sum + t.total_amount, 0);
     const totalDiscount = transactions.reduce((sum, t) => sum + t.discount, 0);
 
-    // Group by day
+    // Group by day (use paid_at if available, otherwise created_at)
     const revenueByDay = new Map<string, { revenue: number; transactions: number }>();
     transactions.forEach(t => {
-      if (t.paid_at) {
-        const day = t.paid_at.toISOString().split('T')[0];
+      const date = t.paid_at || t.created_at;
+      if (date) {
+        const day = date.toISOString().split('T')[0];
         const existing = revenueByDay.get(day) || { revenue: 0, transactions: 0 };
         existing.revenue += t.total_amount;
         existing.transactions += 1;

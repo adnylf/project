@@ -24,16 +24,9 @@ import {
 } from "lucide-react";
 import MentorLayout from "@/components/mentor/mentor-layout";
 import ProtectedRoute from "@/components/auth/protected-route";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-
-const API_BASE_URL = "http://localhost:3000/api";
+import { CertificateTemplateModal } from "@/components/admin/certificate-modal";
 
 interface Certificate {
   id: string;
@@ -90,8 +83,9 @@ export default function MentorCertificateDetailPage() {
   const [certificate, setCertificate] = useState<Certificate | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
-  const [previewContent, setPreviewContent] = useState("");
+  const [previewModalOpen, setPreviewModalOpen] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [templateForm, setTemplateForm] = useState({ name: "", content: "", is_default: false });
 
   const getAuthToken = useCallback(() => typeof window !== "undefined" ? localStorage.getItem("token") || localStorage.getItem("accessToken") : null, []);
 
@@ -102,7 +96,7 @@ export default function MentorCertificateDetailPage() {
         setLoading(true);
         const token = getAuthToken();
 
-        const response = await fetch(`${API_BASE_URL}/mentor/certificates/${certificateId}`, {
+        const response = await fetch(`/api/mentor/certificates/${certificateId}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
 
@@ -127,21 +121,28 @@ export default function MentorCertificateDetailPage() {
     }
   }, [certificateId, getAuthToken]);
 
-  // Preview certificate
+  // Preview certificate - fetches real rendered HTML from API
   const handlePreview = async () => {
     try {
+      setPreviewLoading(true);
       const token = getAuthToken();
-      const response = await fetch(`${API_BASE_URL}/mentor/certificates/${certificateId}/preview`, {
+      const response = await fetch(`/api/mentor/certificates/${certificateId}/preview`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
       if (response.ok) {
         const data = await response.json();
-        setPreviewContent(data.html || "");
-        setPreviewDialogOpen(true);
+        setTemplateForm({
+          name: certificate?.certificate_number || "Preview Sertifikat",
+          content: data.html || "",
+          is_default: false,
+        });
+        setPreviewModalOpen(true);
       }
     } catch (err) {
       console.error("Preview error:", err);
+    } finally {
+      setPreviewLoading(false);
     }
   };
 
@@ -205,10 +206,11 @@ export default function MentorCertificateDetailPage() {
               {/* Button Preview - Style diubah seperti button Lihat Semua di dashboard */}
               <Button 
                 variant="outline" 
-                onClick={handlePreview} 
+                onClick={handlePreview}
+                disabled={previewLoading}
                 className="border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10 dark:border-[#005EB8] dark:text-[#005EB8]"
               >
-                <Eye className="h-4 w-4 mr-2" />
+                {previewLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Eye className="h-4 w-4 mr-2" />}
                 Preview
               </Button>
               {certificate.pdf_url && (
@@ -373,17 +375,18 @@ export default function MentorCertificateDetailPage() {
           </div>
         </div>
 
-        {/* Preview Dialog */}
-        <Dialog open={previewDialogOpen} onOpenChange={setPreviewDialogOpen}>
-          <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Preview Sertifikat</DialogTitle>
-            </DialogHeader>
-            <div className="border rounded-lg p-4 bg-white dark:bg-gray-800">
-              <iframe srcDoc={previewContent} className="w-full h-[600px] border-0" />
-            </div>
-          </DialogContent>
-        </Dialog>
+        {/* Preview Modal - using shared component with real certificate data */}
+        <CertificateTemplateModal
+          open={previewModalOpen}
+          onOpenChange={setPreviewModalOpen}
+          type="preview"
+          template={null}
+          templateForm={templateForm}
+          loading={previewLoading}
+          onFormChange={() => {}}
+          onFileUpload={() => {}}
+          onSave={() => {}}
+        />
       </MentorLayout>
     </ProtectedRoute>
   );

@@ -16,19 +16,16 @@ import {
   ChevronLeft,
   ChevronRight,
   ThumbsUp,
-  Eye,
   EyeOff,
   AlertCircle,
   Search,
-  Award,
   TrendingUp,
-  BarChart3,
+  BookOpen,
+  Sparkles,
 } from "lucide-react";
 import UserLayout from "@/components/user/user-layout";
 import ProtectedRoute from "@/components/auth/protected-route";
 import SweetAlert, { AlertType } from "@/components/ui/sweet-alert";
-
-const API_BASE_URL = "http://localhost:3000/api";
 
 interface Review {
   id: string;
@@ -55,14 +52,6 @@ interface Pagination {
 }
 
 const formatDate = (dateString: string) => new Date(dateString).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" });
-
-const StarRating = ({ rating, size = 4 }: { rating: number; size?: number }) => (
-  <div className="flex gap-0.5">
-    {[1, 2, 3, 4, 5].map((star) => (
-      <Star key={star} className={`h-${size} w-${size} ${star <= rating ? "text-yellow-400 fill-yellow-400" : "text-gray-300"}`} />
-    ))}
-  </div>
-);
 
 export default function UserReviews() {
   const router = useRouter();
@@ -95,7 +84,7 @@ export default function UserReviews() {
       const token = getAuthToken();
       if (!token) { setError("Silakan login terlebih dahulu"); return; }
       
-      const response = await fetch(`${API_BASE_URL}/users/reviews?page=${page}&limit=10`, { headers: { Authorization: `Bearer ${token}` } });
+      const response = await fetch(`/api/users/reviews?page=${page}&limit=10`, { headers: { Authorization: `Bearer ${token}` } });
       if (!response.ok) throw new Error("Gagal mengambil data reviews");
       
       const data = await response.json();
@@ -120,7 +109,7 @@ export default function UserReviews() {
     try {
       setDeleting(reviewToDelete.id);
       const token = getAuthToken();
-      const response = await fetch(`${API_BASE_URL}/users/reviews/${reviewToDelete.id}`, {
+      const response = await fetch(`/api/users/reviews/${reviewToDelete.id}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -167,7 +156,10 @@ export default function UserReviews() {
     <ProtectedRoute allowedRoles={["STUDENT"]}>
       <UserLayout>
         <div className="flex items-center justify-center min-h-[400px]">
-          <Loader2 className="h-12 w-12 animate-spin text-[#005EB8]" />
+          <div className="text-center">
+            <Loader2 className="h-12 w-12 animate-spin text-[#005EB8] mx-auto mb-4" />
+            <p className="text-gray-600 dark:text-gray-400">Memuat review...</p>
+          </div>
         </div>
       </UserLayout>
     </ProtectedRoute>
@@ -197,10 +189,9 @@ export default function UserReviews() {
             setShowConfirmAlert(false);
             setReviewToDelete(null);
           }}
-          duration={0} // Tidak auto close untuk konfirmasi
+          duration={0}
           showCloseButton={true}
         >
-          {/* Tombol konfirmasi */}
           <div className="mt-6 flex gap-3">
             <button
               onClick={() => {
@@ -242,58 +233,65 @@ export default function UserReviews() {
               </h1>
               <p className="text-gray-600 dark:text-gray-400">Kelola semua review yang Anda berikan</p>
             </div>
+            <Badge className="bg-[#005EB8] text-white border border-[#005EB8] pointer-events-none text-sm px-3 py-1">
+              {pagination.total} Review
+            </Badge>
           </div>
 
           {error && (
-            <Card className="rounded-lg border bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-3">
-                  <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
-                  <p className="text-red-600 dark:text-red-400">{error}</p>
-                </div>
-              </CardContent>
-            </Card>
+            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 flex items-center gap-3">
+              <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0" />
+              <p className="text-red-600 dark:text-red-400">{error}</p>
+            </div>
           )}
 
           {/* Stats Cards */}
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
-              <CardContent className="p-5 text-center">
-                <div className="flex items-center justify-center gap-3 mb-2">
-                  <div className="p-2 bg-[#005EB8]/10 rounded-lg">
-                    <BarChart3 className="h-6 w-6 text-[#005EB8]" />
+              <CardContent className="p-5">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 rounded-xl bg-[#005EB8]/10">
+                    <MessageSquare className="h-6 w-6 text-[#005EB8]" />
                   </div>
-                  <p className="text-3xl font-bold text-gray-900 dark:text-white">{stats.total}</p>
+                  <div>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Total Review</p>
+                    <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.total}</p>
+                  </div>
                 </div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Total Review</p>
               </CardContent>
             </Card>
+            
             <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
-              <CardContent className="p-5 text-center">
-                <div className="flex items-center justify-center gap-3 mb-2">
-                  <div className="p-2 bg-[#F4B400]/10 rounded-lg">
+              <CardContent className="p-5">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 rounded-xl bg-[#F4B400]/10">
                     <Star className="h-6 w-6 text-[#F4B400]" />
                   </div>
-                  <div className="flex items-center gap-1">
-                    <p className="text-3xl font-bold text-gray-900 dark:text-white">{stats.avgRating}</p>
-                    <Star className="h-6 w-6 text-yellow-400 fill-yellow-400" />
+                  <div>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Rata-rata Rating</p>
+                    <div className="flex items-center gap-1">
+                      <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.avgRating}</p>
+                      <Star className="h-5 w-5 text-[#F4B400] fill-[#F4B400]" />
+                    </div>
                   </div>
                 </div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Rata-rata Rating</p>
               </CardContent>
             </Card>
+            
             <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
-              <CardContent className="p-5 text-center">
-                <div className="flex items-center justify-center gap-3 mb-2">
-                  <div className="p-2 bg-[#008A00]/10 rounded-lg">
+              <CardContent className="p-5">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 rounded-xl bg-[#008A00]/10">
                     <ThumbsUp className="h-6 w-6 text-[#008A00]" />
                   </div>
-                  <div className="flex items-center gap-1">
-                    <p className="text-3xl font-bold text-gray-900 dark:text-white">{stats.totalHelpful}</p>
-                    <TrendingUp className="h-5 w-5 text-[#008A00]" />
+                  <div>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Total Helpful</p>
+                    <div className="flex items-center gap-1">
+                      <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.totalHelpful}</p>
+                      <TrendingUp className="h-5 w-5 text-[#008A00]" />
+                    </div>
                   </div>
                 </div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Total Helpful</p>
               </CardContent>
             </Card>
           </div>
@@ -325,7 +323,7 @@ export default function UserReviews() {
                   <CardContent className="p-6">
                     <div className="flex flex-col md:flex-row gap-6">
                       {/* Course Thumbnail */}
-                      <Link href={`/courses/${review.course.slug}`} className="relative w-full md:w-48 h-32 rounded-lg overflow-hidden flex-shrink-0 block">
+                      <Link href={`/courses/${review.course.slug}`} className="relative w-full md:w-48 h-32 rounded-lg overflow-hidden flex-shrink-0 block border border-gray-200 dark:border-gray-700">
                         {review.course.thumbnail ? (
                           <img
                             src={review.course.thumbnail}
@@ -333,17 +331,17 @@ export default function UserReviews() {
                             className="w-full h-full object-cover hover:scale-105 transition-transform"
                           />
                         ) : (
-                          <div className="w-full h-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
-                            <MessageSquare className="h-8 w-8 text-gray-400" />
+                          <div className="w-full h-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
+                            <BookOpen className="h-8 w-8 text-gray-400" />
                           </div>
                         )}
                       </Link>
 
                       {/* Review Content */}
                       <div className="flex-1 min-w-0">
-                        <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-3">
+                        <div className="flex flex-col md:flex-row md:items-start justify-between gap-3 mb-3">
                           <div className="flex-1">
-                            <Link href={`/courses/${review.course.slug}`} className="font-semibold text-lg text-gray-900 dark:text-white hover:text-[#005EB8] line-clamp-2">
+                            <Link href={`/courses/${review.course.slug}`} className="font-bold text-lg text-gray-900 dark:text-white hover:text-[#005EB8] transition-colors line-clamp-2">
                               {review.course.title}
                             </Link>
                             <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
@@ -352,7 +350,7 @@ export default function UserReviews() {
                           </div>
                           <div className="flex items-center gap-2 flex-shrink-0">
                             {review.is_anonymous && (
-                              <Badge variant="secondary" className="bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-300 text-xs">
+                              <Badge className="bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700 pointer-events-none">
                                 <EyeOff className="h-3 w-3 mr-1" />Anonim
                               </Badge>
                             )}
@@ -362,38 +360,38 @@ export default function UserReviews() {
                         <div className="flex items-center gap-3 mb-4">
                           <div className="flex gap-0.5">
                             {[1, 2, 3, 4, 5].map((star) => (
-                              <Star key={star} className={`h-5 w-5 ${star <= review.rating ? "text-yellow-400 fill-yellow-400" : "text-gray-300 dark:text-gray-600"}`} />
+                              <Star key={star} className={`h-5 w-5 ${star <= review.rating ? "text-[#F4B400] fill-[#F4B400]" : "text-gray-300 dark:text-gray-600"}`} />
                             ))}
                           </div>
                           <span className="text-sm text-gray-500 dark:text-gray-400">• {formatDate(review.created_at)}</span>
                         </div>
 
                         {review.comment && (
-                          <div className="text-gray-600 dark:text-gray-300 text-sm mb-4 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg line-clamp-3">
-                            {review.comment}
+                          <div className="text-gray-700 dark:text-gray-300 text-sm mb-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-100 dark:border-gray-700 line-clamp-3">
+                            "{review.comment}"
                           </div>
                         )}
 
-                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-                          <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
-                            <div className="p-1 bg-[#008A00]/10 rounded">
-                              <ThumbsUp className="h-4 w-4 text-[#008A00]" />
-                            </div>
-                            <span className="font-medium">{review.helpful_count} orang terbantu</span>
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+                          <div className="flex items-center gap-2">
+                            <Badge className="bg-[#008A00]/10 text-[#008A00] border border-[#008A00]/20 pointer-events-none">
+                              <ThumbsUp className="h-3 w-3 mr-1" />
+                              {review.helpful_count} terbantu
+                            </Badge>
                           </div>
                           <div className="flex gap-2">
                             <Button 
                               variant="outline" 
                               size="sm" 
                               onClick={() => router.push(`/user/reviews/${review.id}/edit`)}
-                              className="border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10"
+                              className="border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10 dark:border-[#005EB8] dark:text-[#005EB8]"
                             >
                               <Edit className="h-4 w-4 mr-1" />Edit
                             </Button>
                             <Button 
                               variant="outline" 
                               size="sm" 
-                              className="text-[#D93025] border-[#D93025] hover:bg-[#D93025]/10 hover:text-[#D93025]" 
+                              className="border-[#D93025] text-[#D93025] hover:bg-[#D93025]/10" 
                               onClick={() => openDeleteConfirmation(review)} 
                               disabled={deleting === review.id}
                             >
@@ -425,12 +423,11 @@ export default function UserReviews() {
                     <p className="text-gray-600 dark:text-gray-400 mb-6">
                       {searchTerm ? "Coba ubah kata kunci pencarian Anda" : "Berikan review pada kursus yang sudah Anda ikuti"}
                     </p>
-                    <Button 
-                      asChild 
-                      className="bg-[#005EB8] hover:bg-[#004A93]"
-                    >
-                      <Link href="/user/enrollments">Lihat Kursus Saya</Link>
-                    </Button>
+                    {!searchTerm && (
+                      <Button asChild className="bg-[#005EB8] hover:bg-[#004A93] text-white">
+                        <Link href="/user/enrollments">Lihat Kursus Saya</Link>
+                      </Button>
+                    )}
                   </div>
                 </div>
               </CardContent>
@@ -439,28 +436,68 @@ export default function UserReviews() {
 
           {/* Pagination */}
           {pagination.totalPages > 1 && (
-            <div className="flex items-center justify-center gap-4">
-              <Button 
-                variant="outline" 
-                onClick={() => fetchReviews(pagination.page - 1)} 
-                disabled={pagination.page <= 1}
-                className="border-gray-300 dark:border-gray-600"
-              >
-                <ChevronLeft className="h-4 w-4 mr-1" />Sebelumnya
-              </Button>
-              <span className="text-sm text-gray-600 dark:text-gray-400">
-                Halaman {pagination.page} dari {pagination.totalPages}
-              </span>
-              <Button 
-                variant="outline" 
-                onClick={() => fetchReviews(pagination.page + 1)} 
-                disabled={pagination.page >= pagination.totalPages}
-                className="border-gray-300 dark:border-gray-600"
-              >
-                Selanjutnya<ChevronRight className="h-4 w-4 ml-1" />
-              </Button>
-            </div>
+            <Card className="rounded-lg border bg-card text-card-foreground shadow-sm border-gray-200 dark:border-gray-700">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <Button 
+                    variant="outline" 
+                    onClick={() => fetchReviews(pagination.page - 1)} 
+                    disabled={pagination.page <= 1}
+                    className="border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10 dark:border-[#005EB8] dark:text-[#005EB8] disabled:opacity-50"
+                  >
+                    <ChevronLeft className="h-4 w-4 mr-1" />Sebelumnya
+                  </Button>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-gray-600 dark:text-gray-400">
+                      Halaman
+                    </span>
+                    <Badge className="bg-[#005EB8] text-white border border-[#005EB8] pointer-events-none">
+                      {pagination.page}
+                    </Badge>
+                    <span className="text-sm text-gray-600 dark:text-gray-400">
+                      dari {pagination.totalPages}
+                    </span>
+                  </div>
+                  <Button 
+                    variant="outline" 
+                    onClick={() => fetchReviews(pagination.page + 1)} 
+                    disabled={pagination.page >= pagination.totalPages}
+                    className="border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10 dark:border-[#005EB8] dark:text-[#005EB8] disabled:opacity-50"
+                  >
+                    Selanjutnya<ChevronRight className="h-4 w-4 ml-1" />
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
           )}
+
+          {/* Bottom CTA Card */}
+          <Card className="rounded-lg border bg-gradient-to-r from-[#005EB8] to-[#004A93] text-white shadow-sm transition-all duration-300 hover:shadow-md border-[#005EB8]">
+            <CardContent className="p-8">
+              <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+                <div className="text-center md:text-left">
+                  <div className="flex items-center gap-2 mb-2 justify-center md:justify-start">
+                    <Sparkles className="h-5 w-5 text-white" />
+                    <h3 className="text-2xl font-bold text-white">
+                      Bagikan Pengalaman Anda
+                    </h3>
+                  </div>
+                  <p className="text-white/90">
+                    Review Anda membantu learners lain menemukan kursus terbaik
+                  </p>
+                </div>
+                <Link href="/user/enrollments">
+                  <Button
+                    size="lg"
+                    className="bg-white text-[#005EB8] hover:bg-gray-100 font-semibold"
+                  >
+                    Lihat Kursus Saya
+                    <ChevronRight className="h-4 w-4 ml-2" />
+                  </Button>
+                </Link>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </UserLayout>
     </ProtectedRoute>

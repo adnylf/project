@@ -37,8 +37,6 @@ import {
 import UserLayout from "@/components/user/user-layout";
 import ProtectedRoute from "@/components/auth/protected-route";
 
-const API_BASE_URL = "http://localhost:3000/api";
-
 interface Enrollment {
   id: string;
   progress: number;
@@ -141,11 +139,11 @@ export default function UserDashboard() {
 
         // Fetch all data in parallel
         const [profileRes, enrollmentsRes, wishlistRes, activityRes, certificatesRes] = await Promise.all([
-          fetch(`${API_BASE_URL}/users/profile`, { headers }),
-          fetch(`${API_BASE_URL}/users/enrollments?limit=5`, { headers }),
-          fetch(`${API_BASE_URL}/wishlist?limit=4`, { headers }),
-          fetch(`${API_BASE_URL}/users/activity?limit=5`, { headers }),
-          fetch(`${API_BASE_URL}/users/certificates`, { headers }),
+          fetch(`/api/users/profile`, { headers }),
+          fetch(`/api/users/enrollments?limit=5`, { headers }),
+          fetch(`/api/wishlist?limit=4`, { headers }),
+          fetch(`/api/users/activity?limit=5`, { headers }),
+          fetch(`/api/users/certificates`, { headers }),
         ]);
 
         // Parse responses
@@ -280,13 +278,13 @@ export default function UserDashboard() {
             </Card>
           </div>
 
-          {/* Main Content Grid - Disesuaikan tinggi */}
+          {/* Main Content Grid */}
           <div className="grid lg:grid-cols-3 gap-6">
             {/* Left Column - Lanjutkan Belajar dan Wishlist */}
             <div className="lg:col-span-2 space-y-6">
-              {/* Continue Learning - Hanya tampilkan 2 course dengan tinggi tetap */}
+              {/* Continue Learning */}
               <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 h-[350px] flex flex-col">
-                <CardHeader className="flex flex-row items-center justify-between pb-3">
+                <CardHeader className="flex flex-row items-center justify-between pb-3 border-b">
                   <div>
                     <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-white text-xl font-bold">
                       <Play className="h-5 w-5 text-[#005EB8]" />
@@ -306,12 +304,12 @@ export default function UserDashboard() {
                     </Link>
                   </Button>
                 </CardHeader>
-                <CardContent className="flex-1 overflow-y-auto">
+                <CardContent className="flex-1 overflow-y-auto p-0">
                   {enrollments.length > 0 ? (
-                    <div className="space-y-4">
+                    <div className="divide-y divide-gray-200 dark:divide-gray-700">
                       {/* Hanya menampilkan 2 course pertama */}
                       {enrollments.slice(0, 2).map((enrollment) => (
-                        <div key={enrollment.id} className="flex gap-4 p-3 rounded-lg bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-750 transition-colors border border-gray-200 dark:border-gray-700">
+                        <div key={enrollment.id} className="flex gap-4 p-4 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
                           <div className="relative w-24 h-16 rounded-lg overflow-hidden flex-shrink-0">
                             {enrollment.course.thumbnail ? (
                               <img
@@ -333,7 +331,7 @@ export default function UserDashboard() {
                               <span className="text-xs font-medium text-[#005EB8]">{Math.round(enrollment.progress)}%</span>
                             </div>
                           </div>
-                          {/* Button Lanjut Belajar - Style diubah seperti button Jelajahi Kursus */}
+                          {/* Button Lanjut Belajar */}
                           <Button 
                             asChild
                             size="sm"
@@ -360,9 +358,9 @@ export default function UserDashboard() {
                 </CardContent>
               </Card>
 
-              {/* Wishlist - Diubah tinggi sama dengan Aktivitas Terbaru */}
+              {/* Wishlist */}
               <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 h-[320px] flex flex-col">
-                <CardHeader className="flex flex-row items-center justify-between pb-3">
+                <CardHeader className="flex flex-row items-center justify-between pb-3 border-b">
                   <div>
                     <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-white text-xl font-bold">
                       <Heart className="h-5 w-5 text-[#D93025]" />
@@ -382,9 +380,9 @@ export default function UserDashboard() {
                     </Link>
                   </Button>
                 </CardHeader>
-                <CardContent className="flex-1 overflow-y-auto">
+                <CardContent className="flex-1 overflow-y-auto p-0">
                   {wishlist.length > 0 ? (
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-2 gap-4 p-4">
                       {wishlist.slice(0, 4).map((item) => (
                         <Link key={item.id} href={`/courses/${item.course.slug}`} className="group">
                           <div className="relative aspect-video rounded-lg overflow-hidden mb-2 border border-gray-200 dark:border-gray-700">
@@ -420,17 +418,20 @@ export default function UserDashboard() {
               </Card>
             </div>
 
-            {/* Right Sidebar - Disesuaikan tinggi sama dengan kiri */}
+            {/* Right Sidebar */}
             <div className="space-y-6">
-              {/* Progress Overview - Tinggi sama dengan Lanjutkan Belajar */}
+              {/* Progress Overview */}
               <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 h-[350px] flex flex-col">
-                <CardHeader className="pb-3">
-                  <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-white text-xl font-bold">
-                    <Star className="h-5 w-5 text-[#F4B400]" />
-                    Overview Progress
-                  </CardTitle>
+                <CardHeader className="pb-3 border-b">
+                  <div>
+                    <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-white text-xl font-bold">
+                      <Star className="h-5 w-5 text-[#F4B400]" />
+                      Overview Progress
+                    </CardTitle>
+                    <CardDescription>Progress rata-rata kursus Anda</CardDescription>
+                  </div>
                 </CardHeader>
-                <CardContent className="flex-1 flex flex-col">
+                <CardContent className="flex-1 flex flex-col p-6">
                   <div className="flex flex-col items-center mb-4 flex-1 justify-center">
                     <div className="relative w-32 h-32">
                       <svg className="w-32 h-32 transform -rotate-90">
@@ -470,13 +471,16 @@ export default function UserDashboard() {
                 </CardContent>
               </Card>
 
-              {/* Recent Activity - Diubah tinggi sama dengan Wishlist */}
+              {/* Recent Activity */}
               <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 h-[320px] flex flex-col">
-                <CardHeader className="flex flex-row items-center justify-between pb-3">
-                  <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-white text-xl font-bold">
-                    <Activity className="h-5 w-5 text-[#008A00]" />
-                    Aktivitas Terbaru
-                  </CardTitle>
+                <CardHeader className="flex flex-row items-center justify-between pb-3 border-b">
+                  <div>
+                    <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-white text-xl font-bold">
+                      <Activity className="h-5 w-5 text-[#008A00]" />
+                      Aktivitas Terbaru
+                    </CardTitle>
+                    <CardDescription>Aktivitas terbaru di akun Anda</CardDescription>
+                  </div>
                   <Button 
                     variant="outline" 
                     asChild 
@@ -488,11 +492,11 @@ export default function UserDashboard() {
                     </Link>
                   </Button>
                 </CardHeader>
-                <CardContent className="flex-1 overflow-y-auto">
+                <CardContent className="flex-1 overflow-y-auto p-0">
                   {activities.length > 0 ? (
-                    <div className="space-y-3">
+                    <div className="divide-y divide-gray-200 dark:divide-gray-700">
                       {activities.slice(0, 5).map((activity) => (
-                        <div key={activity.id} className="flex items-start gap-3">
+                        <div key={activity.id} className="flex items-start gap-3 p-4 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
                           <div className="w-2 h-2 rounded-full bg-[#005EB8] mt-2 flex-shrink-0"></div>
                           <div className="flex-1 min-w-0">
                             <p className="text-sm text-gray-900 dark:text-white">{getActionLabel(activity.action)}</p>
@@ -514,14 +518,14 @@ export default function UserDashboard() {
 
           {/* Aksi Cepat */}
           <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
-            <CardHeader>
+            <CardHeader className="border-b">
               <CardTitle className="flex items-center gap-2 text-xl font-bold text-gray-900 dark:text-white">
                 <Zap className="h-5 w-5 text-[#005EB8]" />
                 Aksi Cepat
               </CardTitle>
               <CardDescription>Kelola akun dan pembelajaran Anda</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="pt-6">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <Card className="rounded-lg border bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 transition-colors cursor-pointer">
                   <CardContent className="p-4">

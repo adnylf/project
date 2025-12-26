@@ -513,6 +513,7 @@ enum TransactionStatus {
 }
 
 enum PaymentMethod {
+  FREE
   E_WALLET
   VIRTUAL_ACCOUNT
   QRIS

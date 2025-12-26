@@ -26,8 +26,6 @@ import UserLayout from "@/components/user/user-layout";
 import ProtectedRoute from "@/components/auth/protected-route";
 import Link from "next/link";
 
-const API_BASE_URL = "http://localhost:3000/api";
-
 interface Certificate {
   id: string;
   certificate_number: string;
@@ -81,7 +79,7 @@ export default function UserCertificatesPage() {
       setLoading(true);
       const token = getAuthToken();
 
-      const response = await fetch(`${API_BASE_URL}/users/certificates`, {
+      const response = await fetch(`/api/users/certificates`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 

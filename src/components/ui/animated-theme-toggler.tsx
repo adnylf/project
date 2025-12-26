@@ -86,13 +86,17 @@ export const AnimatedThemeToggler = ({
     <button
       ref={buttonRef}
       onClick={toggleTheme}
-      className={cn("flex items-center justify-center", className)}
+      className={cn(
+        "flex items-center justify-center p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors",
+        className
+      )}
+      aria-label={isDark ? "Aktifkan mode terang" : "Aktifkan mode gelap"}
       {...props}
     >
       {isDark ? (
-        <Sun className="w-7 h-7" strokeWidth={2} />
+        <Sun className="w-5 h-5 text-[#005EB8]" strokeWidth={2} />
       ) : (
-        <Moon className="w-7 h-7" strokeWidth={2} />
+        <Moon className="w-5 h-5 text-[#005EB8]" strokeWidth={2} />
       )}
     </button>
   )

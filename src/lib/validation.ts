@@ -12,7 +12,7 @@ export const registerSchema = z.object({
     .regex(/[0-9]/, 'Password harus mengandung angka')
     .regex(/[^A-Za-z0-9]/, 'Password harus mengandung karakter khusus'),
   full_name: z.string().min(2, 'Nama lengkap minimal 2 karakter'),
-  disability_type: z.enum(['BUTA_WARNA', 'DISLEKSIA', 'KOGNITIF', 'LOW_VISION', 'MENTOR', 'MOTORIK', 'TUNARUNGU']).optional().nullable(),
+  disability_type: z.enum(['BUTA_WARNA', 'DISLEKSIA', 'KOGNITIF', 'LOW_VISION', 'MENTOR', 'MOTORIK', 'TUNARUNGU', 'STUDENT']).optional().nullable(),
 });
 
 export const loginSchema = z.object({
@@ -135,16 +135,22 @@ export const updateMaterialSchema = createMaterialSchema.partial();
 
 // ==================== MENTOR SCHEMAS ====================
 
+// Helper for optional URL - converts empty string to null before validation
+const optionalUrl = z.preprocess(
+  (val) => (val === '' || val === null || val === undefined ? null : val),
+  z.string().url().nullable().optional()
+);
+
 export const applyMentorSchema = z.object({
   expertise: z.array(z.string()).min(1, 'Minimal 1 keahlian'),
   experience: z.number().int().min(0, 'Pengalaman tidak boleh negatif'),
   education: z.string().optional().nullable(),
   bio: z.string().optional().nullable(),
   headline: z.string().optional().nullable(),
-  website: z.string().url().optional().nullable().or(z.literal('')),
-  linkedin: z.string().url().optional().nullable().or(z.literal('')),
-  twitter: z.string().url().optional().nullable().or(z.literal('')),
-  portfolio: z.string().url().optional().nullable().or(z.literal('')),
+  website: optionalUrl,
+  linkedin: optionalUrl,
+  twitter: optionalUrl,
+  portfolio: optionalUrl,
 });
 
 export const updateMentorProfileSchema = applyMentorSchema.partial();

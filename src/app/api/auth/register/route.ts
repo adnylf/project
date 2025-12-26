@@ -41,7 +41,8 @@ export async function POST(request: NextRequest) {
         email,
         password: hashedPassword,
         full_name,
-        disability_type: disability_type || null,
+        // If STUDENT or MENTOR is selected, set disability_type to null (not a disability)
+        disability_type: (disability_type === 'MENTOR' || disability_type === 'STUDENT') ? null : disability_type,
         role: disability_type === 'MENTOR' ? UserRole.MENTOR : UserRole.STUDENT,
       },
       select: {

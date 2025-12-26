@@ -467,43 +467,13 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
                         value={DisabilityType.MENTOR}
                         className="bg-background text-foreground"
                       >
-                        Mentor (tanpa disabilitas)
+                        Mentor
                       </option>
                       <option
-                        value={DisabilityType.BUTA_WARNA}
+                        value="STUDENT"
                         className="bg-background text-foreground"
                       >
-                        Buta Warna
-                      </option>
-                      <option
-                        value={DisabilityType.DISLEKSIA}
-                        className="bg-background text-foreground"
-                      >
-                        Disleksia
-                      </option>
-                      <option
-                        value={DisabilityType.KOGNITIF}
-                        className="bg-background text-foreground"
-                      >
-                        Disabilitas Kognitif
-                      </option>
-                      <option
-                        value={DisabilityType.LOW_VISION}
-                        className="bg-background text-foreground"
-                      >
-                        Low Vision
-                      </option>
-                      <option
-                        value={DisabilityType.MOTORIK}
-                        className="bg-background text-foreground"
-                      >
-                        Disabilitas Motorik
-                      </option>
-                      <option
-                        value={DisabilityType.TUNARUNGU}
-                        className="bg-background text-foreground"
-                      >
-                        Tunarungu
+                        Siswa
                       </option>
                     </select>
                   </GlassInputWrapper>
@@ -521,7 +491,7 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
                         message={
                           formData.disability_type === DisabilityType.MENTOR
                             ? "Anda terdaftar sebagai Mentor"
-                            : "Jenis disabilitas terpilih"
+                            : "Anda terdaftar sebagai Siswa"
                         }
                         type="info"
                       />

@@ -240,7 +240,7 @@ export const VerifyEmailPage: React.FC<VerifyEmailPageProps> = ({
               {verificationStatus === 'idle' && (
                 <StatusMessage 
                   type="info" 
-                  message="Token verifikasi telah dikirim ke email Anda. Token ini akan kadaluarsa dalam 30 menit." 
+                  message="Token verifikasi telah dikirim ke email Anda. Token ini akan kadaluarsa dalam 24 jam." 
                 />
               )}
 

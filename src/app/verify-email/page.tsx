@@ -28,6 +28,93 @@ function VerifyEmailContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const emailFromParams = searchParams.get("email") || "";
+  const tokenFromParams = searchParams.get("token") || "";
+  const [autoVerifying, setAutoVerifying] = useState(false);
+
+  // Auto-verify when token is present in URL
+  useEffect(() => {
+    const autoVerify = async () => {
+      if (tokenFromParams && !autoVerifying && verificationStatus === 'idle') {
+        setAutoVerifying(true);
+        setIsLoading(true);
+        
+        try {
+          const response = await fetch("/api/auth/verify-email", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ token: tokenFromParams }),
+          });
+
+          const data = await response.json();
+
+          if (!response.ok) {
+            // Handle specific error messages
+            if (data.error === "Token tidak valid") {
+              setErrorMessage("Token verifikasi tidak valid. Pastikan token yang dimasukkan benar dan belum kadaluarsa.");
+              setVerificationStatus('error');
+              return;
+            }
+            
+            if (data.error === "Token sudah kadaluarsa") {
+              setErrorMessage("Token sudah kadaluarsa. Silakan minta token verifikasi baru.");
+              setVerificationStatus('error');
+              return;
+            }
+
+            if (data.error === "Token sudah digunakan") {
+              setErrorMessage("Email Anda sudah terverifikasi. Silakan login ke akun Anda.");
+              setVerificationStatus('error');
+              // Redirect to login after showing message
+              setTimeout(() => {
+                router.push("/login");
+              }, 2000);
+              return;
+            }
+
+            if (data.error === "Email tidak ditemukan") {
+              setErrorMessage("Email tidak ditemukan. Pastikan email yang Anda masukkan benar.");
+              setVerificationStatus('error');
+              return;
+            }
+
+            throw new Error(data.error || "Terjadi kesalahan pada server");
+          }
+
+          // Verification successful
+          setVerificationStatus('success');
+          
+          // Clear email from localStorage
+          localStorage.removeItem("verification_email");
+          
+          // Show success alert
+          showSweetAlert(
+            "success", 
+            "Verifikasi Berhasil!", 
+            "Email Anda telah berhasil diverifikasi. Anda akan diarahkan ke halaman login."
+          );
+
+          // Redirect to login page after delay
+          setTimeout(() => {
+            router.push("/login");
+          }, 3000);
+        } catch (error) {
+          console.error("Verifikasi otomatis gagal:", error);
+          setErrorMessage(
+            error instanceof Error
+              ? error.message
+              : "Terjadi kesalahan pada server, coba lagi nanti."
+          );
+          setVerificationStatus('error');
+        } finally {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    autoVerify();
+  }, [tokenFromParams, autoVerifying, verificationStatus, router]);
 
   // Initialize email from params or local storage
   useEffect(() => {
@@ -37,10 +124,11 @@ function VerifyEmailContent() {
       localStorage.setItem("verification_email", emailFromParams);
     } else if (savedEmail) {
       setEmailInput(savedEmail);
-    } else {
+    } else if (!tokenFromParams) {
+      // Only show email form if there's no token in URL
       setShowEmailForm(true);
     }
-  }, [emailFromParams]);
+  }, [emailFromParams, tokenFromParams]);
 
   // Sample testimonials data
   const sampleTestimonials: Testimonial[] = [
@@ -272,6 +360,97 @@ function VerifyEmailContent() {
     setShowEmailForm(true);
     setIsChangingEmail(false);
   };
+
+  // Render loading state when auto-verifying from URL token
+  if (autoVerifying && tokenFromParams) {
+    return (
+      <div>
+        <SweetAlert
+          type={alertConfig.type}
+          title={alertConfig.title}
+          message={alertConfig.message}
+          show={showAlert}
+          onClose={() => setShowAlert(false)}
+          duration={alertConfig.type === "success" ? 3000 : 5000}
+          showCloseButton={true}
+        />
+
+        <div className="h-screen flex flex-col md:flex-row font-geist bg-background overflow-hidden">
+          <section className="flex-1 flex items-center justify-center p-0 md:p-8">
+            <div className="w-full max-w-md mx-auto p-6 text-center">
+              <div className="flex flex-col items-center gap-6">
+                {verificationStatus === 'idle' && (
+                  <>
+                    <div className="w-20 h-20 border-4 border-violet-500 border-t-transparent rounded-full animate-spin"></div>
+                    <div>
+                      <h1 className="text-3xl md:text-4xl font-semibold mb-2">Memverifikasi Email...</h1>
+                      <p className="text-muted-foreground">Mohon tunggu, kami sedang memverifikasi email Anda.</p>
+                    </div>
+                  </>
+                )}
+                
+                {verificationStatus === 'success' && (
+                  <>
+                    <div className="w-20 h-20 rounded-full bg-green-500/10 flex items-center justify-center">
+                      <svg className="w-10 h-10 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h1 className="text-3xl md:text-4xl font-semibold mb-2 text-green-500">Verifikasi Berhasil!</h1>
+                      <p className="text-muted-foreground">Email Anda telah diverifikasi. Mengalihkan ke halaman login...</p>
+                    </div>
+                  </>
+                )}
+                
+                {verificationStatus === 'error' && (
+                  <>
+                    <div className="w-20 h-20 rounded-full bg-red-500/10 flex items-center justify-center">
+                      <svg className="w-10 h-10 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h1 className="text-3xl md:text-4xl font-semibold mb-2 text-red-500">Verifikasi Gagal</h1>
+                      <p className="text-muted-foreground">{errorMessage || "Terjadi kesalahan saat memverifikasi email."}</p>
+                    </div>
+                    <div className="flex gap-3 mt-4">
+                      <a
+                        href="/login"
+                        className="px-6 py-3 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors"
+                      >
+                        Ke Halaman Login
+                      </a>
+                      <button
+                        onClick={() => {
+                          setAutoVerifying(false);
+                          setShowEmailForm(true);
+                          setVerificationStatus('idle');
+                        }}
+                        className="px-6 py-3 rounded-lg border border-gray-300 dark:border-gray-600 font-medium hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                      >
+                        Minta Token Baru
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </section>
+
+          {/* Right column: hero image */}
+          <section className="hidden md:block flex-1 relative p-4">
+            <div
+              className="absolute inset-4 rounded-lg bg-cover bg-center"
+              style={{ 
+                backgroundImage: `url(https://images.unsplash.com/photo-1603791440384-56cd371ee9a7?w=2160&q=80)` 
+              }}
+            ></div>
+          </section>
+        </div>
+      </div>
+    );
+  }
 
   // Render email input form
   if (showEmailForm) {

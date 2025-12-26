@@ -20,12 +20,15 @@ import {
   Share2,
   Loader2,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  GraduationCap,
+  Award
 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
+import { ShareCourseModal } from '@/components/courses/share-course-modal';
 
-const API_BASE_URL = 'http://localhost:3000/api';
+// ... (semua interface dan helper functions tetap sama, TIDAK DIUBAH) ...
 
 interface Category {
   id: string;
@@ -163,9 +166,8 @@ export default function CourseDetailPage() {
   const [inWishlist, setInWishlist] = useState(false);
   const [wishlistLoading, setWishlistLoading] = useState(false);
   
-  // Share dialog state
-  const [showShareDialog, setShowShareDialog] = useState(false);
-  const [copied, setCopied] = useState(false);
+  // Share modal state - HANYA INI YANG DIUBAH
+  const [showShareModal, setShowShareModal] = useState(false);
 
   const getAuthToken = useCallback(() => {
     if (typeof window !== 'undefined') {
@@ -174,7 +176,7 @@ export default function CourseDetailPage() {
     return null;
   }, []);
 
-  // Fetch course data
+  // Fetch course data - TIDAK DIUBAH
   useEffect(() => {
     const fetchCourse = async () => {
       try {
@@ -187,7 +189,7 @@ export default function CourseDetailPage() {
           headers['Authorization'] = `Bearer ${token}`;
         }
 
-        const response = await fetch(`${API_BASE_URL}/courses/${courseId}`, { headers });
+        const response = await fetch(`/api/courses/${courseId}`, { headers });
 
         if (!response.ok) {
           if (response.status === 404) {
@@ -216,7 +218,7 @@ export default function CourseDetailPage() {
     }
   }, [courseId, getAuthToken]);
 
-  // Handle enroll
+  // Handle enroll - TIDAK DIUBAH
   const handleEnroll = async () => {
     const token = getAuthToken();
     if (!token) {
@@ -224,36 +226,12 @@ export default function CourseDetailPage() {
       return;
     }
 
-    try {
-      setEnrolling(true);
-      const response = await fetch(`${API_BASE_URL}/courses/${course?.id}/enroll`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        if (response.status === 402) {
-          // Redirect to payment
-          router.push(`/checkout/${course?.id}`);
-          return;
-        }
-        throw new Error(result.error || 'Gagal mendaftar kursus');
-      }
-
-      setIsEnrolled(true);
-    } catch (err) {
-      alert(err instanceof Error ? err.message : 'Gagal mendaftar');
-    } finally {
-      setEnrolling(false);
-    }
+    // For both free and paid courses, redirect directly to checkout
+    // The checkout page will handle the enrollment logic (free enrollment or payment)
+    router.push(`/checkout/${course?.id}`);
   };
 
-  // Toggle section expansion
+  // Toggle section expansion - TIDAK DIUBAH
   const toggleSection = (sectionId: string) => {
     setExpandedSections(prev => {
       const newSet = new Set(Array.from(prev));
@@ -266,14 +244,14 @@ export default function CourseDetailPage() {
     });
   };
 
-  // Check if in wishlist
+  // Check if in wishlist - TIDAK DIUBAH
   useEffect(() => {
     const checkWishlist = async () => {
       const token = getAuthToken();
       if (!token || !course?.id) return;
 
       try {
-        const response = await fetch(`${API_BASE_URL}/wishlist/${course.id}`, {
+        const response = await fetch(`/api/wishlist/${course.id}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (response.ok) {
@@ -288,7 +266,7 @@ export default function CourseDetailPage() {
     checkWishlist();
   }, [course?.id, getAuthToken]);
 
-  // Toggle wishlist
+  // Toggle wishlist - TIDAK DIUBAH
   const handleWishlistToggle = async () => {
     const token = getAuthToken();
     if (!token) {
@@ -301,7 +279,7 @@ export default function CourseDetailPage() {
 
       if (inWishlist) {
         // Remove from wishlist
-        const response = await fetch(`${API_BASE_URL}/wishlist?course_id=${course?.id}`, {
+        const response = await fetch(`/api/wishlist?course_id=${course?.id}`, {
           method: 'DELETE',
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -310,7 +288,7 @@ export default function CourseDetailPage() {
         }
       } else {
         // Add to wishlist
-        const response = await fetch(`${API_BASE_URL}/wishlist`, {
+        const response = await fetch(`/api/wishlist`, {
           method: 'POST',
           headers: {
             Authorization: `Bearer ${token}`,
@@ -329,51 +307,7 @@ export default function CourseDetailPage() {
     }
   };
 
-  // Copy share URL
-  const handleCopyLink = async () => {
-    const url = `${window.location.origin}/courses/${course?.slug || course?.id}`;
-    try {
-      await navigator.clipboard.writeText(url);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // Fallback
-      const input = document.createElement('input');
-      input.value = url;
-      document.body.appendChild(input);
-      input.select();
-      document.execCommand('copy');
-      document.body.removeChild(input);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
-  };
-
-  // Share to social media
-  const getShareUrl = () => `${window.location.origin}/courses/${course?.slug || course?.id}`;
-
-  const shareToTwitter = () => {
-    const url = encodeURIComponent(getShareUrl());
-    const text = encodeURIComponent(`Lihat kursus "${course?.title}" di platform kami!`);
-    window.open(`https://twitter.com/intent/tweet?url=${url}&text=${text}`, '_blank');
-  };
-
-  const shareToFacebook = () => {
-    const url = encodeURIComponent(getShareUrl());
-    window.open(`https://www.facebook.com/sharer/sharer.php?u=${url}`, '_blank');
-  };
-
-  const shareToWhatsApp = () => {
-    const url = encodeURIComponent(getShareUrl());
-    const text = encodeURIComponent(`Lihat kursus "${course?.title}" di platform kami! ${getShareUrl()}`);
-    window.open(`https://wa.me/?text=${text}`, '_blank');
-  };
-
-  const shareToTelegram = () => {
-    const url = encodeURIComponent(getShareUrl());
-    const text = encodeURIComponent(`Lihat kursus "${course?.title}" di platform kami!`);
-    window.open(`https://t.me/share/url?url=${url}&text=${text}`, '_blank');
-  };
+  // HAPUS SEMUA FUNGSI SHARE DI SINI karena sudah dipindah ke komponen modal
 
   if (loading) {
     return (
@@ -388,19 +322,26 @@ export default function CourseDetailPage() {
 
   if (error || !course) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
-        <div className="text-center">
-          <BookOpen className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-            {error || 'Kursus tidak ditemukan'}
-          </h2>
-          <Link href="/courses">
-            <Button className="bg-[#005EB8] hover:bg-[#004A93]">
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Kembali ke Katalog
-            </Button>
-          </Link>
-        </div>
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center px-4">
+        <Card className="max-w-md mx-auto rounded-lg border bg-card text-card-foreground shadow-sm border-gray-200 dark:border-gray-700">
+          <CardContent className="p-8 text-center">
+            <div className="p-4 rounded-full bg-gray-100 dark:bg-gray-800 inline-flex mb-4">
+              <BookOpen className="h-8 w-8 text-gray-400" />
+            </div>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+              {error || 'Kursus tidak ditemukan'}
+            </h3>
+            <p className="text-gray-600 dark:text-gray-400 mb-6">
+              Kursus yang Anda cari tidak tersedia
+            </p>
+            <Link href="/courses">
+              <Button className="bg-[#005EB8] hover:bg-[#004A93]">
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Kembali ke Katalog
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -413,9 +354,9 @@ export default function CourseDetailPage() {
       <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-50">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
-            <Link href="/courses" className="flex items-center gap-2 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-colors">
+            <Link href="/courses" className="flex items-center gap-2 text-gray-600 hover:text-[#005EB8] dark:text-gray-400 dark:hover:text-[#005EB8] transition-colors">
               <ArrowLeft className="h-5 w-5" />
-              <span>Kembali ke Katalog</span>
+              <span className="font-medium">Kembali ke Katalog</span>
             </Link>
           </div>
         </div>
@@ -427,23 +368,23 @@ export default function CourseDetailPage() {
           <div className="grid lg:grid-cols-3 gap-8">
             <div className="lg:col-span-2 space-y-6">
               <div className="flex items-center gap-3 flex-wrap">
-                <Badge variant="secondary" className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                <Badge className="bg-[#005EB8]/10 text-[#005EB8] border-0 pointer-events-none">
                   {course.category?.name || 'Kategori'}
                 </Badge>
-                <Badge variant="outline">
+                <Badge variant="outline" className="border-gray-300 dark:border-gray-600">
                   {getLevelLabel(course.level)}
                 </Badge>
-                <Badge variant="outline">
+                <Badge variant="outline" className="border-gray-300 dark:border-gray-600">
                   <Clock className="h-3 w-3 mr-1" />
                   {formatDuration(course.total_duration)}
                 </Badge>
               </div>
 
-              <h1 className="text-4xl lg:text-5xl font-bold leading-tight text-gray-900 dark:text-white">
+              <h1 className="text-3xl lg:text-4xl font-bold leading-tight text-gray-900 dark:text-white">
                 {course.title}
               </h1>
 
-              <p className="text-xl text-gray-600 dark:text-gray-400 leading-relaxed">
+              <p className="text-lg text-gray-600 dark:text-gray-400 leading-relaxed">
                 {course.short_description || course.description}
               </p>
 
@@ -473,25 +414,42 @@ export default function CourseDetailPage() {
 
               {/* Instructor Card */}
               {course.mentor && (
-                <Card className="border-gray-200 dark:border-gray-700">
+                <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
                   <CardContent className="p-6">
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-start gap-4">
                       <Avatar className="h-16 w-16 border-2 border-gray-200 dark:border-gray-600">
                         <AvatarImage src={course.mentor.user?.avatar_url || ''} />
-                        <AvatarFallback>{course.mentor.user?.full_name?.[0] || 'M'}</AvatarFallback>
+                        <AvatarFallback className="bg-[#005EB8] text-white text-lg font-semibold">
+                          {course.mentor.user?.full_name?.[0] || 'M'}
+                        </AvatarFallback>
                       </Avatar>
-                      <div className="flex-1">
-                        <p className="text-sm text-gray-600 dark:text-gray-400">Instruktur</p>
-                        <p className="font-semibold text-gray-900 dark:text-white text-lg">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-gray-500 dark:text-gray-400">Instruktur</p>
+                        <p className="font-bold text-gray-900 dark:text-white text-lg">
                           {course.mentor.user?.full_name || 'Instruktur'}
                         </p>
-                        <p className="text-gray-600 dark:text-gray-400 text-sm mt-1">
+                        <p className="text-gray-600 dark:text-gray-400 text-sm mt-1 line-clamp-2">
                           {course.mentor.headline || course.mentor.bio}
                         </p>
-                        <div className="flex items-center gap-4 mt-2 text-sm text-gray-600 dark:text-gray-400">
-                          <span>⭐ {course.mentor.average_rating?.toFixed(1) || '0'}/5.0</span>
-                          <span>👨‍🏫 {course.mentor.total_courses || 0} Kursus</span>
-                          <span>🎓 {(course.mentor.total_students || 0).toLocaleString()} Siswa</span>
+                        <div className="flex flex-wrap items-center gap-4 mt-3">
+                          <div className="flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-400">
+                            <div className="p-1 rounded bg-yellow-100 dark:bg-yellow-900/30">
+                              <Star className="h-3.5 w-3.5 text-yellow-500 fill-yellow-500" />
+                            </div>
+                            <span>{course.mentor.average_rating?.toFixed(1) || '0'}/5.0</span>
+                          </div>
+                          <div className="flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-400">
+                            <div className="p-1 rounded bg-[#005EB8]/10">
+                              <BookOpen className="h-3.5 w-3.5 text-[#005EB8]" />
+                            </div>
+                            <span>{course.mentor.total_courses || 0} Kursus</span>
+                          </div>
+                          <div className="flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-400">
+                            <div className="p-1 rounded bg-[#008A00]/10">
+                              <GraduationCap className="h-3.5 w-3.5 text-[#008A00]" />
+                            </div>
+                            <span>{(course.mentor.total_students || 0).toLocaleString()} Siswa</span>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -502,7 +460,7 @@ export default function CourseDetailPage() {
 
             {/* Enrollment Card */}
             <div>
-              <Card className="border-gray-200 dark:border-gray-700 sticky top-24">
+              <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 sticky top-24">
                 <CardHeader className="p-0">
                   <div className="aspect-video w-full overflow-hidden rounded-t-lg bg-gray-100 dark:bg-gray-800">
                     {course.thumbnail ? (
@@ -513,18 +471,18 @@ export default function CourseDetailPage() {
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center">
-                        <BookOpen className="h-16 w-16 text-gray-300" />
+                        <BookOpen className="h-16 w-16 text-gray-300 dark:text-gray-600" />
                       </div>
                     )}
                   </div>
                 </CardHeader>
                 <CardContent className="p-6 space-y-6">
                   <div className="text-center">
-                    <div className="text-4xl font-bold text-gray-900 dark:text-white mb-2">
+                    <div className="text-4xl font-bold text-[#005EB8] mb-2">
                       {course.is_free ? 'Gratis' : formatCurrency(course.discount_price || course.price)}
                     </div>
                     {!course.is_free && course.discount_price && course.discount_price < course.price && (
-                      <div className="text-lg text-gray-600 dark:text-gray-400 line-through">
+                      <div className="text-lg text-gray-500 dark:text-gray-400 line-through">
                         {formatCurrency(course.price)}
                       </div>
                     )}
@@ -533,14 +491,14 @@ export default function CourseDetailPage() {
                   <div className="space-y-3">
                     {isEnrolled ? (
                       <Link href={`/user/courses/${course.id}/player`}>
-                        <Button className="w-full bg-[#005EB8] hover:bg-[#004A93]" size="lg">
+                        <Button className="w-full bg-[#005EB8] hover:bg-[#004A93] h-12 text-base font-semibold" size="lg">
                           <PlayCircle className="mr-2 h-5 w-5" />
                           Lanjutkan Belajar
                         </Button>
                       </Link>
                     ) : (
                       <Button 
-                        className="w-full bg-[#005EB8] hover:bg-[#004A93]" 
+                        className="w-full bg-[#005EB8] hover:bg-[#004A93] h-12 text-base font-semibold" 
                         size="lg"
                         onClick={handleEnroll}
                         disabled={enrolling}
@@ -561,24 +519,28 @@ export default function CourseDetailPage() {
                   </div>
 
                   {/* Simpan & Bagikan buttons */}
-                  <div className="flex gap-2">
+                  <div className="flex gap-3">
                     <Button
                       variant="outline"
-                      className={`flex-1 ${inWishlist ? 'border-red-500 text-red-500 hover:bg-red-50' : ''}`}
+                      className={`flex-1 h-11 ${
+                        inWishlist 
+                          ? 'border-[#D93025] text-[#D93025] hover:bg-[#D93025]/10 dark:border-[#D93025] dark:text-[#D93025]' 
+                          : 'border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10 dark:border-[#005EB8] dark:text-[#005EB8]'
+                      }`}
                       onClick={handleWishlistToggle}
                       disabled={wishlistLoading}
                     >
                       {wishlistLoading ? (
                         <Loader2 className="h-4 w-4 animate-spin mr-2" />
                       ) : (
-                        <Heart className={`h-4 w-4 mr-2 ${inWishlist ? 'fill-red-500' : ''}`} />
+                        <Heart className={`h-4 w-4 mr-2 ${inWishlist ? 'fill-[#D93025]' : ''}`} />
                       )}
                       {inWishlist ? 'Tersimpan' : 'Simpan'}
                     </Button>
                     <Button
                       variant="outline"
-                      className="flex-1"
-                      onClick={() => setShowShareDialog(true)}
+                      className="flex-1 h-11 border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10 dark:border-[#005EB8] dark:text-[#005EB8]"
+                      onClick={() => setShowShareModal(true)}
                     >
                       <Share2 className="h-4 w-4 mr-2" />
                       Bagikan
@@ -591,20 +553,28 @@ export default function CourseDetailPage() {
                     </p>
                     <div className="grid gap-3 text-sm">
                       <div className="flex items-center gap-3">
-                        <PlayCircle className="h-5 w-5 text-[#005EB8]" />
-                        <span>{formatDuration(course.total_duration)} video on-demand</span>
+                        <div className="p-2 rounded-lg bg-[#005EB8]/10">
+                          <PlayCircle className="h-4 w-4 text-[#005EB8]" />
+                        </div>
+                        <span className="text-gray-700 dark:text-gray-300">{formatDuration(course.total_duration)} video on-demand</span>
                       </div>
                       <div className="flex items-center gap-3">
-                        <BookOpen className="h-5 w-5 text-[#005EB8]" />
-                        <span>{totalMaterials} materi pembelajaran</span>
+                        <div className="p-2 rounded-lg bg-[#F4B400]/10">
+                          <BookOpen className="h-4 w-4 text-[#F4B400]" />
+                        </div>
+                        <span className="text-gray-700 dark:text-gray-300">{totalMaterials} materi pembelajaran</span>
                       </div>
                       <div className="flex items-center gap-3">
-                        <Globe className="h-5 w-5 text-[#005EB8]" />
-                        <span>Akses seumur hidup</span>
+                        <div className="p-2 rounded-lg bg-[#008A00]/10">
+                          <Globe className="h-4 w-4 text-[#008A00]" />
+                        </div>
+                        <span className="text-gray-700 dark:text-gray-300">Akses seumur hidup</span>
                       </div>
                       <div className="flex items-center gap-3">
-                        <CheckCircle2 className="h-5 w-5 text-[#005EB8]" />
-                        <span>Sertifikat kelulusan</span>
+                        <div className="p-2 rounded-lg bg-[#D93025]/10">
+                          <Award className="h-4 w-4 text-[#D93025]" />
+                        </div>
+                        <span className="text-gray-700 dark:text-gray-300">Sertifikat kelulusan</span>
                       </div>
                     </div>
                   </div>
@@ -618,35 +588,44 @@ export default function CourseDetailPage() {
       {/* Course Content */}
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <Tabs defaultValue="curriculum" className="space-y-8">
-          <TabsList className="grid w-full max-w-2xl grid-cols-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-1 rounded-lg">
-            <TabsTrigger value="curriculum">Kurikulum</TabsTrigger>
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="reviews">Ulasan</TabsTrigger>
+          <TabsList className="grid w-full max-w-2xl grid-cols-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-1.5 rounded-xl h-auto">
+            <TabsTrigger value="curriculum" className="py-2.5 rounded-lg data-[state=active]:bg-[#005EB8] data-[state=active]:text-white font-medium">
+              Kurikulum
+            </TabsTrigger>
+            <TabsTrigger value="overview" className="py-2.5 rounded-lg data-[state=active]:bg-[#005EB8] data-[state=active]:text-white font-medium">
+              Overview
+            </TabsTrigger>
+            <TabsTrigger value="reviews" className="py-2.5 rounded-lg data-[state=active]:bg-[#005EB8] data-[state=active]:text-white font-medium">
+              Ulasan
+            </TabsTrigger>
           </TabsList>
 
           {/* Curriculum Tab */}
           <TabsContent value="curriculum" className="space-y-6">
-            <Card className="border-gray-200 dark:border-gray-700">
-              <CardHeader>
+            <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
+              <CardHeader className="pb-3 border-b border-gray-200 dark:border-gray-700">
                 <div className="flex items-center justify-between">
                   <div>
-                    <CardTitle className="text-xl font-bold">Konten Kursus</CardTitle>
-                    <CardDescription>
+                    <CardTitle className="text-xl font-bold flex items-center gap-2 text-gray-900 dark:text-white">
+                      <BookOpen className="h-5 w-5 text-[#005EB8]" />
+                      Konten Kursus
+                    </CardTitle>
+                    <CardDescription className="mt-1">
                       {course.sections?.length || 0} section • {totalMaterials} materi • {formatDuration(course.total_duration)}
                     </CardDescription>
                   </div>
                 </div>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="p-6 space-y-4">
                 {course.sections && course.sections.length > 0 ? (
                   course.sections.map((section) => (
-                    <Card key={section.id} className="border-gray-200 dark:border-gray-700">
+                    <Card key={section.id} className="rounded-lg border bg-card text-card-foreground shadow-sm border-gray-200 dark:border-gray-700 overflow-hidden">
                       <button
                         onClick={() => toggleSection(section.id)}
                         className="w-full p-4 flex items-center justify-between text-left hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
                       >
                         <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 bg-[#005EB8] rounded-full flex items-center justify-center text-white text-sm font-bold">
+                          <div className="w-10 h-10 bg-[#005EB8] rounded-xl flex items-center justify-center text-white text-sm font-bold">
                             {section.order}
                           </div>
                           <div>
@@ -666,16 +645,16 @@ export default function CourseDetailPage() {
                       </button>
                       
                       {expandedSections.has(section.id) && (
-                        <div className="border-t border-gray-200 dark:border-gray-700 p-4 space-y-2">
+                        <div className="border-t border-gray-200 dark:border-gray-700 p-4 space-y-2 bg-gray-50/50 dark:bg-gray-800/30">
                           {section.materials.map((material) => (
                             <div
                               key={material.id}
-                              className="flex items-center gap-4 p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50"
+                              className="flex items-center gap-4 p-3 rounded-lg bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700"
                             >
-                              <div className="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
-                                <PlayCircle className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+                              <div className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
+                                <PlayCircle className="h-5 w-5 text-gray-600 dark:text-gray-400" />
                               </div>
-                              <div className="flex-1">
+                              <div className="flex-1 min-w-0">
                                 <p className="font-medium text-gray-900 dark:text-white">
                                   {material.title}
                                 </p>
@@ -684,7 +663,7 @@ export default function CourseDetailPage() {
                                 </p>
                               </div>
                               {material.is_free && (
-                                <Badge className="bg-[#008A00]">Gratis</Badge>
+                                <Badge className="bg-[#008A00] text-white border-0 pointer-events-none">Gratis</Badge>
                               )}
                             </div>
                           ))}
@@ -693,8 +672,10 @@ export default function CourseDetailPage() {
                     </Card>
                   ))
                 ) : (
-                  <div className="text-center py-8 text-gray-500">
-                    Belum ada konten kursus
+                  <div className="text-center py-12">
+                    <BookOpen className="h-16 w-16 text-gray-300 dark:text-gray-700 mx-auto mb-4" />
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Belum Ada Konten</h3>
+                    <p className="text-gray-500 dark:text-gray-400">Konten kursus akan segera tersedia</p>
                   </div>
                 )}
               </CardContent>
@@ -704,11 +685,14 @@ export default function CourseDetailPage() {
           {/* Overview Tab */}
           <TabsContent value="overview" className="space-y-6">
             <div className="grid lg:grid-cols-2 gap-8">
-              <Card className="border-gray-200 dark:border-gray-700">
-                <CardHeader>
-                  <CardTitle className="text-xl font-bold">Deskripsi</CardTitle>
+              <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
+                <CardHeader className="pb-3 border-b border-gray-200 dark:border-gray-700">
+                  <CardTitle className="text-xl font-bold flex items-center gap-2 text-gray-900 dark:text-white">
+                    <BookOpen className="h-5 w-5 text-[#005EB8]" />
+                    Deskripsi
+                  </CardTitle>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="p-6">
                   <p className="text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap">
                     {course.description}
                   </p>
@@ -717,14 +701,17 @@ export default function CourseDetailPage() {
 
               <div className="space-y-6">
                 {course.what_you_will_learn && course.what_you_will_learn.length > 0 && (
-                  <Card className="border-gray-200 dark:border-gray-700">
-                    <CardHeader>
-                      <CardTitle className="text-xl font-bold">Yang akan Anda pelajari</CardTitle>
+                  <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
+                    <CardHeader className="pb-3 border-b border-gray-200 dark:border-gray-700">
+                      <CardTitle className="text-xl font-bold flex items-center gap-2 text-gray-900 dark:text-white">
+                        <CheckCircle2 className="h-5 w-5 text-[#008A00]" />
+                        Yang akan Anda pelajari
+                      </CardTitle>
                     </CardHeader>
-                    <CardContent>
-                      <div className="grid gap-2">
+                    <CardContent className="p-6">
+                      <div className="grid gap-3">
                         {course.what_you_will_learn.map((item, index) => (
-                          <div key={index} className="flex items-start gap-2">
+                          <div key={index} className="flex items-start gap-3">
                             <CheckCircle2 className="h-5 w-5 text-[#008A00] mt-0.5 flex-shrink-0" />
                             <span className="text-gray-700 dark:text-gray-300">{item}</span>
                           </div>
@@ -735,14 +722,17 @@ export default function CourseDetailPage() {
                 )}
 
                 {course.requirements && course.requirements.length > 0 && (
-                  <Card className="border-gray-200 dark:border-gray-700">
-                    <CardHeader>
-                      <CardTitle className="text-xl font-bold">Persyaratan</CardTitle>
+                  <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
+                    <CardHeader className="pb-3 border-b border-gray-200 dark:border-gray-700">
+                      <CardTitle className="text-xl font-bold flex items-center gap-2 text-gray-900 dark:text-white">
+                        <Award className="h-5 w-5 text-[#F4B400]" />
+                        Persyaratan
+                      </CardTitle>
                     </CardHeader>
-                    <CardContent>
-                      <ul className="space-y-2">
+                    <CardContent className="p-6">
+                      <ul className="space-y-3">
                         {course.requirements.map((req, index) => (
-                          <li key={index} className="flex items-start gap-2 text-gray-700 dark:text-gray-300">
+                          <li key={index} className="flex items-start gap-3 text-gray-700 dark:text-gray-300">
                             <div className="w-2 h-2 bg-[#005EB8] rounded-full mt-2 flex-shrink-0"></div>
                             {req}
                           </li>
@@ -757,23 +747,26 @@ export default function CourseDetailPage() {
 
           {/* Reviews Tab */}
           <TabsContent value="reviews" className="space-y-6">
-            <Card className="border-gray-200 dark:border-gray-700">
-              <CardHeader>
-                <CardTitle className="text-xl font-bold">Ulasan Siswa</CardTitle>
+            <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
+              <CardHeader className="pb-3 border-b border-gray-200 dark:border-gray-700">
+                <CardTitle className="text-xl font-bold flex items-center gap-2 text-gray-900 dark:text-white">
+                  <Star className="h-5 w-5 text-[#F4B400]" />
+                  Ulasan Siswa
+                </CardTitle>
                 <CardDescription>
                   {course.total_reviews} ulasan
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-6">
+              <CardContent className="p-6 space-y-6">
                 {course.average_rating > 0 && (
-                  <Card className="bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800">
+                  <Card className="rounded-lg border bg-gradient-to-br from-[#005EB8]/5 to-[#005EB8]/10 border-[#005EB8]/20 dark:border-[#005EB8]/30">
                     <CardContent className="p-6">
                       <div className="flex items-center gap-8">
                         <div className="text-center">
                           <div className="text-5xl font-bold text-gray-900 dark:text-white">
                             {course.average_rating.toFixed(1)}
                           </div>
-                          <div className="flex items-center gap-1 mt-2">
+                          <div className="flex items-center gap-1 mt-2 justify-center">
                             {[...Array(5)].map((_, i) => (
                               <Star
                                 key={i}
@@ -797,14 +790,16 @@ export default function CourseDetailPage() {
                 {course.reviews && course.reviews.length > 0 ? (
                   <div className="space-y-4">
                     {course.reviews.map((review) => (
-                      <Card key={review.id} className="border-gray-200 dark:border-gray-700">
+                      <Card key={review.id} className="rounded-lg border bg-card text-card-foreground shadow-sm border-gray-200 dark:border-gray-700">
                         <CardContent className="p-6">
                           <div className="flex items-start gap-4">
                             <Avatar>
                               <AvatarImage src={review.user?.avatar_url || ''} />
-                              <AvatarFallback>{review.user?.full_name?.[0] || 'U'}</AvatarFallback>
+                              <AvatarFallback className="bg-[#005EB8] text-white">
+                                {review.user?.full_name?.[0] || 'U'}
+                              </AvatarFallback>
                             </Avatar>
-                            <div className="flex-1 space-y-2">
+                            <div className="flex-1 space-y-2 min-w-0">
                               <div className="flex items-start justify-between">
                                 <div>
                                   <p className="font-semibold text-gray-900 dark:text-white">
@@ -839,8 +834,10 @@ export default function CourseDetailPage() {
                     ))}
                   </div>
                 ) : (
-                  <div className="text-center py-8 text-gray-500">
-                    Belum ada ulasan
+                  <div className="text-center py-12">
+                    <Star className="h-16 w-16 text-gray-300 dark:text-gray-700 mx-auto mb-4" />
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Belum Ada Ulasan</h3>
+                    <p className="text-gray-500 dark:text-gray-400">Jadilah yang pertama memberikan ulasan!</p>
                   </div>
                 )}
               </CardContent>
@@ -849,28 +846,12 @@ export default function CourseDetailPage() {
         </Tabs>
       </div>
 
-      {/* Share Dialog */}
-      {showShareDialog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowShareDialog(false)}>
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4 p-6" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-gray-900 dark:text-white">Bagikan Kursus</h3>
-              <button onClick={() => setShowShareDialog(false)} className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">✕</button>
-            </div>
-            <p className="text-gray-600 dark:text-gray-400 mb-6">Bagikan kursus ini ke teman-teman Anda</p>
-            <div className="flex gap-2 mb-6">
-              <input type="text" readOnly value={typeof window !== 'undefined' ? `${window.location.origin}/courses/${course.slug || course.id}` : ''} className="flex-1 px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-900 text-sm" />
-              <Button onClick={handleCopyLink} variant="outline">{copied ? '✓ Tersalin!' : 'Salin'}</Button>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <Button variant="outline" onClick={shareToWhatsApp} className="hover:bg-green-50 hover:border-green-500 hover:text-green-600">📱 WhatsApp</Button>
-              <Button variant="outline" onClick={shareToTelegram} className="hover:bg-blue-50 hover:border-blue-500 hover:text-blue-600">✈️ Telegram</Button>
-              <Button variant="outline" onClick={shareToTwitter} className="hover:bg-sky-50 hover:border-sky-500 hover:text-sky-600">🐦 Twitter/X</Button>
-              <Button variant="outline" onClick={shareToFacebook} className="hover:bg-blue-50 hover:border-blue-600 hover:text-blue-700">📘 Facebook</Button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Share Course Modal */}
+      <ShareCourseModal
+        open={showShareModal}
+        onOpenChange={setShowShareModal}
+        course={course}
+      />
     </div>
   );
 }

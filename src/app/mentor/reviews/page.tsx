@@ -13,13 +13,20 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
   Star,
   Search,
   Loader2,
   ChevronLeft,
   ChevronRight,
   MessageSquare,
-  TrendingUp,
   ThumbsUp,
   Calendar,
   BookOpen,
@@ -27,14 +34,10 @@ import {
   StarOff,
   User,
   Award,
-  BarChart3,
-  Sparkles,
 } from "lucide-react";
 import Image from "next/image";
 import MentorLayout from "@/components/mentor/mentor-layout";
 import ProtectedRoute from "@/components/auth/protected-route";
-
-const API_BASE_URL = "http://localhost:3000/api";
 
 interface Review {
   id: string;
@@ -68,7 +71,7 @@ interface Pagination {
 const formatDate = (dateString: string) => {
   return new Date(dateString).toLocaleDateString("id-ID", {
     day: "numeric",
-    month: "long",
+    month: "short",
     year: "numeric",
   });
 };
@@ -109,7 +112,7 @@ export default function MentorReviewsPage() {
   const fetchCourses = useCallback(async () => {
     try {
       const token = getAuthToken();
-      const response = await fetch(`${API_BASE_URL}/mentors/courses`, {
+      const response = await fetch(`/api/mentors/courses`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (response.ok) {
@@ -137,7 +140,7 @@ export default function MentorReviewsPage() {
         limit: pagination.limit.toString(),
       });
 
-      const response = await fetch(`${API_BASE_URL}/mentors/reviews?${params}`, {
+      const response = await fetch(`/api/mentors/reviews?${params}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -200,7 +203,7 @@ export default function MentorReviewsPage() {
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
               <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-3">
-                <Star className="h-8 w-8 text-[#005EB8]" />
+                  <Star className="h-8 w-8 text-[#005EB8]" />
                 Ulasan Kursus
               </h1>
               <p className="text-gray-600 dark:text-gray-400">
@@ -265,209 +268,238 @@ export default function MentorReviewsPage() {
             </Card>
           </div>
 
-          <div className="space-y-6">
-            {/* Filters */}
-            <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
-              <CardContent className="p-6">
-                <div className="flex flex-col md:flex-row gap-4">
+          {/* Error */}
+          {error && (
+            <Card className="rounded-lg border bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-900">
+              <CardContent className="p-4">
+                <p className="text-[#D93025] dark:text-[#D93025]">{error}</p>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Reviews Table Card */}
+          <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 border-gray-200 dark:border-gray-700 overflow-hidden">
+            <CardHeader className="pb-4 border-b border-gray-200 dark:border-gray-700">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div>
+                  <CardTitle className="text-xl font-bold flex items-center gap-2 text-gray-900 dark:text-white">
+                    <MessageSquare className="h-5 w-5 text-[#005EB8]" />
+                    Daftar Ulasan
+                  </CardTitle>
+                  <CardDescription className="mt-1">
+                    {filteredReviews.length} ulasan ditemukan
+                  </CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              {/* Filters */}
+              <div className="p-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50">
+                <div className="flex flex-col md:flex-row gap-3">
                   <div className="flex-1 relative">
                     <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                     <Input
-                      placeholder="Cari ulasan berdasarkan nama siswa, komentar, atau judul kursus..."
+                      placeholder="Cari ulasan berdasarkan nama, komentar, atau kursus..."
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
-                      className="pl-10 border-gray-300 dark:border-gray-600 focus:border-[#005EB8] focus:ring-[#005EB8]"
+                      className="pl-10 h-10 bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600"
                     />
                   </div>
-                  <div className="flex gap-2">
-                    <Select value={courseFilter} onValueChange={setCourseFilter}>
-                      <SelectTrigger className="w-[180px] border-gray-300 dark:border-gray-600 focus:border-[#005EB8] focus:ring-[#005EB8]">
-                        <BookOpen className="h-4 w-4 mr-2" />
-                        <SelectValue placeholder="Kursus" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">Semua Kursus</SelectItem>
-                        {courses.map((course) => (
-                          <SelectItem key={course.id} value={course.id}>
-                            {course.title}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Select value={ratingFilter} onValueChange={setRatingFilter}>
-                      <SelectTrigger className="w-[150px] border-gray-300 dark:border-gray-600 focus:border-[#005EB8] focus:ring-[#005EB8]">
-                        <Star className="h-4 w-4 mr-2" />
-                        <SelectValue placeholder="Rating" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">Semua Rating</SelectItem>
-                        {[5, 4, 3, 2, 1].map((r) => (
-                          <SelectItem key={r} value={r.toString()}>
-                            {r} Bintang
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Error */}
-            {error && (
-              <Card className="rounded-lg border bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-900">
-                <CardContent className="p-4">
-                  <p className="text-[#D93025] dark:text-[#D93025]">{error}</p>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Reviews */}
-            <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
-              <CardHeader className="flex flex-row items-center justify-between">
-                <div>
-                  <CardTitle className="text-gray-900 dark:text-white text-xl font-bold">Daftar Ulasan</CardTitle>
-                  <CardDescription>Ulasan dari siswa untuk kursus Anda</CardDescription>
-                </div>
-                <Badge className="bg-[#005EB8] text-white border border-[#005EB8] pointer-events-none">
-                  {filteredReviews.length} ulasan
-                </Badge>
-              </CardHeader>
-              <CardContent>
-                {filteredReviews.length === 0 ? (
-                  <div className="text-center py-12">
-                    <div className="h-20 w-20 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center mx-auto mb-4">
-                      <StarOff className="h-10 w-10 text-gray-400 dark:text-gray-600" />
-                    </div>
-                    <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">Belum Ada Ulasan</h3>
-                    <p className="text-gray-600 dark:text-gray-400 mb-6">
-                      {searchTerm || courseFilter !== "all" || ratingFilter !== "all"
-                        ? "Tidak ada ulasan yang cocok dengan filter"
-                        : "Ulasan akan muncul setelah siswa memberikan review"}
-                    </p>
-                    {(searchTerm || courseFilter !== "all" || ratingFilter !== "all") && (
-                      <Button 
-                        variant="outline"
-                        className="border-gray-300 dark:border-gray-600"
-                        onClick={() => {
-                          setSearchTerm("");
-                          setCourseFilter("all");
-                          setRatingFilter("all");
-                        }}
-                      >
-                        Reset Filter
-                      </Button>
-                    )}
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {filteredReviews.map((review) => (
-                      <Card key={review.id} className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
-                        <CardContent className="p-6">
-                          <div className="flex flex-col md:flex-row gap-4">
-                            {/* Avatar */}
-                            <div className="flex flex-col items-center gap-2 md:w-16 flex-shrink-0">
-                              {review.is_anonymous ? (
-                                <div className="w-14 h-14 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
-                                  <User className="h-7 w-7 text-gray-500 dark:text-gray-400" />
-                                </div>
-                              ) : review.user.avatar_url ? (
-                                <div className="relative w-14 h-14 rounded-full overflow-hidden">
-                                  <Image
-                                    src={review.user.avatar_url.startsWith("/") ? `/api${review.user.avatar_url}` : review.user.avatar_url}
-                                    alt={review.user.full_name}
-                                    fill
-                                    className="object-cover"
-                                  />
-                                </div>
-                              ) : (
-                                <div className="w-14 h-14 rounded-full bg-[#005EB8] flex items-center justify-center text-white font-semibold text-lg">
-                                  {review.user.full_name.charAt(0).toUpperCase()}
-                                </div>
-                              )}
-                              <div className="text-center">
-                                <RatingStars rating={review.rating} size="sm" />
-                              </div>
-                            </div>
-
-                            {/* Content */}
-                            <div className="flex-1 min-w-0">
-                              <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-3">
-                                <div className="flex-1">
-                                  <h4 className="font-semibold text-gray-900 dark:text-white">
-                                    {review.is_anonymous ? "Anonim" : review.user.full_name}
-                                  </h4>
-                                  <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400 text-sm mt-1">
-                                    <BookOpen className="h-4 w-4" />
-                                    <span className="truncate">{review.course.title}</span>
-                                  </div>
-                                </div>
-                                <div className="flex flex-col items-start md:items-end gap-1">
-                                  <div className="flex items-center gap-1 text-gray-500 dark:text-gray-400 text-sm">
-                                    <Calendar className="h-4 w-4" />
-                                    {formatDate(review.created_at)}
-                                  </div>
-                                  {review.is_anonymous && (
-                                    <Badge className="bg-[#F4B400]/10 text-[#F4B400] border border-[#F4B400]/20 pointer-events-none text-xs">
-                                      Anonim
-                                    </Badge>
-                                  )}
-                                </div>
-                              </div>
-
-                              {review.comment && (
-                                <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 mb-3">
-                                  <p className="text-gray-700 dark:text-gray-300">{review.comment}</p>
-                                </div>
-                              )}
-
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-                                  <div className="flex items-center gap-1">
-                                    <ThumbsUp className="h-4 w-4" />
-                                    <span>{review.helpful_count} orang terbantu</span>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
+                  <Select value={courseFilter} onValueChange={setCourseFilter}>
+                    <SelectTrigger className="w-full md:w-[180px] h-10 bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600">
+                      <Filter className="h-4 w-4 mr-2 text-gray-400" />
+                      <SelectValue placeholder="Kursus" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-[300px]">
+                      <SelectItem value="all" className="truncate">
+                        Semua Kursus
+                      </SelectItem>
+                      {courses.map((course) => (
+                        <SelectItem key={course.id} value={course.id} className="truncate">
+                          {course.title}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select value={ratingFilter} onValueChange={setRatingFilter}>
+                    <SelectTrigger className="w-full md:w-[150px] h-10 bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600">
+                      <Star className="h-4 w-4 mr-2 text-gray-400" />
+                      <SelectValue placeholder="Rating" />
+                    </SelectTrigger>
+                    <SelectContent className="w-full">
+                      <SelectItem value="all" className="truncate">
+                        Semua Rating
+                      </SelectItem>
+                      {[5, 4, 3, 2, 1].map((r) => (
+                        <SelectItem key={r} value={r.toString()} className="truncate">
+                          <div className="flex items-center gap-2">
+                            <RatingStars rating={r} size="sm" />
                           </div>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
-                )}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
 
-                {/* Pagination */}
-                {pagination.totalPages > 1 && (
-                  <div className="flex items-center justify-between mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
-                    <p className="text-sm text-gray-500 dark:text-gray-400">
-                      Halaman {pagination.page} dari {pagination.totalPages} • Total {totalReviews} ulasan
-                    </p>
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={pagination.page === 1 || loading}
-                        onClick={() => setPagination((prev) => ({ ...prev, page: prev.page - 1 }))}
-                        className="border-gray-300 dark:border-gray-600"
-                      >
-                        <ChevronLeft className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={pagination.page === pagination.totalPages || loading}
-                        onClick={() => setPagination((prev) => ({ ...prev, page: prev.page + 1 }))}
-                        className="border-gray-300 dark:border-gray-600"
-                      >
-                        <ChevronRight className="h-4 w-4" />
-                      </Button>
-                    </div>
+              {/* Table */}
+              {filteredReviews.length === 0 ? (
+                <div className="text-center py-12">
+                  <div className="h-20 w-20 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center mx-auto mb-4">
+                    <StarOff className="h-10 w-10 text-gray-400 dark:text-gray-600" />
                   </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
+                  <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">Belum Ada Ulasan</h3>
+                  <p className="text-gray-600 dark:text-gray-400 mb-4">
+                    {searchTerm || courseFilter !== "all" || ratingFilter !== "all"
+                      ? "Tidak ada ulasan yang cocok dengan filter"
+                      : "Ulasan akan muncul setelah siswa memberikan review"}
+                  </p>
+                  {(searchTerm || courseFilter !== "all" || ratingFilter !== "all") && (
+                    <Button 
+                      variant="outline"
+                      className="border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10 dark:border-[#005EB8] dark:text-[#005EB8]"
+                      onClick={() => {
+                        setSearchTerm("");
+                        setCourseFilter("all");
+                        setRatingFilter("all");
+                      }}
+                    >
+                      Reset Filter
+                    </Button>
+                  )}
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table className="min-w-full">
+                    <TableHeader>
+                      <TableRow className="bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                        <TableHead className="font-semibold text-gray-700 dark:text-gray-300 w-[180px] px-4 py-3">
+                          Siswa
+                        </TableHead>
+                        <TableHead className="font-semibold text-gray-700 dark:text-gray-300 w-[180px] px-4 py-3">
+                          Kursus
+                        </TableHead>
+                        <TableHead className="font-semibold text-gray-700 dark:text-gray-300 w-[100px] px-4 py-3 text-center">
+                          Rating
+                        </TableHead>
+                        <TableHead className="font-semibold text-gray-700 dark:text-gray-300 px-4 py-3">
+                          Komentar
+                        </TableHead>
+                        <TableHead className="font-semibold text-gray-700 dark:text-gray-300 w-[100px] px-4 py-3 text-center">
+                          Helpful
+                        </TableHead>
+                        <TableHead className="font-semibold text-gray-700 dark:text-gray-300 w-[120px] px-4 py-3">
+                          Tanggal
+                        </TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredReviews.map((review) => (
+                        <TableRow key={review.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors">
+                          <TableCell className="px-4 py-3">
+                            <div className="flex items-center gap-3">
+                              <div className="flex-shrink-0">
+                                {review.is_anonymous ? (
+                                  <div className="w-10 h-10 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
+                                    <User className="h-5 w-5 text-gray-500 dark:text-gray-400" />
+                                  </div>
+                                ) : review.user.avatar_url ? (
+                                  <div className="relative w-10 h-10 rounded-full overflow-hidden">
+                                    <Image
+                                      src={review.user.avatar_url.startsWith("/") ? `/api${review.user.avatar_url}` : review.user.avatar_url}
+                                      alt={review.user.full_name}
+                                      fill
+                                      className="object-cover"
+                                    />
+                                  </div>
+                                ) : (
+                                  <div className="w-10 h-10 rounded-full bg-[#005EB8] flex items-center justify-center text-white font-semibold">
+                                    {review.user.full_name.charAt(0).toUpperCase()}
+                                  </div>
+                                )}
+                              </div>
+                              <div className="min-w-0">
+                                <p className="font-medium text-gray-900 dark:text-white truncate" title={review.is_anonymous ? "Anonim" : review.user.full_name}>
+                                  {review.is_anonymous ? "Anonim" : review.user.full_name}
+                                </p>
+                                {review.is_anonymous && (
+                                  <Badge className="bg-[#F4B400]/10 text-[#F4B400] border border-[#F4B400]/20 pointer-events-none text-xs mt-1">
+                                    Anonim
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell className="px-4 py-3">
+                            <div className="min-w-0">
+                              <p className="text-sm text-gray-900 dark:text-white truncate flex items-center gap-1" title={review.course.title}>
+                                {review.course.title}
+                              </p>
+                            </div>
+                          </TableCell>
+                          <TableCell className="px-4 py-3">
+                            <div className="flex justify-center">
+                              <RatingStars rating={review.rating} size="sm" />
+                            </div>
+                          </TableCell>
+                          <TableCell className="px-4 py-3">
+                            <div className="min-w-0 max-w-[300px]">
+                              {review.comment ? (
+                                <p className="text-sm text-gray-700 dark:text-gray-300 line-clamp-2" title={review.comment}>
+                                  {review.comment}
+                                </p>
+                              ) : (
+                                <span className="text-sm text-gray-400 dark:text-gray-500 italic">Tidak ada komentar</span>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell className="px-4 py-3">
+                            <div className="flex items-center justify-center gap-1 text-sm text-gray-600 dark:text-gray-400">
+                              <span>{review.helpful_count}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="px-4 py-3">
+                            <div className="flex items-center gap-1 text-sm text-gray-600 dark:text-gray-400">
+                              {formatDate(review.created_at)}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+
+              {/* Pagination */}
+              {pagination.totalPages > 1 && (
+                <div className="flex items-center justify-between p-4 border-t border-gray-200 dark:border-gray-700">
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    Halaman {pagination.page} dari {pagination.totalPages} • Total {totalReviews} ulasan
+                  </p>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={pagination.page === 1 || loading}
+                      onClick={() => setPagination((prev) => ({ ...prev, page: prev.page - 1 }))}
+                      className="border-gray-300 dark:border-gray-600"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={pagination.page === pagination.totalPages || loading}
+                      onClick={() => setPagination((prev) => ({ ...prev, page: prev.page + 1 }))}
+                      className="border-gray-300 dark:border-gray-600"
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
       </MentorLayout>
     </ProtectedRoute>

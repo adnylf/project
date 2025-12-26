@@ -27,8 +27,6 @@ import { SectionModal } from "@/components/modal/section-modal";
 import { MaterialModal } from "@/components/modal/material-modal";
 import SweetAlert, { AlertType } from "@/components/ui/sweet-alert";
 
-const API_BASE_URL = "http://localhost:3000/api";
-
 type MaterialType = "VIDEO" | "DOCUMENT" | "QUIZ" | "ASSIGNMENT";
 type VideoStatus = "UPLOADING" | "PROCESSING" | "COMPLETED" | "FAILED";
 
@@ -147,7 +145,7 @@ export default function SectionsPage() {
       }
 
       // Fetch course details
-      const courseResponse = await fetch(`${API_BASE_URL}/courses/${courseId}`, {
+      const courseResponse = await fetch(`/api/courses/${courseId}`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -161,7 +159,7 @@ export default function SectionsPage() {
       setCourse(courseResult.data || courseResult.course || courseResult);
 
       // Fetch sections
-      const sectionsResponse = await fetch(`${API_BASE_URL}/courses/${courseId}/sections`, {
+      const sectionsResponse = await fetch(`/api/courses/${courseId}/sections`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -236,7 +234,7 @@ export default function SectionsPage() {
 
       if (editingSection) {
         // Update existing section
-        const response = await fetch(`${API_BASE_URL}/sections/${editingSection.id}`, {
+        const response = await fetch(`/api/sections/${editingSection.id}`, {
           method: "PUT",
           headers: {
             Authorization: `Bearer ${token}`,
@@ -263,7 +261,7 @@ export default function SectionsPage() {
         setShowAlert(true);
       } else {
         // Create new section
-        const response = await fetch(`${API_BASE_URL}/courses/${courseId}/sections`, {
+        const response = await fetch(`/api/courses/${courseId}/sections`, {
           method: "POST",
           headers: {
             Authorization: `Bearer ${token}`,
@@ -369,7 +367,7 @@ export default function SectionsPage() {
           const uploadFormData = new FormData();
           uploadFormData.append('file', selectedDocumentFile);
           
-          const uploadResponse = await fetch(`${API_BASE_URL}/uploads/documents`, {
+          const uploadResponse = await fetch(`/api/uploads/documents`, {
             method: 'POST',
             headers: {
               'Authorization': `Bearer ${token}`,
@@ -403,7 +401,7 @@ export default function SectionsPage() {
 
       if (editingMaterial) {
         // Update existing material
-        const response = await fetch(`${API_BASE_URL}/materials/${editingMaterial.id}`, {
+        const response = await fetch(`/api/materials/${editingMaterial.id}`, {
           method: "PUT",
           headers: {
             Authorization: `Bearer ${token}`,
@@ -435,7 +433,7 @@ export default function SectionsPage() {
         setShowAlert(true);
       } else {
         // Create new material
-        const response = await fetch(`${API_BASE_URL}/sections/${selectedSectionId}/materials`, {
+        const response = await fetch(`/api/sections/${selectedSectionId}/materials`, {
           method: "POST",
           headers: {
             Authorization: `Bearer ${token}`,
@@ -520,7 +518,7 @@ export default function SectionsPage() {
           reject(new Error("Upload gagal"));
         });
 
-        xhr.open("POST", `${API_BASE_URL}/videos/upload`);
+        xhr.open("POST", `/api/videos/upload`);
         xhr.setRequestHeader("Authorization", `Bearer ${token}`);
         xhr.send(formData);
       });
@@ -556,8 +554,8 @@ export default function SectionsPage() {
 
       const endpoint =
         deleteTarget.type === "section"
-          ? `${API_BASE_URL}/sections/${deleteTarget.id}`
-          : `${API_BASE_URL}/materials/${deleteTarget.id}`;
+          ? `/api/sections/${deleteTarget.id}`
+          : `/api/materials/${deleteTarget.id}`;
 
       const response = await fetch(endpoint, {
         method: "DELETE",
@@ -915,7 +913,12 @@ export default function SectionsPage() {
                               )}
                               {material.type === "QUIZ" && (
                                 <Link href={`/mentor/courses/${courseId}/materials/${material.id}/quiz`}>
-                                  <Button variant="outline" size="sm" className="border-[#005EB8] text-[#005EB8]">
+                                  {/* Button Kelola Quiz - Style diubah seperti button Lihat Semua di dashboard */}
+                                  <Button 
+                                    variant="outline" 
+                                    size="sm" 
+                                    className="border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10 dark:border-[#005EB8] dark:text-[#005EB8]"
+                                  >
                                     <HelpCircle className="h-4 w-4 mr-1" />
                                     Kelola Quiz
                                   </Button>

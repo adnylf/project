@@ -7,127 +7,149 @@ import {
   ArrowRight, 
   Play, 
   Users, 
-  Trophy, 
-  BookOpen 
+  Award, 
+  BookOpen,
+  GraduationCap,
+  CheckCircle
 } from "lucide-react";
 import { NumberTicker } from "@/components/ui/number-ticker";
 
 export default function HeroSection() {
   return (
-    <section className="relative overflow-hidden bg-white dark:bg-gray-900">
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 lg:py-8">
+    <section className="relative overflow-hidden bg-gradient-to-b from-gray-50 to-white dark:from-gray-900 dark:to-gray-900">
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-12 lg:py-16">
         <div className="grid lg:grid-cols-2 gap-12 items-center">
-          <div className="space-y-8 animate-fadeIn">
+          {/* Left Content */}
+          <div className="space-y-6 animate-fadeIn">
+            {/* Badge */}
             <div className="inline-block">
-              <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary text-sm font-medium">
-                <Trophy className="h-4 w-4" />
-                Platform Pembelajaran Inklusif
+              <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#005EB8]/10 text-[#005EB8] text-sm font-medium border border-[#005EB8]/20">
+                <GraduationCap className="h-4 w-4" />
+                Platform Pembelajaran Inklusif #1
               </span>
             </div>
 
+            {/* Heading */}
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-gray-900 dark:text-white leading-tight">
               Belajar Tanpa Batas untuk{" "}
-              <span className="text-primary">Semua Orang</span>
+              <span className="text-[#005EB8]">Semua Orang</span>
             </h1>
 
-            <p className="text-lg text-gray-600 dark:text-gray-400 leading-relaxed">
+            {/* Description */}
+            <p className="text-lg text-gray-600 dark:text-gray-400 leading-relaxed max-w-xl">
               Platform pembelajaran online yang dirancang khusus dengan fitur
               aksesibilitas lengkap. Belajar dengan nyaman sesuai kebutuhan
               Anda, kapan saja dan di mana saja.
             </p>
 
-            {/* Updated Button Container */}
-            <div className="flex flex-wrap gap-4">
-              <Link href="/register" className="flex-1 min-w-[200px]">
-                <NeuButton className="group flex items-center justify-center gap-2 w-full">
+            {/* Features List */}
+            <div className="flex flex-wrap gap-4 text-sm text-gray-600 dark:text-gray-400">
+              <div className="flex items-center gap-2">
+                <CheckCircle className="h-4 w-4 text-[#008A00]" />
+                <span>Screen Reader Support</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <CheckCircle className="h-4 w-4 text-[#008A00]" />
+                <span>Subtitle Lengkap</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <CheckCircle className="h-4 w-4 text-[#008A00]" />
+                <span>Sertifikat Resmi</span>
+              </div>
+            </div>
+
+            {/* CTA Buttons */}
+            <div className="flex flex-wrap gap-4 pt-2">
+              <Link href="/register">
+                <NeuButton className="group flex items-center justify-center gap-2">
                   Mulai Belajar Gratis
-                  <ArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-1" />
+                  <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
                 </NeuButton>
               </Link>
-              <Link href="/courses" className="flex-1 min-w-[200px]">
-                <NeuButton className="group flex items-center justify-center gap-2 w-full">
-                  <Play className="h-5 w-5" />
+              <Link href="/courses">
+                <NeuButton className="group flex items-center justify-center gap-2">
+                  <Play className="h-4 w-4" />
                   Jelajahi Kursus
                 </NeuButton>
               </Link>
             </div>
 
-            {/* Updated Statistics Section */}
-            <div className="grid grid-cols-3 gap-2 sm:gap-6 pt-8 border-t">
-              <div className="space-y-1 text-center">
-                <div className="stat-number text-2xl sm:text-3xl">
+            {/* Stats Row */}
+            <div className="grid grid-cols-3 gap-4 pt-6 border-t border-gray-200 dark:border-gray-700">
+              <div className="text-center">
+                <div className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
                   <NumberTicker value={10000} />+
                 </div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Siswa Aktif
-                </p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Siswa Aktif</p>
               </div>
-              <div className="space-y-1 text-center">
-                <div className="stat-number text-2xl sm:text-3xl">
+              <div className="text-center">
+                <div className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
                   <NumberTicker value={500} />+
                 </div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Kursus
-                </p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Kursus</p>
               </div>
-              <div className="space-y-1 text-center">
-                <div className="stat-number text-2xl sm:text-3xl">
+              <div className="text-center">
+                <div className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
                   <NumberTicker value={95} />%
                 </div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Kepuasan
-                </p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Kepuasan</p>
               </div>
             </div>
           </div>
 
+          {/* Right Content - Cards */}
           <div className="relative animate-fadeIn delay-200">
-            {/* Card Utama */}
-            <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 overflow-hidden">
+            {/* Main Card */}
+            <Card className="rounded-lg border bg-white dark:bg-gray-800 shadow-sm hover:shadow-md transition-all duration-300 border-gray-200 dark:border-gray-700 overflow-hidden">
               <div className="aspect-[4/3] w-full overflow-hidden">
-                <div className="w-full h-full bg-gradient-to-br from-primary/20 to-success/20 flex items-center justify-center">
+                <div className="w-full h-full bg-gradient-to-br from-[#005EB8]/10 via-[#008A00]/10 to-[#F4B400]/10 flex items-center justify-center">
                   <div className="text-center space-y-4 p-8">
-                    <BookOpen className="h-24 w-24 mx-auto text-primary animate-float" />
-                    <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                    <div className="h-20 w-20 mx-auto rounded-lg bg-[#005EB8]/10 flex items-center justify-center">
+                      <BookOpen className="h-12 w-12 text-[#005EB8] animate-float" />
+                    </div>
+                    <p className="text-xl font-bold text-gray-900 dark:text-white">
                       Akses Pembelajaran Inklusif
+                    </p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      Dirancang untuk semua kemampuan
                     </p>
                   </div>
                 </div>
               </div>
             </Card>
 
-            {/* Card Kecil Kanan Bawah - Diperbaiki untuk mobile/tablet */}
-            <Card className="absolute -bottom-4 -right-4 lg:-bottom-6 lg:-right-6 animate-scaleIn delay-400 rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 w-[180px] sm:w-[200px] lg:w-auto">
-              <CardContent className="p-3 sm:p-4">
-                <div className="flex items-center gap-2 sm:gap-3">
-                  <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-full bg-success/10 flex items-center justify-center flex-shrink-0">
-                    <Users className="h-4 w-4 sm:h-5 sm:w-5 text-success" />
+            {/* Floating Card - Bottom Right */}
+            <Card className="absolute -bottom-4 -right-4 lg:-bottom-6 lg:-right-6 animate-scaleIn delay-400 rounded-lg border bg-white dark:bg-gray-800 shadow-sm hover:shadow-md transition-all duration-300 border-gray-200 dark:border-gray-700 w-[180px] sm:w-[200px]">
+              <CardContent className="p-3">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-lg bg-[#008A00]/10 flex items-center justify-center flex-shrink-0">
+                    <Users className="h-5 w-5 text-[#008A00]" />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-xs sm:text-sm font-medium text-gray-900 dark:text-white truncate">
+                    <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">
                       Komunitas Aktif
                     </p>
-                    <p className="text-xs text-gray-600 dark:text-gray-400 truncate">
-                      Bergabung bersama ribuan pelajar
+                    <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                      10,000+ pelajar
                     </p>
                   </div>
                 </div>
               </CardContent>
             </Card>
 
-            {/* Card Kecil Kiri Atas - Diperbaiki untuk mobile/tablet */}
-            <Card className="absolute -top-4 -left-4 lg:-top-6 lg:-left-6 animate-scaleIn delay-300 rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 w-[180px] sm:w-[200px] lg:w-auto">
-              <CardContent className="p-3 sm:p-4">
-                <div className="flex items-center gap-2 sm:gap-3">
-                  <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-full bg-accent/10 flex items-center justify-center flex-shrink-0">
-                    <Trophy className="h-4 w-4 sm:h-5 sm:w-5 text-accent" />
+            {/* Floating Card - Top Left */}
+            <Card className="absolute -top-4 -left-4 lg:-top-6 lg:-left-6 animate-scaleIn delay-300 rounded-lg border bg-white dark:bg-gray-800 shadow-sm hover:shadow-md transition-all duration-300 border-gray-200 dark:border-gray-700 w-[180px] sm:w-[200px]">
+              <CardContent className="p-3">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-lg bg-[#F4B400]/10 flex items-center justify-center flex-shrink-0">
+                    <Award className="h-5 w-5 text-[#F4B400]" />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-xs sm:text-sm font-medium text-gray-900 dark:text-white truncate">
+                    <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">
                       Sertifikat Resmi
                     </p>
-                    <p className="text-xs text-gray-600 dark:text-gray-400 truncate">
-                      Dapatkan pengakuan kemampuan
+                    <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                      Diakui industri
                     </p>
                   </div>
                 </div>

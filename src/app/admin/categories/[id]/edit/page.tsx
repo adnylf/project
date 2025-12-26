@@ -30,8 +30,6 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 
-const API_BASE_URL = 'http://localhost:3000/api';
-
 interface Category {
   id: string;
   name: string;
@@ -111,7 +109,7 @@ export default function EditCategory() {
         }
 
         // Fetch current category
-        const categoryResponse = await fetch(`${API_BASE_URL}/admin/categories/${categoryId}`, {
+        const categoryResponse = await fetch(`/api/admin/categories/${categoryId}`, {
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -133,7 +131,7 @@ export default function EditCategory() {
         });
 
         // Fetch all categories for parent dropdown
-        const categoriesResponse = await fetch(`${API_BASE_URL}/admin/categories`, {
+        const categoriesResponse = await fetch(`/api/admin/categories`, {
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -187,7 +185,7 @@ export default function EditCategory() {
         is_active: formData.is_active,
       };
 
-      const response = await fetch(`${API_BASE_URL}/admin/categories/${categoryId}`, {
+      const response = await fetch(`/api/admin/categories/${categoryId}`, {
         method: 'PUT',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -239,7 +237,7 @@ export default function EditCategory() {
       setDeleting(true);
       const token = getAuthToken();
 
-      const response = await fetch(`${API_BASE_URL}/admin/categories/${categoryId}`, {
+      const response = await fetch(`/api/admin/categories/${categoryId}`, {
         method: 'DELETE',
         headers: {
           Authorization: `Bearer ${token}`,

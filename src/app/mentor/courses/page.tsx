@@ -32,8 +32,7 @@ import {
 } from '@/components/ui/select';
 import { CoursesModal } from '@/components/modal/courses-modal';
 import SweetAlert, { AlertType } from '@/components/ui/sweet-alert';
-
-const API_BASE_URL = 'http://localhost:3000/api';
+import Pagination from '@/components/ui/pagination'; // Import komponen pagination
 
 type CourseStatus = 'DRAFT' | 'PENDING_REVIEW' | 'PUBLISHED' | 'ARCHIVED';
 
@@ -78,6 +77,13 @@ const RatingStars = ({ rating, size = "sm" }: { rating: number; size?: "sm" | "m
   );
 };
 
+interface PaginationData {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
 export default function MentorCourses() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
@@ -85,6 +91,12 @@ export default function MentorCourses() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [sortBy, setSortBy] = useState('recent');
+  const [pagination, setPagination] = useState<PaginationData>({
+    page: 1,
+    limit: 12, // Changed to 12 items per page
+    total: 0,
+    totalPages: 0,
+  });
   
   // Submit modal state
   const [submitModalOpen, setSubmitModalOpen] = useState(false);
@@ -130,8 +142,8 @@ export default function MentorCourses() {
 
       // Build query params
       const params = new URLSearchParams({
-        page: '1',
-        limit: '50',
+        page: pagination.page.toString(),
+        limit: pagination.limit.toString(),
         sortBy: 'created_at',
         sortOrder: 'desc',
       });
@@ -142,7 +154,7 @@ export default function MentorCourses() {
       }
 
       // Use dedicated mentor courses endpoint
-      const response = await fetch(`${API_BASE_URL}/mentors/courses?${params.toString()}`, {
+      const response = await fetch(`/api/mentors/courses?${params.toString()}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -164,16 +176,23 @@ export default function MentorCourses() {
         status: course.status || 'DRAFT' as CourseStatus,
       }));
       setCourses(coursesWithStatus);
+      
+      // Update pagination state
+      setPagination(prev => ({
+        ...prev,
+        total: data.pagination?.total || coursesArray.length,
+        totalPages: data.pagination?.totalPages || 1,
+      }));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Terjadi kesalahan');
     } finally {
       setLoading(false);
     }
-  }, [getAuthToken, filterStatus]);
+  }, [getAuthToken, filterStatus, pagination.page, pagination.limit]);
 
   useEffect(() => {
     fetchCourses();
-  }, [fetchCourses]);
+  }, [fetchCourses, pagination.page]);
 
   // Filter and sort courses locally
   const filteredCourses = courses
@@ -256,7 +275,7 @@ export default function MentorCourses() {
       setDeleting(true);
       const token = getAuthToken();
       
-      const response = await fetch(`${API_BASE_URL}/courses/${courseToDelete.id}`, {
+      const response = await fetch(`/api/courses/${courseToDelete.id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -302,7 +321,7 @@ export default function MentorCourses() {
       const token = getAuthToken();
       
       // Use the publish endpoint which validates course content and sets PENDING_REVIEW for mentors
-      const response = await fetch(`${API_BASE_URL}/courses/${selectedCourse.id}/publish`, {
+      const response = await fetch(`/api/courses/${selectedCourse.id}/publish`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -343,6 +362,11 @@ export default function MentorCourses() {
     } finally {
       setSubmitLoading(false);
     }
+  };
+
+  // Handle page change
+  const handlePageChange = (newPage: number) => {
+    setPagination(prev => ({ ...prev, page: newPage }));
   };
 
   // Calculate stats
@@ -606,7 +630,7 @@ export default function MentorCourses() {
                 >
                   <div className="relative flex-shrink-0">
                     <img
-                      src={course.thumbnail || 'https://images.pexels.com/photos/11035380/pexels-photo-11035380.jpeg?auto=compress&cs=tinysrgb&w=800'}
+                      src={course.thumbnail || 'https://images.pexels.com/photos/11035380/pexels-photo-11035380.jpeg?auto=compress&cs=tinysrgb&w=800  '}
                       alt={course.title}
                       className="w-full aspect-video object-cover"
                     />
@@ -739,6 +763,18 @@ export default function MentorCourses() {
               ))
             )}
           </div>
+
+          {/* Pagination */}
+          {pagination.totalPages > 1 && (
+            <Pagination
+              currentPage={pagination.page}
+              totalPages={pagination.totalPages}
+              totalItems={pagination.total}
+              itemsPerPage={pagination.limit}
+              onPageChange={handlePageChange}
+              loading={loading}
+            />
+          )}
         </div>
 
         {/* Submit Modal only for submit action */}

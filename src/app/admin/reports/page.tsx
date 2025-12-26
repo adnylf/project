@@ -32,11 +32,18 @@ import {
   Filter,
   Eye,
   CheckCircle,
+  LineChart,
+  Target,
+  ShoppingBag,
+  Bookmark,
+  GraduationCap,
+  Crown,
+  BarChart,
+  FileBarChart,
+  ChartBar,
 } from "lucide-react";
 import AdminLayout from "@/components/admin/admin-layout";
 import ProtectedRoute from "@/components/auth/protected-route";
-
-const API_BASE_URL = "http://localhost:3000/api";
 
 interface RevenueReport {
   period: string;
@@ -126,9 +133,9 @@ export default function AdminReportsPage() {
       const headers = { Authorization: `Bearer ${token}` };
 
       const [revenueRes, usersRes, coursesRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/admin/reports/revenue?period=${period}`, { headers }),
-        fetch(`${API_BASE_URL}/admin/reports/users?period=${period}`, { headers }),
-        fetch(`${API_BASE_URL}/admin/reports/courses?period=${period}`, { headers }),
+        fetch(`/api/admin/reports/revenue?period=${period}`, { headers }),
+        fetch(`/api/admin/reports/users?period=${period}`, { headers }),
+        fetch(`/api/admin/reports/courses?period=${period}`, { headers }),
       ]);
 
       if (revenueRes.ok) setRevenueReport(await revenueRes.json());
@@ -303,7 +310,11 @@ export default function AdminReportsPage() {
                     {/* Revenue Trend */}
                     <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
                       <CardHeader>
-                        <CardTitle className="text-base text-gray-900 dark:text-white">Trend Pendapatan</CardTitle>
+                        <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-white text-xl font-bold">
+                          <LineChart className="h-5 w-5 text-[#005EB8]" />
+                          Trend Pendapatan
+                        </CardTitle>
+                        <CardDescription>Perkembangan pendapatan harian</CardDescription>
                       </CardHeader>
                       <CardContent>
                         {revenueReport.trend.length === 0 ? (
@@ -340,7 +351,11 @@ export default function AdminReportsPage() {
                     {/* Payment Methods */}
                     <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
                       <CardHeader>
-                        <CardTitle className="text-base text-gray-900 dark:text-white">Metode Pembayaran</CardTitle>
+                        <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-white text-xl font-bold">
+                          <CreditCard className="h-5 w-5 text-[#005EB8]" />
+                          Metode Pembayaran
+                        </CardTitle>
+                        <CardDescription>Distribusi berdasarkan metode pembayaran</CardDescription>
                       </CardHeader>
                       <CardContent>
                         {revenueReport.by_payment_method.length === 0 ? (
@@ -379,28 +394,33 @@ export default function AdminReportsPage() {
 
                   {/* Top Courses by Revenue */}
                   <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
-                    <CardHeader className="flex flex-row items-center justify-between">
-                      <CardTitle className="text-base text-gray-900 dark:text-white">Kursus dengan Pendapatan Tertinggi</CardTitle>
-                      {/* Button Export - Style diubah seperti button Lihat Semua di dashboard */}
+                    <CardHeader className="flex flex-row items-center justify-between pb-3 border-b">
+                      <div>
+                        <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-white text-xl font-bold">
+                          <ShoppingBag className="h-5 w-5 text-[#008A00]" />
+                          Kursus dengan Pendapatan Tertinggi
+                        </CardTitle>
+                        <CardDescription>Kursus dengan pendapatan terbesar</CardDescription>
+                      </div>
                       <Button 
                         variant="outline" 
                         size="sm" 
                         className="border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10 dark:border-[#005EB8] dark:text-[#005EB8]"
                       >
-                        <Download className="h-4 w-4 mr-1" />
-                        Export
+                        <Eye className="h-4 w-4 mr-1" />
+                        Lihat Semua
                       </Button>
                     </CardHeader>
-                    <CardContent>
+                    <CardContent className="p-0">
                       {revenueReport.top_courses.length === 0 ? (
                         <div className="text-center py-8">
                           <BookOpen className="h-12 w-12 text-gray-300 dark:text-gray-700 mx-auto mb-3" />
                           <p className="text-gray-500 dark:text-gray-400">Tidak ada data kursus</p>
                         </div>
                       ) : (
-                        <div className="space-y-3">
+                        <div className="divide-y divide-gray-200 dark:divide-gray-700">
                           {revenueReport.top_courses.slice(0, 5).map((course, i) => (
-                            <div key={course.course_id} className="flex items-center gap-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-750 transition-colors">
+                            <div key={course.course_id} className="flex items-center gap-4 p-4 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
                               <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-sm ${
                                 i === 0 ? "bg-[#F4B400]" : 
                                 i === 1 ? "bg-gray-500" : 
@@ -485,7 +505,11 @@ export default function AdminReportsPage() {
                     {/* Registration Trend */}
                     <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
                       <CardHeader>
-                        <CardTitle className="text-base text-gray-900 dark:text-white">Trend Registrasi</CardTitle>
+                        <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-white text-xl font-bold">
+                          <TrendingUpIcon className="h-5 w-5 text-[#005EB8]" />
+                          Trend Registrasi
+                        </CardTitle>
+                        <CardDescription>Pertumbuhan pengguna baru harian</CardDescription>
                       </CardHeader>
                       <CardContent>
                         {usersReport.registration_trend.length === 0 ? (
@@ -522,7 +546,11 @@ export default function AdminReportsPage() {
                     {/* Users by Role */}
                     <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
                       <CardHeader>
-                        <CardTitle className="text-base text-gray-900 dark:text-white">Distribusi Role</CardTitle>
+                        <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-white text-xl font-bold">
+                          <Filter className="h-5 w-5 text-[#005EB8]" />
+                          Distribusi Role
+                        </CardTitle>
+                        <CardDescription>Distribusi pengguna berdasarkan role</CardDescription>
                       </CardHeader>
                       <CardContent>
                         {usersReport.by_role.length === 0 ? (
@@ -567,12 +595,14 @@ export default function AdminReportsPage() {
 
                   {/* Top Learners */}
                   <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
-                    <CardHeader className="flex flex-row items-center justify-between">
-                      <CardTitle className="text-base text-gray-900 dark:text-white flex items-center gap-2">
-                        <Award className="h-5 w-5 text-[#F4B400]" />
-                        Top Learners
-                      </CardTitle>
-                      {/* Button Lihat Semua - Style diubah seperti button Lihat Semua di dashboard */}
+                    <CardHeader className="flex flex-row items-center justify-between pb-3 border-b">
+                      <div>
+                        <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-white text-xl font-bold">
+                          <Crown className="h-5 w-5 text-[#F4B400]" />
+                          Top Learners
+                        </CardTitle>
+                        <CardDescription>Pengguna dengan enrollment terbanyak</CardDescription>
+                      </div>
                       <Button 
                         variant="outline" 
                         size="sm" 
@@ -582,16 +612,16 @@ export default function AdminReportsPage() {
                         Lihat Semua
                       </Button>
                     </CardHeader>
-                    <CardContent>
+                    <CardContent className="p-0">
                       {usersReport.top_learners.length === 0 ? (
                         <div className="text-center py-8">
                           <Users className="h-12 w-12 text-gray-300 dark:text-gray-700 mx-auto mb-3" />
                           <p className="text-gray-500 dark:text-gray-400">Tidak ada data learners</p>
                         </div>
                       ) : (
-                        <div className="grid md:grid-cols-2 gap-3">
+                        <div className="divide-y divide-gray-200 dark:divide-gray-700">
                           {usersReport.top_learners.slice(0, 10).map((learner, i) => (
-                            <div key={learner.user?.id || i} className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-750 transition-colors">
+                            <div key={learner.user?.id || i} className="flex items-center gap-3 p-4 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
                               <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-sm ${
                                 i === 0 ? "bg-[#F4B400]" : 
                                 i === 1 ? "bg-gray-500" : 
@@ -686,22 +716,25 @@ export default function AdminReportsPage() {
                   <div className="grid lg:grid-cols-2 gap-6">
                     {/* Top Rated */}
                     <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
-                      <CardHeader>
-                        <CardTitle className="text-base text-gray-900 dark:text-white flex items-center gap-2">
-                          <Star className="h-5 w-5 text-[#F4B400]" />
-                          Rating Tertinggi
-                        </CardTitle>
+                      <CardHeader className="pb-3 border-b">
+                        <div>
+                          <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-white text-xl font-bold">
+                            <Star className="h-5 w-5 text-[#F4B400]" />
+                            Rating Tertinggi
+                          </CardTitle>
+                          <CardDescription>Kursus dengan rating terbaik</CardDescription>
+                        </div>
                       </CardHeader>
-                      <CardContent>
+                      <CardContent className="p-0">
                         {coursesReport.top_rated.length === 0 ? (
                           <div className="text-center py-8">
                             <Star className="h-12 w-12 text-gray-300 dark:text-gray-700 mx-auto mb-3" />
                             <p className="text-gray-500 dark:text-gray-400">Tidak ada data rating</p>
                           </div>
                         ) : (
-                          <div className="space-y-3">
+                          <div className="divide-y divide-gray-200 dark:divide-gray-700">
                             {coursesReport.top_rated.slice(0, 5).map((course, i) => (
-                              <div key={course.id} className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-750 transition-colors">
+                              <div key={course.id} className="flex items-center gap-3 p-4 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
                                 <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-sm ${
                                   i === 0 ? "bg-[#F4B400]" : 
                                   i === 1 ? "bg-gray-500" : 
@@ -729,22 +762,25 @@ export default function AdminReportsPage() {
 
                     {/* Most Enrolled */}
                     <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
-                      <CardHeader>
-                        <CardTitle className="text-base text-gray-900 dark:text-white flex items-center gap-2">
-                          <Users className="h-5 w-5 text-[#005EB8]" />
-                          Paling Populer
-                        </CardTitle>
+                      <CardHeader className="pb-3 border-b">
+                        <div>
+                          <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-white text-xl font-bold">
+                            <Users className="h-5 w-5 text-[#005EB8]" />
+                            Paling Populer
+                          </CardTitle>
+                          <CardDescription>Kursus dengan siswa terbanyak</CardDescription>
+                        </div>
                       </CardHeader>
-                      <CardContent>
+                      <CardContent className="p-0">
                         {coursesReport.most_enrolled.length === 0 ? (
                           <div className="text-center py-8">
                             <Users className="h-12 w-12 text-gray-300 dark:text-gray-700 mx-auto mb-3" />
                             <p className="text-gray-500 dark:text-gray-400">Tidak ada data enroll</p>
                           </div>
                         ) : (
-                          <div className="space-y-3">
+                          <div className="divide-y divide-gray-200 dark:divide-gray-700">
                             {coursesReport.most_enrolled.slice(0, 5).map((course, i) => (
-                              <div key={course.id} className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-750 transition-colors">
+                              <div key={course.id} className="flex items-center gap-3 p-4 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
                                 <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-sm ${
                                   i === 0 ? "bg-[#F4B400]" : 
                                   i === 1 ? "bg-gray-500" : 
@@ -772,7 +808,11 @@ export default function AdminReportsPage() {
                     {/* By Category */}
                     <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
                       <CardHeader>
-                        <CardTitle className="text-base text-gray-900 dark:text-white">Per Kategori</CardTitle>
+                        <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-white text-xl font-bold">
+                          <Bookmark className="h-5 w-5 text-[#005EB8]" />
+                          Per Kategori
+                        </CardTitle>
+                        <CardDescription>Distribusi kursus berdasarkan kategori</CardDescription>
                       </CardHeader>
                       <CardContent>
                         {coursesReport.by_category.length === 0 ? (
@@ -809,7 +849,11 @@ export default function AdminReportsPage() {
                     {/* By Level */}
                     <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
                       <CardHeader>
-                        <CardTitle className="text-base text-gray-900 dark:text-white">Per Level</CardTitle>
+                        <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-white text-xl font-bold">
+                          <GraduationCap className="h-5 w-5 text-[#005EB8]" />
+                          Per Level
+                        </CardTitle>
+                        <CardDescription>Distribusi kursus berdasarkan level kesulitan</CardDescription>
                       </CardHeader>
                       <CardContent>
                         {coursesReport.by_level.length === 0 ? (

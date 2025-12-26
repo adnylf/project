@@ -49,8 +49,6 @@ import {
 import { useParams } from "next/navigation";
 import ImageCropper from "@/components/modal/image-cropper";
 
-const API_BASE_URL = "http://localhost:3000/api";
-
 interface Category {
   id: string;
   name: string;
@@ -164,7 +162,7 @@ export default function EditCourse() {
     const fetchCategories = async () => {
       try {
         setLoadingCategories(true);
-        const response = await fetch(`${API_BASE_URL}/courses/categories`);
+        const response = await fetch(`/api/courses/categories`);
 
         if (!response.ok) {
           throw new Error("Gagal mengambil kategori");
@@ -230,7 +228,7 @@ export default function EditCourse() {
           return;
         }
 
-        const response = await fetch(`${API_BASE_URL}/courses/${courseId}`, {
+        const response = await fetch(`/api/courses/${courseId}`, {
           headers: {
             Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",
@@ -376,7 +374,7 @@ export default function EditCourse() {
         tags: formData.tags,
       };
 
-      const response = await fetch(`${API_BASE_URL}/courses/${courseId}`, {
+      const response = await fetch(`/api/courses/${courseId}`, {
         method: "PUT",
         headers: {
           Authorization: `Bearer ${token}`,

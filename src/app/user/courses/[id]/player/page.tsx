@@ -31,8 +31,6 @@ import { useParams } from "next/navigation";
 import VideoPlayer from "@/components/courses/video-player";
 import CourseReviewForm from "@/components/courses/course-review-form";
 
-const API_BASE_URL = "http://localhost:3000/api";
-
 interface Material {
   id: string;
   title: string;
@@ -196,7 +194,7 @@ export default function CoursePlayer() {
       }
 
       // Fetch course with sections
-      const courseResponse = await fetch(`${API_BASE_URL}/courses/${courseId}`, {
+      const courseResponse = await fetch(`/api/courses/${courseId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -210,7 +208,7 @@ export default function CoursePlayer() {
 
       // Fetch sections if not included
       if (!courseData.sections || courseData.sections.length === 0) {
-        const sectionsResponse = await fetch(`${API_BASE_URL}/courses/${courseId}/sections`, {
+        const sectionsResponse = await fetch(`/api/courses/${courseId}/sections`, {
           headers: { Authorization: `Bearer ${token}` },
         });
 
@@ -222,16 +220,26 @@ export default function CoursePlayer() {
       }
 
       // Fetch enrollment and progress
-      const enrollmentResponse = await fetch(`${API_BASE_URL}/users/enrollments`, {
+      const enrollmentResponse = await fetch(`/api/users/enrollments`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
       if (enrollmentResponse.ok) {
         const enrollmentResult = await enrollmentResponse.json();
         const enrollments = enrollmentResult.data?.enrollments || enrollmentResult.enrollments || [];
-        const courseEnrollment = enrollments.find((e: any) => e.course_id === courseId);
+        console.log("Enrollments fetched:", enrollments);
+        
+        // Search for enrollment by course_id or course.id
+        const courseEnrollment = enrollments.find((e: any) => 
+          e.course_id === courseId || e.course?.id === courseId
+        );
+        
         if (courseEnrollment) {
+          console.log("Found enrollment:", courseEnrollment);
+          console.log("Progress records:", courseEnrollment.progress_records);
           setEnrollment(courseEnrollment);
+        } else {
+          console.log("No enrollment found for courseId:", courseId);
         }
       }
 
@@ -267,7 +275,7 @@ export default function CoursePlayer() {
         const token = getAuthToken();
 
         const response = await fetch(
-          `${API_BASE_URL}/videos/stream/${currentMaterial.video_id}`,
+          `/api/videos/stream/${currentMaterial.video_id}`,
           {
             headers: { Authorization: `Bearer ${token}` },
           }
@@ -307,7 +315,7 @@ export default function CoursePlayer() {
         const token = getAuthToken();
 
         // Fetch quiz questions
-        const quizResponse = await fetch(`${API_BASE_URL}/materials/${currentMaterial.id}/quiz`, {
+        const quizResponse = await fetch(`/api/materials/${currentMaterial.id}/quiz`, {
           headers: { Authorization: `Bearer ${token}` },
         });
 
@@ -317,7 +325,7 @@ export default function CoursePlayer() {
         }
 
         // Fetch user's attempt history
-        const attemptResponse = await fetch(`${API_BASE_URL}/materials/${currentMaterial.id}/quiz/attempt`, {
+        const attemptResponse = await fetch(`/api/materials/${currentMaterial.id}/quiz/attempt`, {
           headers: { Authorization: `Bearer ${token}` },
         });
 
@@ -370,7 +378,7 @@ export default function CoursePlayer() {
         selected,
       }));
 
-      const response = await fetch(`${API_BASE_URL}/materials/${currentMaterial.id}/quiz/attempt`, {
+      const response = await fetch(`/api/materials/${currentMaterial.id}/quiz/attempt`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -472,7 +480,7 @@ export default function CoursePlayer() {
 
       try {
         const token = getAuthToken();
-        await fetch(`${API_BASE_URL}/videos/progress`, {
+        await fetch(`/api/videos/progress`, {
           method: "POST",
           headers: {
             Authorization: `Bearer ${token}`,
@@ -497,7 +505,7 @@ export default function CoursePlayer() {
 
     try {
       const token = getAuthToken();
-      await fetch(`${API_BASE_URL}/videos/progress`, {
+      await fetch(`/api/videos/progress`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -550,7 +558,7 @@ export default function CoursePlayer() {
   const markMaterialAsComplete = useCallback(async (material: Material) => {
     try {
       const token = getAuthToken();
-      await fetch(`${API_BASE_URL}/videos/progress`, {
+      const response = await fetch(`/api/videos/progress`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -559,10 +567,19 @@ export default function CoursePlayer() {
         body: JSON.stringify({
           material_id: material.id,
           is_completed: true,
-          last_position: material.duration,
-          watched_duration: material.duration,
+          last_position: material.duration || 0,
+          watched_duration: material.duration || 0,
         }),
       });
+
+      const data = await response.json();
+      
+      if (!response.ok) {
+        console.error("Error marking completion:", data.error);
+        return;
+      }
+
+      console.log("Progress saved successfully:", data);
 
       // Update local enrollment state
       setEnrollment((prev) => {
@@ -587,8 +604,8 @@ export default function CoursePlayer() {
                 id: "",
                 material_id: material.id,
                 is_completed: true,
-                watched_duration: material.duration,
-                last_position: material.duration,
+                watched_duration: material.duration || 0,
+                last_position: material.duration || 0,
               },
             ],
           };
@@ -637,10 +654,18 @@ export default function CoursePlayer() {
 
   // Handle next material - mark current as complete and go to next
   const handleNextMaterial = useCallback(async () => {
-    if (!currentMaterial) return;
+    console.log("handleNextMaterial called");
+    console.log("Current material:", currentMaterial);
+    console.log("Current enrollment:", enrollment);
+    
+    if (!currentMaterial) {
+      console.log("No current material, returning");
+      return;
+    }
 
     // Mark current material as complete (for non-quiz materials)
     if (currentMaterial.type !== "QUIZ") {
+      console.log("Marking material as complete:", currentMaterial.id);
       await markMaterialAsComplete(currentMaterial);
     }
 
@@ -649,8 +674,10 @@ export default function CoursePlayer() {
     if (next) {
       setCurrentSection(next.section);
       setCurrentMaterial(next.material);
+    } else {
+      console.log("No next material - this is the last one");
     }
-  }, [currentMaterial, markMaterialAsComplete, getNextMaterial]);
+  }, [currentMaterial, enrollment, markMaterialAsComplete, getNextMaterial]);
 
   // Handle previous material
   const handlePrevMaterial = useCallback(() => {
@@ -1025,7 +1052,12 @@ export default function CoursePlayer() {
                         target="_blank"
                         rel="noopener noreferrer"
                       >
-                        <Button variant="outline" size="sm">
+                        {/* Button Buka di Tab Baru - Style diubah seperti button Lihat Semua di dashboard */}
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          className="border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10 dark:border-[#005EB8] dark:text-[#005EB8]"
+                        >
                           Buka di Tab Baru
                         </Button>
                       </a>
@@ -1102,23 +1134,33 @@ export default function CoursePlayer() {
                       )}
                     </div>
 
-                    <Button
-                      onClick={handleNextMaterial}
-                      disabled={!getNextMaterial()}
-                      className="bg-[#005EB8] hover:bg-[#004A93] text-white gap-2"
-                    >
-                      {currentMaterial?.type !== "QUIZ" && !isMaterialCompleted(currentMaterial?.id || "") ? (
-                        <>
-                          <SkipForward className="h-4 w-4" />
-                          Tandai Selesai & Lanjut
-                        </>
-                      ) : (
-                        <>
-                          Selanjutnya
-                          <ChevronRight className="h-4 w-4" />
-                        </>
-                      )}
-                    </Button>
+                    {/* Show different buttons based on context */}
+                    {currentMaterial?.type !== "QUIZ" && !isMaterialCompleted(currentMaterial?.id || "") ? (
+                      // For non-completed, non-quiz materials
+                      <Button
+                        onClick={handleNextMaterial}
+                        className="bg-[#005EB8] hover:bg-[#004A93] text-white gap-2"
+                      >
+                        <SkipForward className="h-4 w-4" />
+                        {getNextMaterial() ? "Tandai Selesai & Lanjut" : "Tandai Selesai"}
+                      </Button>
+                    ) : (
+                      // For completed materials or quizzes - only show next button
+                      <Button
+                        onClick={() => {
+                          const next = getNextMaterial();
+                          if (next) {
+                            setCurrentSection(next.section);
+                            setCurrentMaterial(next.material);
+                          }
+                        }}
+                        disabled={!getNextMaterial()}
+                        className="bg-[#005EB8] hover:bg-[#004A93] text-white gap-2"
+                      >
+                        Selanjutnya
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    )}
                   </div>
                 </CardContent>
               </Card>
