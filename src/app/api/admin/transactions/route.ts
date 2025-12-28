@@ -25,7 +25,19 @@ export async function GET(request: NextRequest) {
         orderBy: { created_at: 'desc' },
         include: {
           user: { select: { id: true, full_name: true, email: true } },
-          course: { select: { id: true, title: true } },
+          course: { 
+            select: { 
+              id: true, 
+              title: true,
+              mentor: {
+                select: {
+                  user: {
+                    select: { full_name: true }
+                  }
+                }
+              }
+            } 
+          },
         },
       }),
       prisma.transaction.count({ where }),
@@ -40,3 +52,4 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 });
   }
 }
+

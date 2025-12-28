@@ -3,7 +3,7 @@
 import React from 'react';
 import { Navigation, MousePointer, Eye, EyeOff, Focus } from 'lucide-react';
 import { CategoryPanelProps } from './types';
-import { SelectControl, SettingButton, InfoBox } from './SettingControls';
+import { SelectControl, SettingButton, InfoBox } from './setting-controls';
 
 const NavigationPanel: React.FC<CategoryPanelProps> = ({
   settings,

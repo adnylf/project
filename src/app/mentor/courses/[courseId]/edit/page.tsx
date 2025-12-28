@@ -453,11 +453,10 @@ export default function EditCourse() {
               <Link href="/mentor/courses">
                 <Button
                   variant="outline"
-                  size="sm"
+                  size="icon"
                   className="border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10 dark:border-[#005EB8] dark:text-[#005EB8]"
                 >
-                  <ArrowLeft className="h-4 w-4 mr-2" />
-                  Kembali
+                  <ArrowLeft className="h-5 w-5" />
                 </Button>
               </Link>
               <div>

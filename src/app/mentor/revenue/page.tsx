@@ -178,15 +178,15 @@ export default function RevenuePage() {
           {/* Stats Cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {/* Total Revenue */}
-            <Card className="border rounded-xl">
+            <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 border-gray-200 dark:border-gray-700">
               <CardContent className="p-5">
                 <div className="flex items-center gap-3">
                   <div className="p-3 rounded-xl bg-[#005EB8]/10">
                     <Wallet className="h-6 w-6 text-[#005EB8]" />
                   </div>
                   <div>
-                    <p className="text-sm text-gray-500">Total Pendapatan</p>
-                    <p className="text-2xl font-bold text-gray-900">
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Total Pendapatan</p>
+                    <p className="text-2xl font-bold text-gray-900 dark:text-white">
                       {formatShortCurrency(revenueData?.total_revenue || 0)}
                     </p>
                   </div>
@@ -195,15 +195,15 @@ export default function RevenuePage() {
             </Card>
 
             {/* This Year */}
-            <Card className="border rounded-xl">
+            <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 border-gray-200 dark:border-gray-700">
               <CardContent className="p-5">
                 <div className="flex items-center gap-3">
                   <div className="p-3 rounded-xl bg-[#008A00]/10">
                     <PiggyBank className="h-6 w-6 text-[#008A00]" />
                   </div>
                   <div>
-                    <p className="text-sm text-gray-500">Tahun Ini</p>
-                    <p className="text-2xl font-bold text-gray-900">
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Tahun Ini</p>
+                    <p className="text-2xl font-bold text-gray-900 dark:text-white">
                       {formatShortCurrency(yearlyTotal)}
                     </p>
                   </div>
@@ -212,15 +212,15 @@ export default function RevenuePage() {
             </Card>
 
             {/* This Month */}
-            <Card className="border rounded-xl">
+            <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 border-gray-200 dark:border-gray-700">
               <CardContent className="p-5">
                 <div className="flex items-center gap-3">
                   <div className="p-3 rounded-xl bg-[#F4B400]/10">
                     <CreditCard className="h-6 w-6 text-[#F4B400]" />
                   </div>
                   <div>
-                    <p className="text-sm text-gray-500">Bulan Ini</p>
-                    <p className="text-2xl font-bold text-gray-900">
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Bulan Ini</p>
+                    <p className="text-2xl font-bold text-gray-900 dark:text-white">
                       {formatShortCurrency(currentMonthRevenue)}
                     </p>
                     {monthlyGrowth !== 0 && (
@@ -239,15 +239,15 @@ export default function RevenuePage() {
             </Card>
 
             {/* Transactions */}
-            <Card className="border rounded-xl">
+            <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 border-gray-200 dark:border-gray-700">
               <CardContent className="p-5">
                 <div className="flex items-center gap-3">
                   <div className="p-3 rounded-xl bg-[#D93025]/10">
                     <Receipt className="h-6 w-6 text-[#D93025]" />
                   </div>
                   <div>
-                    <p className="text-sm text-gray-500">Total Transaksi</p>
-                    <p className="text-2xl font-bold text-gray-900">
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Total Transaksi</p>
+                    <p className="text-2xl font-bold text-gray-900 dark:text-white">
                       {revenueData?.transactions_count || 0}
                     </p>
                   </div>

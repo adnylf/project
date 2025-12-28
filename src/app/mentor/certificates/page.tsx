@@ -47,7 +47,7 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs";
 import Link from "next/link";
-import { CertificateTemplateModal } from "@/components/admin/certificate-modal";
+import { CertificateTemplateModal } from "@/components/certificates/certificate-modal";
 
 interface Certificate {
   id: string;
@@ -327,10 +327,10 @@ export default function MentorCertificatesPage() {
           {/* Stats */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 border-gray-200 dark:border-gray-700">
-              <CardContent className="p-4">
+              <CardContent className="p-5">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-[#005EB8]/10">
-                    <Award className="h-5 w-5 text-[#005EB8]" />
+                  <div className="p-3 rounded-xl bg-[#005EB8]/10">
+                    <Award className="h-6 w-6 text-[#005EB8]" />
                   </div>
                   <div>
                     <p className="text-sm text-gray-500 dark:text-gray-400">Total Sertifikat</p>
@@ -340,40 +340,40 @@ export default function MentorCertificatesPage() {
               </CardContent>
             </Card>
             <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 border-gray-200 dark:border-gray-700">
-              <CardContent className="p-4">
+              <CardContent className="p-5">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-[#008A00]/10">
-                    <CheckCircle className="h-5 w-5 text-[#008A00]" />
+                  <div className="p-3 rounded-xl bg-[#008A00]/10">
+                    <CheckCircle className="h-6 w-6 text-[#008A00]" />
                   </div>
                   <div>
                     <p className="text-sm text-gray-500 dark:text-gray-400">Terbit</p>
-                    <p className="text-2xl font-bold text-[#008A00] dark:text-[#008A00]">{stats.issued}</p>
+                    <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.issued}</p>
                   </div>
                 </div>
               </CardContent>
             </Card>
             <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 border-gray-200 dark:border-gray-700">
-              <CardContent className="p-4">
+              <CardContent className="p-5">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-[#F4B400]/10">
-                    <Clock className="h-5 w-5 text-[#F4B400]" />
+                  <div className="p-3 rounded-xl bg-[#F4B400]/10">
+                    <Clock className="h-6 w-6 text-[#F4B400]" />
                   </div>
                   <div>
                     <p className="text-sm text-gray-500 dark:text-gray-400">Pending</p>
-                    <p className="text-2xl font-bold text-[#F4B400] dark:text-[#F4B400]">{stats.pending}</p>
+                    <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.pending}</p>
                   </div>
                 </div>
               </CardContent>
             </Card>
             <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 border-gray-200 dark:border-gray-700">
-              <CardContent className="p-4">
+              <CardContent className="p-5">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-[#005EB8]/10">
-                    <BookOpen className="h-5 w-5 text-[#005EB8]" />
+                  <div className="p-3 rounded-xl bg-[#D93025]/10">
+                    <BookOpen className="h-6 w-6 text-[#D93025]" />
                   </div>
                   <div>
                     <p className="text-sm text-gray-500 dark:text-gray-400">Kursus Aktif</p>
-                    <p className="text-2xl font-bold text-[#005EB8] dark:text-[#005EB8]">{stats.courses}</p>
+                    <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.courses}</p>
                   </div>
                 </div>
               </CardContent>

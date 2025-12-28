@@ -25,7 +25,7 @@ import {
 import AdminLayout from "@/components/admin/admin-layout";
 import ProtectedRoute from "@/components/auth/protected-route";
 import SweetAlert, { AlertType } from "@/components/ui/sweet-alert";
-import { CertificateTemplateModal } from "@/components/admin/certificate-modal";
+import { CertificateTemplateModal } from "@/components/certificates/certificate-modal";
 import {
   Tabs,
   TabsContent,

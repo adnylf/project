@@ -211,7 +211,7 @@ export default function AdminCourses() {
       case 'DRAFT':
         return <Badge className="bg-gray-100 text-gray-600 border border-gray-300 pointer-events-none dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600">Draft</Badge>;
       case 'ARCHIVED':
-        return <Badge className="bg-gray-500/10 text-gray-500 border border-gray-500/20 pointer-events-none">Archived</Badge>;
+        return <Badge className="bg-gray-100 text-gray-600 border border-gray-300 pointer-events-none dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600">Archived</Badge>;
       default:
         return <Badge className="bg-gray-100 text-gray-800 border border-gray-300 pointer-events-none">Unknown</Badge>;
     }

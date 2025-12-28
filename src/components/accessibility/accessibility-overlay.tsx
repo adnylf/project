@@ -18,10 +18,10 @@ import {
   ChevronDown
 } from 'lucide-react';
 import { AccessibilitySettings, defaultSettings } from './types';
-import VisualPanel from './VisualPanel';
-import TextPanel from './TextPanel';
-import NavigationPanel from './NavigationPanel';
-import AudioPanel from './AudioPanel';
+import VisualPanel from './visual-panel';
+import TextPanel from './text-panel';
+import NavigationPanel from './navigation-panel';
+import AudioPanel from './audio-panel';
 
 const AccessibilityOverlay: React.FC = () => {
   const [isOpen, setIsOpen] = useState<boolean>(false);

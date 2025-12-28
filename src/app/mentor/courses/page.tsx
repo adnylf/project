@@ -238,10 +238,10 @@ export default function MentorCourses() {
       case 'PENDING_REVIEW':
         return <Badge className="bg-[#F4B400] text-[#1A1A1A] border border-[#F4B400] pointer-events-none">Menunggu Review</Badge>;
       case 'ARCHIVED':
-        return <Badge className="bg-gray-700 text-white border border-gray-700 pointer-events-none">Archived</Badge>;
+        return <Badge className="bg-gray-100 text-gray-600 border border-gray-300 pointer-events-none dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600">Archived</Badge>;
       case 'DRAFT':
       default:
-        return <Badge className="bg-gray-500 text-white border border-gray-500 pointer-events-none">Draft</Badge>;
+        return <Badge className="bg-gray-100 text-gray-600 border border-gray-300 pointer-events-none dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600">Draft</Badge>;
     }
   };
 

@@ -12,7 +12,8 @@ import {
   FolderTree,
   BarChart3,
   Award,
-  MessageSquare
+  MessageSquare,
+  CreditCard
 } from 'lucide-react';
 
 const menuItems = [
@@ -35,6 +36,11 @@ const menuItems = [
     label: 'Courses',
     icon: BookOpen,
     link: '/admin/courses',
+  },
+  {
+    label: 'Transactions',
+    icon: CreditCard,
+    link: '/admin/transactions',
   },
   {
     label: 'Categories',

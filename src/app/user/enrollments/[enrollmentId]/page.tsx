@@ -243,25 +243,22 @@ export default function EnrollmentDetail() {
       <UserLayout>
         <div className="space-y-8">
           {/* Header */}
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <Link href="/user/enrollments">
+              <Button 
+                variant="outline" 
+                size="icon"
+                className="border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10 dark:border-[#005EB8] dark:text-[#005EB8]"
+              >
+                <ArrowLeft className="h-5 w-5" />
+              </Button>
+            </Link>
             <div>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-3">
+              <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-1 flex items-center gap-3">
                 <GraduationCap className="h-8 w-8 text-[#005EB8]" />
                 Detail Enrollment
               </h1>
               <p className="text-gray-600 dark:text-gray-400">Detail kursus yang Anda ikuti</p>
-            </div>
-            <div className="flex gap-2">
-              <Button 
-                variant="outline" 
-                asChild
-                className="border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10 dark:border-[#005EB8] dark:text-[#005EB8]"
-              >
-                <Link href="/user/enrollments">
-                  <ArrowLeft className="h-4 w-4 mr-2" />
-                  Kembali
-                </Link>
-              </Button>
             </div>
           </div>
 

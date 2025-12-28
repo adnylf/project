@@ -3,7 +3,7 @@
 import React from 'react';
 import { Monitor, Type, Contrast, Palette } from 'lucide-react';
 import { CategoryPanelProps } from './types';
-import { SliderControl, SelectControl, SettingButton } from './SettingControls';
+import { SliderControl, SelectControl, SettingButton } from './setting-controls';
 
 const VisualPanel: React.FC<CategoryPanelProps> = ({
   settings,

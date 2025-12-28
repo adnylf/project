@@ -1,23 +1,20 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import {
   Search,
-  Filter,
   Eye,
   Download,
-  RefreshCw,
   MoreHorizontal,
   CreditCard,
-  ArrowUpDown,
   CheckCircle,
   XCircle,
   Clock,
-  BarChart3
+  Loader2
 } from 'lucide-react';
 import AdminLayout from '@/components/admin/admin-layout';
 import ProtectedRoute from "@/components/auth/protected-route";
@@ -43,124 +40,125 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import Pagination from '@/components/ui/pagination'; // Import komponen pagination
 
-// Data dummy
-const transactions = [
-  {
-    id: 'TXN-2024-001',
-    user: 'Ahmad Fauzi',
-    course: 'Web Development Basics',
-    mentor: 'Ahmad Hidayat',
-    amount: 499000,
-    date: '2024-10-15',
-    status: 'completed',
-    paymentMethod: 'Credit Card',
-    paymentGateway: 'Midtrans',
-    refundStatus: 'none'
-  },
-  {
-    id: 'TXN-2024-002',
-    user: 'Sarah Putri',
-    course: 'JavaScript Advanced',
-    mentor: 'Sarah Johnson',
-    amount: 599000,
-    date: '2024-10-14',
-    status: 'completed',
-    paymentMethod: 'Bank Transfer',
-    paymentGateway: 'Midtrans',
-    refundStatus: 'none'
-  },
-  {
-    id: 'TXN-2024-003',
-    user: 'John Smith',
-    course: 'React untuk Pemula',
-    mentor: 'David Lee',
-    amount: 549000,
-    date: '2024-10-13',
-    status: 'pending',
-    paymentMethod: 'E-Wallet',
-    paymentGateway: 'Xendit',
-    refundStatus: 'none'
-  },
-  {
-    id: 'TXN-2024-004',
-    user: 'Maria Chen',
-    course: 'UI/UX Design Fundamentals',
-    mentor: 'Maria Garcia',
-    amount: 399000,
-    date: '2024-10-12',
-    status: 'completed',
-    paymentMethod: 'Credit Card',
-    paymentGateway: 'Midtrans',
-    refundStatus: 'none'
-  },
-  {
-    id: 'TXN-2024-005',
-    user: 'David Lee',
-    course: 'Python Data Science',
-    mentor: 'John Smith',
-    amount: 699000,
-    date: '2024-10-11',
-    status: 'failed',
-    paymentMethod: 'Bank Transfer',
-    paymentGateway: 'Xendit',
-    refundStatus: 'none'
-  },
-  {
-    id: 'TXN-2024-006',
-    user: 'Lisa Wang',
-    course: 'Mobile App Development',
-    mentor: 'Robert Brown',
-    amount: 749000,
-    date: '2024-10-10',
-    status: 'completed',
-    paymentMethod: 'Credit Card',
-    paymentGateway: 'Midtrans',
-    refundStatus: 'requested'
-  },
-  {
-    id: 'TXN-2024-007',
-    user: 'Robert Brown',
-    course: 'Cloud Computing',
-    mentor: 'Emily Davis',
-    amount: 899000,
-    date: '2024-10-09',
-    status: 'completed',
-    paymentMethod: 'E-Wallet',
-    paymentGateway: 'Xendit',
-    refundStatus: 'processing'
-  },
-  {
-    id: 'TXN-2024-008',
-    user: 'Emily Davis',
-    course: 'Graphic Design Mastery',
-    mentor: 'Lisa Wang',
-    amount: 299000,
-    date: '2024-10-08',
-    status: 'refunded',
-    paymentMethod: 'Credit Card',
-    paymentGateway: 'Midtrans',
-    refundStatus: 'completed'
-  }
-];
+interface Transaction {
+  id: string;
+  order_id: string;
+  user: {
+    id: string;
+    full_name: string;
+    email: string;
+  };
+  course: {
+    id: string;
+    title: string;
+    mentor?: {
+      user?: {
+        full_name: string;
+      };
+    };
+  };
+  amount: number;
+  discount: number;
+  total_amount: number;
+  payment_method: string;
+  status: string;
+  created_at: string;
+  paid_at: string | null;
+}
 
-const payoutStats = {
-  totalRevenue: 4587000,
-  platformFee: 458700,
-  mentorPayout: 4128300,
-  pendingPayouts: 1250000,
-  completedPayouts: 2878300
-};
+interface PaginationData {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
 
 export default function AdminTransactions() {
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [pagination, setPagination] = useState<PaginationData>({ page: 1, limit: 10, total: 0, totalPages: 0 });
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
-  const [filterRefund, setFilterRefund] = useState('all');
-  const [isClient, setIsClient] = useState(false);
+  const [stats, setStats] = useState({
+    total: 0,
+    success: 0,
+    pending: 0,
+    failed: 0,
+    expired: 0,
+    totalRevenue: 0
+  });
+
+  const getAuthToken = useCallback(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('token') || localStorage.getItem('accessToken');
+    }
+    return null;
+  }, []);
+
+  // Fetch transactions from API
+  const fetchTransactions = useCallback(async () => {
+    try {
+      setLoading(true);
+      const token = getAuthToken();
+      const params = new URLSearchParams();
+      params.set('page', pagination.page.toString());
+      params.set('limit', pagination.limit.toString());
+      if (filterStatus !== 'all') {
+        params.set('status', filterStatus.toUpperCase());
+      }
+
+      const response = await fetch(`/api/admin/transactions?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setTransactions(data.transactions || []);
+        setPagination(data.pagination || { page: 1, limit: pagination.limit, total: 0, totalPages: 0 });
+      }
+    } catch (error) {
+      console.error('Error fetching transactions:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [getAuthToken, pagination.page, pagination.limit, filterStatus]);
+
+  // Fetch stats
+  const fetchStats = useCallback(async () => {
+    try {
+      const token = getAuthToken();
+      
+      // Fetch all transactions for stats calculation
+      const response = await fetch('/api/admin/transactions?limit=1000', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const allTransactions = data.transactions || [];
+        
+        const total = allTransactions.length;
+        const success = allTransactions.filter((t: Transaction) => t.status === 'SUCCESS').length;
+        const pending = allTransactions.filter((t: Transaction) => t.status === 'PENDING').length;
+        const failed = allTransactions.filter((t: Transaction) => t.status === 'FAILED').length;
+        const expired = allTransactions.filter((t: Transaction) => t.status === 'EXPIRED').length;
+        const totalRevenue = allTransactions
+          .filter((t: Transaction) => t.status === 'SUCCESS')
+          .reduce((sum: number, t: Transaction) => sum + (t.total_amount || 0), 0);
+
+        setStats({ total, success, pending, failed, expired, totalRevenue });
+      }
+    } catch (error) {
+      console.error('Error fetching stats:', error);
+    }
+  }, [getAuthToken]);
 
   useEffect(() => {
-    setIsClient(true);
-  }, []);
+    fetchTransactions();
+    fetchStats();
+  }, [fetchTransactions, fetchStats]);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('id-ID', {
@@ -170,77 +168,73 @@ export default function AdminTransactions() {
     }).format(amount);
   };
 
-  const formatNumber = (num: number) => {
-    if (num >= 1000000) {
-      return (num / 1000000).toFixed(1) + 'jt';
-    } else if (num >= 1000) {
-      return (num / 1000).toFixed(1) + 'k';
-    }
-    return num.toString();
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('id-ID', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
   };
 
   const getStatusBadge = (status: string) => {
     switch (status) {
-      case 'completed':
-        return <Badge className="bg-[#008A00]">Selesai</Badge>;
-      case 'pending':
-        return <Badge className="bg-[#F4B400]">Pending</Badge>;
-      case 'failed':
-        return <Badge className="bg-[#D93025]">Gagal</Badge>;
-      case 'refunded':
-        return <Badge className="bg-[#005EB8]">Dikembalikan</Badge>;
+      case 'SUCCESS':
+        return (
+          <Badge className="bg-[#008A00]/10 text-[#008A00] border border-[#008A00]/20 pointer-events-none text-xs px-3 py-1.5">
+            <CheckCircle className="h-3 w-3 mr-1.5" />
+            Berhasil
+          </Badge>
+        );
+      case 'PENDING':
+        return (
+          <Badge className="bg-[#F4B400]/10 text-[#F4B400] border border-[#F4B400]/20 pointer-events-none text-xs px-3 py-1.5">
+            <Clock className="h-3 w-3 mr-1.5" />
+            Pending
+          </Badge>
+        );
+      case 'FAILED':
+        return (
+          <Badge className="bg-[#D93025]/10 text-[#D93025] border border-[#D93025]/20 pointer-events-none text-xs px-3 py-1.5">
+            <XCircle className="h-3 w-3 mr-1.5" />
+            Gagal
+          </Badge>
+        );
+      case 'EXPIRED':
+        return (
+          <Badge className="bg-gray-100 text-gray-600 border border-gray-300 pointer-events-none dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600 text-xs px-3 py-1.5">
+            <Clock className="h-3 w-3 mr-1.5" />
+            Kadaluarsa
+          </Badge>
+        );
       default:
-        return <Badge>Unknown</Badge>;
+        return <Badge variant="outline" className="text-xs px-3 py-1.5">{status}</Badge>;
     }
   };
 
-  const getRefundBadge = (refundStatus: string) => {
-    switch (refundStatus) {
-      case 'none':
-        return <Badge variant="outline" className="border-gray-300 text-gray-600">Tidak Ada</Badge>;
-      case 'requested':
-        return <Badge className="bg-[#F4B400]">Diminta</Badge>;
-      case 'processing':
-        return <Badge className="bg-[#005EB8]">Diproses</Badge>;
-      case 'completed':
-        return <Badge className="bg-[#008A00]">Selesai</Badge>;
-      default:
-        return <Badge variant="outline">Unknown</Badge>;
-    }
+  const getPaymentMethodLabel = (method: string) => {
+    const methods: Record<string, string> = {
+      'BANK_TRANSFER': 'Transfer Bank',
+      'CREDIT_CARD': 'Kartu Kredit',
+      'E_WALLET': 'E-Wallet',
+      'CASH': 'Tunai'
+    };
+    return methods[method] || method;
   };
 
+  // Filter transactions by search term
   const filteredTransactions = transactions.filter((transaction) => {
     const matchesSearch = 
-      transaction.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      transaction.user.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      transaction.course.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = filterStatus === 'all' || transaction.status === filterStatus;
-    const matchesRefund = filterRefund === 'all' || transaction.refundStatus === filterRefund;
-    
-    return matchesSearch && matchesStatus && matchesRefund;
+      (transaction.order_id?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+      (transaction.user?.full_name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+      (transaction.course?.title?.toLowerCase() || '').includes(searchTerm.toLowerCase());
+    return matchesSearch;
   });
 
-  const handleRefundTransaction = (transactionId: string) => {
-    console.log(`Refund transaction: ${transactionId}`);
-    // API call: POST /api/refunds/request
-  };
-
-  const handleViewDetails = (transactionId: string) => {
-    console.log(`View details: ${transactionId}`);
-    // Implement view details modal
-  };
-
-  const handleExportCSV = () => {
-    console.log('Export transactions to CSV');
-    // Implement CSV export
-  };
-
-  const stats = {
-    total: transactions.length,
-    completed: transactions.filter(t => t.status === 'completed').length,
-    pending: transactions.filter(t => t.status === 'pending').length,
-    failed: transactions.filter(t => t.status === 'failed').length,
-    refunded: transactions.filter(t => t.status === 'refunded').length
+  const handleRefresh = () => {
+    fetchTransactions();
+    fetchStats();
   };
 
   return (
@@ -248,304 +242,256 @@ export default function AdminTransactions() {
     <AdminLayout>
       <div className="space-y-8">
         {/* Header Section */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 animate-fadeIn">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-              Transactions
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-3">
+              <CreditCard className="h-8 w-8 text-[#005EB8]" />
+              Transaksi
             </h1>
             <p className="text-gray-600 dark:text-gray-400">
-              Daftar transaksi, status pembayaran, refund, dan payout
+              Daftar semua transaksi pembelian kursus
             </p>
-          </div>
-          <div className="flex gap-3">
-            <Button 
-              variant="outline" 
-              className="border-gray-300 dark:border-gray-600"
-              onClick={handleExportCSV}
-            >
-              <Download className="h-4 w-4 mr-2" />
-              Export CSV
-            </Button>
           </div>
         </div>
 
         {/* Stats Cards */}
-        <div className="grid md:grid-cols-2 lg:grid-cols-5 gap-6">
-          <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 animate-scaleIn">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="h-12 w-12 rounded-full bg-[#005EB8]/10 flex items-center justify-center">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 border-gray-200 dark:border-gray-700">
+            <CardContent className="p-5">
+              <div className="flex items-center gap-3">
+                <div className="p-3 rounded-xl bg-[#005EB8]/10">
                   <CreditCard className="h-6 w-6 text-[#005EB8]" />
                 </div>
-              </div>
-              <div className="space-y-1">
-                <p className="text-3xl font-bold text-gray-900 dark:text-white">{stats.total}</p>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Total Transaksi</p>
+                <div>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Transaksi</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.total}</p>
+                </div>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 animate-scaleIn delay-100">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="h-12 w-12 rounded-full bg-[#008A00]/10 flex items-center justify-center">
+          <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 border-gray-200 dark:border-gray-700">
+            <CardContent className="p-5">
+              <div className="flex items-center gap-3">
+                <div className="p-3 rounded-xl bg-[#008A00]/10">
                   <CheckCircle className="h-6 w-6 text-[#008A00]" />
                 </div>
-              </div>
-              <div className="space-y-1">
-                <p className="text-3xl font-bold text-gray-900 dark:text-white">{stats.completed}</p>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Selesai</p>
+                <div>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Berhasil</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.success}</p>
+                </div>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 animate-scaleIn delay-200">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="h-12 w-12 rounded-full bg-[#F4B400]/10 flex items-center justify-center">
+          <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 border-gray-200 dark:border-gray-700">
+            <CardContent className="p-5">
+              <div className="flex items-center gap-3">
+                <div className="p-3 rounded-xl bg-[#F4B400]/10">
                   <Clock className="h-6 w-6 text-[#F4B400]" />
                 </div>
-              </div>
-              <div className="space-y-1">
-                <p className="text-3xl font-bold text-gray-900 dark:text-white">{stats.pending}</p>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Pending</p>
+                <div>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Pending</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.pending}</p>
+                </div>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 animate-scaleIn delay-300">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="h-12 w-12 rounded-full bg-[#D93025]/10 flex items-center justify-center">
+          <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 border-gray-200 dark:border-gray-700">
+            <CardContent className="p-5">
+              <div className="flex items-center gap-3">
+                <div className="p-3 rounded-xl bg-[#D93025]/10">
                   <XCircle className="h-6 w-6 text-[#D93025]" />
                 </div>
-              </div>
-              <div className="space-y-1">
-                <p className="text-3xl font-bold text-gray-900 dark:text-white">{stats.failed}</p>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Gagal</p>
+                <div>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Gagal</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.failed + stats.expired}</p>
+                </div>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 animate-scaleIn delay-400">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="h-12 w-12 rounded-full bg-[#005EB8]/10 flex items-center justify-center">
-                  <RefreshCw className="h-6 w-6 text-[#005EB8]" />
+          <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 border-gray-200 dark:border-gray-700">
+            <CardContent className="p-5">
+              <div className="flex items-center gap-3">
+                <div className="p-3 rounded-xl bg-[#008A00]/10">
+                  <CreditCard className="h-6 w-6 text-[#008A00]" />
                 </div>
-              </div>
-              <div className="space-y-1">
-                <p className="text-3xl font-bold text-gray-900 dark:text-white">{stats.refunded}</p>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Dikembalikan</p>
+                <div>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Pendapatan</p>
+                  <p className="text-xl font-bold text-gray-900 dark:text-white">{formatCurrency(stats.totalRevenue)}</p>
+                </div>
               </div>
             </CardContent>
           </Card>
         </div>
 
-        {/* Payout Summary */}
-        <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 animate-fadeSlide">
-          <CardHeader>
-            <CardTitle className="text-xl font-bold">Ringkasan Payout</CardTitle>
-            <CardDescription>
-              Total pendapatan dan pembagian untuk mentor
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-              <div className="space-y-2">
-                <p className="text-sm text-gray-600 dark:text-gray-400">Total Pendapatan</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {isClient ? formatNumber(payoutStats.totalRevenue) : formatCurrency(payoutStats.totalRevenue)}
-                </p>
-              </div>
-              <div className="space-y-2">
-                <p className="text-sm text-gray-600 dark:text-gray-400">Platform Fee (10%)</p>
-                <p className="text-2xl font-bold text-[#005EB8]">
-                  {isClient ? formatNumber(payoutStats.platformFee) : formatCurrency(payoutStats.platformFee)}
-                </p>
-              </div>
-              <div className="space-y-2">
-                <p className="text-sm text-gray-600 dark:text-gray-400">Payout Mentor</p>
-                <p className="text-2xl font-bold text-[#008A00]">
-                  {isClient ? formatNumber(payoutStats.mentorPayout) : formatCurrency(payoutStats.mentorPayout)}
-                </p>
-              </div>
-              <div className="space-y-2">
-                <p className="text-sm text-gray-600 dark:text-gray-400">Pending Payout</p>
-                <p className="text-2xl font-bold text-[#F4B400]">
-                  {isClient ? formatNumber(payoutStats.pendingPayouts) : formatCurrency(payoutStats.pendingPayouts)}
-                </p>
+        {/* Transactions Table */}
+        <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 border-gray-200 dark:border-gray-700 overflow-hidden">
+          <CardHeader className="pb-4 border-b border-gray-200 dark:border-gray-700">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+              <div>
+                <CardTitle className="text-xl font-bold flex items-center gap-2 text-gray-900 dark:text-white">
+                  <CreditCard className="h-5 w-5 text-[#005EB8]" />
+                  Daftar Transaksi
+                </CardTitle>
+                <CardDescription className="mt-1">
+                  {filteredTransactions.length} transaksi ditemukan
+                </CardDescription>
               </div>
             </div>
-          </CardContent>
-        </Card>
-
-        {/* Search and Filter Section */}
-        <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 animate-fadeSlide delay-100">
-          <CardContent className="p-6">
-            <div className="flex flex-col md:flex-row gap-4">
-              <div className="flex-1 relative">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                <Input
-                  type="search"
-                  placeholder="Cari ID transaksi, user, atau kursus..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
-              <div className="flex gap-2">
-                <Select value={filterStatus} onValueChange={setFilterStatus}>
-                  <SelectTrigger className="w-[150px]">
+          </CardHeader>
+          <CardContent className="p-0">
+            {/* Filters */}
+            <div className="p-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50">
+              <div className="flex flex-col md:flex-row gap-3">
+                <div className="flex-1 relative">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                  <Input
+                    type="search"
+                    placeholder="Cari ID transaksi, user, atau kursus..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10 h-10 bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600"
+                  />
+                </div>
+                <Select value={filterStatus} onValueChange={(value) => {
+                  setFilterStatus(value);
+                  setPagination(prev => ({ ...prev, page: 1 }));
+                }}>
+                  <SelectTrigger className="w-full md:w-[160px] h-10 bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600">
                     <SelectValue placeholder="Status" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Semua Status</SelectItem>
-                    <SelectItem value="completed">Selesai</SelectItem>
-                    <SelectItem value="pending">Pending</SelectItem>
-                    <SelectItem value="failed">Gagal</SelectItem>
-                    <SelectItem value="refunded">Dikembalikan</SelectItem>
-                  </SelectContent>
-                </Select>
-
-                <Select value={filterRefund} onValueChange={setFilterRefund}>
-                  <SelectTrigger className="w-[150px]">
-                    <SelectValue placeholder="Refund" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Semua Refund</SelectItem>
-                    <SelectItem value="none">Tidak Ada</SelectItem>
-                    <SelectItem value="requested">Diminta</SelectItem>
-                    <SelectItem value="processing">Diproses</SelectItem>
-                    <SelectItem value="completed">Selesai</SelectItem>
+                    <SelectItem value="SUCCESS">Berhasil</SelectItem>
+                    <SelectItem value="PENDING">Pending</SelectItem>
+                    <SelectItem value="FAILED">Gagal</SelectItem>
+                    <SelectItem value="EXPIRED">Kadaluarsa</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
             </div>
-          </CardContent>
-        </Card>
 
-        {/* Transactions Table */}
-        <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 animate-fadeSlide delay-200">
-          <CardHeader>
-            <CardTitle className="text-xl font-bold">
-              Daftar Transaksi
-            </CardTitle>
-            <CardDescription>
-              Kelola semua transaksi dan proses refund
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>ID Transaksi</TableHead>
-                    <TableHead>User</TableHead>
-                    <TableHead>Kursus</TableHead>
-                    <TableHead>Mentor</TableHead>
-                    <TableHead>Tanggal</TableHead>
-                    <TableHead>Metode</TableHead>
-                    <TableHead>Gateway</TableHead>
-                    <TableHead>Jumlah</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Refund</TableHead>
-                    <TableHead className="text-right">Aksi</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredTransactions.map((transaction) => (
-                    <TableRow key={transaction.id} className="table-row">
-                      <TableCell className="font-mono text-sm">
-                        {transaction.id}
-                      </TableCell>
-                      <TableCell>
-                        <p className="font-medium text-gray-900 dark:text-white">
-                          {transaction.user}
-                        </p>
-                      </TableCell>
-                      <TableCell>
-                        <p className="text-sm text-gray-900 dark:text-white">
-                          {transaction.course}
-                        </p>
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        {transaction.mentor}
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        {new Date(transaction.date).toLocaleDateString('id-ID')}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="text-xs">
-                          {transaction.paymentMethod}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        {transaction.paymentGateway}
-                      </TableCell>
-                      <TableCell className="font-semibold">
-                        {formatCurrency(transaction.amount)}
-                      </TableCell>
-                      <TableCell>{getStatusBadge(transaction.status)}</TableCell>
-                      <TableCell>{getRefundBadge(transaction.refundStatus)}</TableCell>
-                      <TableCell className="text-right">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="sm">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-48">
-                            <DropdownMenuItem 
-                              onClick={() => handleViewDetails(transaction.id)}
-                            >
-                              <Eye className="h-4 w-4 mr-2" />
-                              Lihat Detail
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            {transaction.status === 'completed' && transaction.refundStatus === 'none' && (
-                              <DropdownMenuItem 
-                                onClick={() => handleRefundTransaction(transaction.id)}
-                                className="text-[#D93025]"
-                              >
-                                <RefreshCw className="h-4 w-4 mr-2" />
-                                Proses Refund
-                              </DropdownMenuItem>
-                            )}
-                            {(transaction.refundStatus === 'requested' || transaction.refundStatus === 'processing') && (
-                              <DropdownMenuItem 
-                                onClick={() => handleRefundTransaction(transaction.id)}
-                                className="text-[#005EB8]"
-                              >
-                                <RefreshCw className="h-4 w-4 mr-2" />
-                                Lanjutkan Refund
-                              </DropdownMenuItem>
-                            )}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
+            {/* Table */}
+            {loading ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="text-center">
+                  <Loader2 className="h-12 w-12 animate-spin text-[#005EB8] mx-auto mb-4" />
+                  <p className="text-gray-600 dark:text-gray-400">Memuat transaksi...</p>
+                </div>
+              </div>
+            ) : filteredTransactions.length > 0 ? (
+              <div className="overflow-x-auto">
+                <Table className="min-w-full">
+                  <TableHeader>
+                    <TableRow className="bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                      <TableHead className="font-semibold text-gray-700 dark:text-gray-300 w-[120px] px-4 py-3">
+                        Order ID
+                      </TableHead>
+                      <TableHead className="font-semibold text-gray-700 dark:text-gray-300 px-4 py-3 min-w-[180px]">
+                        User
+                      </TableHead>
+                      <TableHead className="font-semibold text-gray-700 dark:text-gray-300 px-4 py-3 min-w-[180px]">
+                        Kursus
+                      </TableHead>
+                      <TableHead className="font-semibold text-gray-700 dark:text-gray-300 w-[110px] px-4 py-3">
+                        Tanggal
+                      </TableHead>
+                      <TableHead className="font-semibold text-gray-700 dark:text-gray-300 w-[100px] px-4 py-3">
+                        Metode
+                      </TableHead>
+                      <TableHead className="font-semibold text-gray-700 dark:text-gray-300 w-[120px] px-4 py-3 text-right">
+                        Jumlah
+                      </TableHead>
+                      <TableHead className="font-semibold text-gray-700 dark:text-gray-300 w-[120px] px-4 py-3 text-center">
+                        Status
+                      </TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-
-            {filteredTransactions.length === 0 && (
-              <div className="text-center py-12">
+                  </TableHeader>
+                  <TableBody>
+                    {filteredTransactions.map((transaction) => (
+                      <TableRow 
+                        key={transaction.id}
+                        className="hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors"
+                      >
+                        <TableCell className="px-4 py-3">
+                          <div className="font-mono text-xs text-gray-600 dark:text-gray-400 truncate" title={transaction.order_id}>
+                            {transaction.order_id}
+                          </div>
+                        </TableCell>
+                        <TableCell className="px-4 py-3">
+                          <div className="min-w-0">
+                            <p className="font-medium text-gray-900 dark:text-white text-sm truncate" title={transaction.user?.full_name || '-'}>
+                              {transaction.user?.full_name || '-'}
+                            </p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 truncate" title={transaction.user?.email || '-'}>
+                              {transaction.user?.email || '-'}
+                            </p>
+                          </div>
+                        </TableCell>
+                        <TableCell className="px-4 py-3">
+                          <p className="font-medium text-gray-900 dark:text-white text-sm max-w-[200px] truncate" title={transaction.course?.title || '-'}>
+                            {transaction.course?.title || '-'}
+                          </p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                            {transaction.course?.mentor?.user?.full_name || 'Mentor'}
+                          </p>
+                        </TableCell>
+                        <TableCell className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
+                          {formatDate(transaction.created_at)}
+                        </TableCell>
+                        <TableCell className="px-4 py-3">
+                          <div className="flex justify-start">
+                            <Badge className="bg-gray-100 text-gray-800 border border-gray-300 pointer-events-none dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600 text-xs px-2 py-1">
+                              {getPaymentMethodLabel(transaction.payment_method)}
+                            </Badge>
+                          </div>
+                        </TableCell>
+                        <TableCell className="px-4 py-3 text-right font-semibold text-[#005EB8] whitespace-nowrap">
+                          {formatCurrency(transaction.total_amount).replace('Rp', 'Rp ')}
+                        </TableCell>
+                        <TableCell className="px-4 py-3">
+                          <div className="flex justify-center">
+                            {getStatusBadge(transaction.status)}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            ) : (
+              <div className="p-12 text-center">
                 <div className="flex flex-col items-center gap-4">
                   <div className="h-20 w-20 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
                     <CreditCard className="h-10 w-10 text-gray-400" />
                   </div>
                   <div>
                     <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-                      Tidak ada transaksi ditemukan
+                      {searchTerm || filterStatus !== 'all' ? 'Tidak ada transaksi' : 'Belum ada transaksi'}
                     </h3>
                     <p className="text-gray-600 dark:text-gray-400">
-                      Coba ubah filter atau kata kunci pencarian
+                      {searchTerm || filterStatus !== 'all' 
+                        ? 'Coba ubah filter pencarian Anda' 
+                        : 'Belum ada transaksi yang tercatat'}
                     </p>
                   </div>
                 </div>
               </div>
+            )}
+
+            {/* Pagination - Diganti dengan komponen Pagination */}
+            {pagination.totalPages > 1 && (
+              <Pagination
+                currentPage={pagination.page}
+                totalPages={pagination.totalPages}
+                totalItems={pagination.total}
+                itemsPerPage={pagination.limit}
+                onPageChange={(newPage) => setPagination(prev => ({ ...prev, page: newPage }))}
+                loading={loading}
+              />
             )}
           </CardContent>
         </Card>

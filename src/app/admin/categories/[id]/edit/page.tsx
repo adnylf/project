@@ -406,15 +406,16 @@ export default function EditCategory() {
           <div className="flex items-center gap-4">
             <Link href="/admin/categories">
               <Button 
-                variant="ghost" 
-                className="text-[#005EB8] hover:text-[#004A93] hover:bg-[#005EB8]/10"
+                variant="outline" 
+                size="icon" 
+                className="border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10 dark:border-[#005EB8] dark:text-[#005EB8]"
               >
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                Kembali
+                <ArrowLeft className="h-5 w-5" />
               </Button>
             </Link>
             <div>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+              <h1 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
+                <FolderTree className="h-8 w-8 text-[#005EB8]" />
                 Edit Kategori
               </h1>
               <p className="text-gray-600 dark:text-gray-400">
@@ -446,7 +447,7 @@ export default function EditCategory() {
                     </div>
                     <p className="text-xs text-gray-500 dark:text-gray-400">Kursus</p>
                   </div>
-                  <Badge className={category.is_active ? 'bg-[#008A00] text-white' : 'bg-gray-500 text-white'}>
+                  <Badge className={category.is_active ? 'bg-[#008A00] text-white border border-[#008A00] pointer-events-none' : 'bg-gray-100 text-gray-600 border border-gray-300 pointer-events-none dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600'}>
                     {category.is_active ? 'Aktif' : 'Non-aktif'}
                   </Badge>
                 </div>

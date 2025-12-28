@@ -3,7 +3,7 @@
 import React from 'react';
 import { Type, Bold, AlignLeft, AlignCenter, AlignRight, AlignJustify } from 'lucide-react';
 import { CategoryPanelProps } from './types';
-import { SliderControl, SelectControl, SettingButton } from './SettingControls';
+import { SliderControl, SelectControl, SettingButton } from './setting-controls';
 
 const TextPanel: React.FC<CategoryPanelProps> = ({
   settings,

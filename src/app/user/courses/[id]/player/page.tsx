@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
+  ArrowLeft,
   ChevronLeft,
   ChevronRight,
   Clock,
@@ -791,11 +792,11 @@ export default function CoursePlayer() {
               {/* Button Kembali - Style diubah seperti button Lihat Semua di dashboard */}
               <Button 
                 variant="outline" 
+                size="icon"
                 onClick={() => window.history.back()} 
-                className="gap-2 mb-2 -ml-2 border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10 dark:border-[#005EB8] dark:text-[#005EB8]"
+                className="border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10 dark:border-[#005EB8] dark:text-[#005EB8]"
               >
-                <ChevronLeft className="h-4 w-4" />
-                Kembali
+                <ArrowLeft className="h-5 w-5" />
               </Button>
               <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-1">
                 {course.title}

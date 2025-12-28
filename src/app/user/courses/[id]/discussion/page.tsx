@@ -279,12 +279,23 @@ export default function CourseDiscussion() {
         <div className="space-y-8">
           {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-3">
-                <MessageSquare className="h-8 w-8 text-[#005EB8]" />
-                Diskusi Kursus
-              </h1>
-              <p className="text-gray-600 dark:text-gray-400">{course?.title || "Memuat..."}</p>
+            <div className="flex items-center gap-4">
+              <Link href={`/user/courses/${courseId}/player`}>
+                <Button 
+                  variant="outline" 
+                  size="icon" 
+                  className="border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10 dark:border-[#005EB8] dark:text-[#005EB8]"
+                >
+                  <ArrowLeft className="h-5 w-5" />
+                </Button>
+              </Link>
+              <div>
+                <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-3">
+                  <MessageSquare className="h-8 w-8 text-[#005EB8]" />
+                  Diskusi Kursus
+                </h1>
+                <p className="text-gray-600 dark:text-gray-400">{course?.title || "Memuat..."}</p>
+              </div>
             </div>
             <div className="flex items-center gap-2">
               <Badge className="bg-[#005EB8] text-white border border-[#005EB8] pointer-events-none text-sm px-3 py-1">

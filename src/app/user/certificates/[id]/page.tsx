@@ -22,8 +22,8 @@ import {
 } from "lucide-react";
 import UserLayout from "@/components/user/user-layout";
 import ProtectedRoute from "@/components/auth/protected-route";
-import { PreviewCertificateModal } from "@/components/user/preview-certificate-modal";
-import { ShareCertificateModal } from "@/components/user/share-certificate-modal";
+import { PreviewCertificateModal } from "@/components/certificates/preview-certificate-modal";
+import { ShareCertificateModal } from "@/components/certificates/share-certificate-modal";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 

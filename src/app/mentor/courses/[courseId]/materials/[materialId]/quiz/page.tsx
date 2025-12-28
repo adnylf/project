@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import MentorLayout from "@/components/mentor/mentor-layout";
 import ProtectedRoute from "@/components/auth/protected-route";
 import SweetAlert, { AlertType } from "@/components/ui/sweet-alert";
-import { QuizSettingsModal } from "@/components/mentor/quiz-settings-modal";
+import { QuizSettingsModal } from "@/components/modal/quiz-settings-modal";
 import {
   ArrowLeft,
   Plus,
@@ -357,15 +358,15 @@ export default function QuizBuilderPage() {
           {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div className="flex items-center gap-4">
-              {/* Button Kembali - Style diubah seperti button Lihat Semua di dashboard */}
-              <Button
-                variant="outline"
-                onClick={() => router.push(`/mentor/courses/${courseId}/sections`)}
-                className="border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10 dark:border-[#005EB8] dark:text-[#005EB8]"
-              >
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                Kembali
-              </Button>
+              <Link href={`/mentor/courses/${courseId}/sections`}>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10 dark:border-[#005EB8] dark:text-[#005EB8]"
+                >
+                  <ArrowLeft className="h-5 w-5" />
+                </Button>
+              </Link>
               <div>
                 <h1 className="text-3xl font-bold text-gray-900 mb-2 flex items-center gap-3">
                   <HelpCircle className="h-8 w-8 text-[#005EB8]" />

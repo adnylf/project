@@ -3,7 +3,7 @@
 import React from 'react';
 import { Volume2, VolumeX, Gauge, User } from 'lucide-react';
 import { AudioPanelProps } from './types';
-import { SliderControl, SelectControl, SettingButton, InfoBox } from './SettingControls';
+import { SliderControl, SelectControl, SettingButton, InfoBox } from './setting-controls';
 
 const AudioPanel: React.FC<AudioPanelProps> = ({
   settings,

@@ -339,7 +339,7 @@ export default function AdminDashboardPage() {
                         <Clock className="h-4 w-4 text-[#F4B400]" />
                       </div>
                       Mentor Menunggu Persetujuan
-                      <Badge className="bg-[#F4B400] text-gray-900 dark:text-white ml-auto">{pendingMentors.length}</Badge>
+                      <Badge className="bg-[#F4B400] text-[#1A1A1A] border border-[#F4B400] pointer-events-none ml-auto">{pendingMentors.length}</Badge>
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
@@ -389,7 +389,7 @@ export default function AdminDashboardPage() {
                         <FileText className="h-4 w-4 text-[#F4B400]" />
                       </div>
                       Kursus Menunggu Review
-                      <Badge className="bg-[#F4B400] text-gray-900 dark:text-white ml-auto">{pendingCourses.length}</Badge>
+                      <Badge className="bg-[#F4B400] text-[#1A1A1A] border border-[#F4B400] pointer-events-none ml-auto">{pendingCourses.length}</Badge>
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
