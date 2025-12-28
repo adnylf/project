@@ -79,6 +79,33 @@ export default function PurchaseSuccessPage() {
           return;
         }
 
+        // First, get transaction for this course and verify payment status with Midtrans
+        try {
+          const transactionsResponse = await fetch(`/api/payments`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          
+          if (transactionsResponse.ok) {
+            const transactionsData = await transactionsResponse.json();
+            const courseTransaction = transactionsData.transactions?.find(
+              (t: { course_id: string; status: string }) => t.course_id === courseId
+            );
+            
+            // If there's a pending transaction, verify with Midtrans
+            if (courseTransaction && courseTransaction.status === 'PENDING') {
+              const orderId = courseTransaction.order_id;
+              // Call notification endpoint to verify and update payment status
+              await fetch(`/api/payments/notification?order_id=${orderId}`, {
+                headers: { Authorization: `Bearer ${token}` },
+              });
+              // Wait a moment for enrollment to be created
+              await new Promise(resolve => setTimeout(resolve, 500));
+            }
+          }
+        } catch (err) {
+          console.log('Error verifying payment status:', err);
+        }
+
         // Check if user is enrolled
         const response = await fetch(`/api/users/enrollments`, {
           headers: {

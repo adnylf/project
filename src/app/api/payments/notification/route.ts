@@ -138,14 +138,19 @@ export async function GET(request: NextRequest) {
     // Find and update local transaction
     const transaction = await prisma.transaction.findUnique({
       where: { order_id: orderId },
+      include: {
+        course: true,
+      },
     });
 
     if (transaction) {
       let newStatus: TransactionStatus = transaction.status;
+      let shouldEnroll = false;
 
       if (midtransStatus.transaction_status === 'settlement' || 
           midtransStatus.transaction_status === 'capture') {
-        newStatus = 'SUCCESS' as TransactionStatus;
+        newStatus = TransactionStatus.SUCCESS;
+        shouldEnroll = true;
       } else if (midtransStatus.transaction_status === 'pending') {
         newStatus = TransactionStatus.PENDING;
       } else if (['deny', 'expire', 'cancel'].includes(midtransStatus.transaction_status)) {
@@ -155,8 +160,49 @@ export async function GET(request: NextRequest) {
       if (newStatus !== transaction.status) {
         await prisma.transaction.update({
           where: { id: transaction.id },
-          data: { status: newStatus },
+          data: { 
+            status: newStatus,
+            paid_at: shouldEnroll ? new Date() : undefined,
+          },
         });
+
+        // Create enrollment if payment successful
+        if (shouldEnroll) {
+          const existingEnrollment = await prisma.enrollment.findUnique({
+            where: {
+              user_id_course_id: {
+                user_id: transaction.user_id,
+                course_id: transaction.course_id,
+              },
+            },
+          });
+
+          if (!existingEnrollment) {
+            await prisma.enrollment.create({
+              data: {
+                user_id: transaction.user_id,
+                course_id: transaction.course_id,
+                status: EnrollmentStatus.ACTIVE,
+              },
+            });
+
+            // Update course total students
+            await prisma.course.update({
+              where: { id: transaction.course_id },
+              data: { total_students: { increment: 1 } },
+            });
+
+            // Update mentor total students if course has mentor
+            if (transaction.course.mentor_id) {
+              await prisma.mentorProfile.update({
+                where: { id: transaction.course.mentor_id },
+                data: { total_students: { increment: 1 } },
+              });
+            }
+
+            console.log('Enrollment created for user:', transaction.user_id, 'course:', transaction.course_id);
+          }
+        }
       }
     }
 
