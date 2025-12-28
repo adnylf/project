@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
+import { createPortal } from "react-dom";
 import ReactCrop, { Crop, PixelCrop, centerCrop, makeAspectCrop } from "react-image-crop";
 import "react-image-crop/dist/ReactCrop.css";
 import { Card, CardContent } from "@/components/ui/card";
@@ -43,6 +44,12 @@ export default function AvatarCropper({
   const [completedCrop, setCompletedCrop] = useState<PixelCrop>();
   const [isProcessing, setIsProcessing] = useState(false);
   const [showInstructions, setShowInstructions] = useState(true);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    return () => setMounted(false);
+  }, []);
 
   // Initialize crop when image loads
   const onImageLoad = useCallback(
@@ -135,10 +142,10 @@ export default function AvatarCropper({
     }
   }, []);
 
-  if (!open) return null;
+  if (!mounted || !open) return null;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
+  const modalContent = (
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/40">
       <Card
         className="relative w-full max-w-3xl rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 border-gray-200 dark:border-gray-700 overflow-hidden animate-fade-in max-h-[85vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
@@ -332,4 +339,6 @@ export default function AvatarCropper({
       </Card>
     </div>
   );
+
+  return createPortal(modalContent, document.body);
 }

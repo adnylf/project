@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { X, Check, Upload, Video, FileText, HelpCircle, ClipboardList, Loader2, AlertCircle } from "lucide-react";
 
@@ -56,7 +57,14 @@ export function MaterialModal({
     setDurationInMinutes(Math.floor(formData.duration / 60));
   }, [formData.duration]);
 
-  if (!open) return null;
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    return () => setMounted(false);
+  }, []);
+
+  if (!mounted || !open) return null;
 
   // Get material type icon
   const getMaterialIcon = (type: MaterialType) => {
@@ -130,8 +138,8 @@ export function MaterialModal({
     onDocumentFileSelect(file || null);
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
+  const modalContent = (
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/40">
       <Card
         className="relative w-full max-w-3xl rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 border-gray-200 dark:border-gray-700 overflow-hidden animate-fade-in max-h-[85vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
@@ -576,4 +584,6 @@ export function MaterialModal({
       </Card>
     </div>
   );
+
+  return createPortal(modalContent, document.body);
 }

@@ -1,6 +1,7 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { X, Check, Loader2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -27,10 +28,17 @@ export function SectionModal({
   onDescriptionChange,
   onSave,
 }: SectionModalProps) {
-  if (!open) return null;
+  const [mounted, setMounted] = useState(false);
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
+  useEffect(() => {
+    setMounted(true);
+    return () => setMounted(false);
+  }, []);
+
+  if (!mounted || !open) return null;
+
+  const modalContent = (
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/40">
       <Card
         className="relative w-full max-w-3xl rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 border-gray-200 dark:border-gray-700 overflow-hidden animate-fade-in max-h-[85vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
@@ -157,4 +165,6 @@ export function SectionModal({
       </Card>
     </div>
   );
+
+  return createPortal(modalContent, document.body);
 }

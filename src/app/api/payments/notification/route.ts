@@ -122,7 +122,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// GET /api/payments/notification?order_id=xxx - Check payment status
+// GET /api/payments/notification?order_id=xxx - Check payment status and create enrollment if successful
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -157,59 +157,93 @@ export async function GET(request: NextRequest) {
         newStatus = TransactionStatus.FAILED;
       }
 
+      // Update transaction status if changed
       if (newStatus !== transaction.status) {
+        const isExpired = midtransStatus.transaction_status === 'expire';
+        const isFailed = ['deny', 'cancel'].includes(midtransStatus.transaction_status);
+        
         await prisma.transaction.update({
           where: { id: transaction.id },
           data: { 
             status: newStatus,
             paid_at: shouldEnroll ? new Date() : undefined,
+            // Set expired_at when transaction expires from Midtrans
+            expired_at: isExpired ? new Date() : transaction.expired_at,
+            metadata: {
+              ...(transaction.metadata as object || {}),
+              payment_type: midtransStatus.payment_type,
+              transaction_status: midtransStatus.transaction_status,
+              midtrans_transaction_id: midtransStatus.transaction_id,
+              verified_at: new Date().toISOString(),
+              // Add failure reason for expired/failed transactions
+              ...(isExpired && { failure_reason: 'Waktu pembayaran habis (expired)' }),
+              ...(isFailed && { failure_reason: `Pembayaran ${midtransStatus.transaction_status === 'deny' ? 'ditolak' : 'dibatalkan'}` }),
+            },
+          },
+        });
+      }
+
+      // Create enrollment if payment successful
+      if (shouldEnroll) {
+        // Check if enrollment already exists
+        const existingEnrollment = await prisma.enrollment.findUnique({
+          where: {
+            user_id_course_id: {
+              user_id: transaction.user_id,
+              course_id: transaction.course_id,
+            },
           },
         });
 
-        // Create enrollment if payment successful
-        if (shouldEnroll) {
-          const existingEnrollment = await prisma.enrollment.findUnique({
-            where: {
-              user_id_course_id: {
-                user_id: transaction.user_id,
-                course_id: transaction.course_id,
-              },
+        if (!existingEnrollment) {
+          await prisma.enrollment.create({
+            data: {
+              user_id: transaction.user_id,
+              course_id: transaction.course_id,
+              status: EnrollmentStatus.ACTIVE,
             },
           });
 
-          if (!existingEnrollment) {
-            await prisma.enrollment.create({
-              data: {
-                user_id: transaction.user_id,
-                course_id: transaction.course_id,
-                status: EnrollmentStatus.ACTIVE,
+          // Update course total students
+          await prisma.course.update({
+            where: { id: transaction.course_id },
+            data: { total_students: { increment: 1 } },
+          });
+
+          // Update mentor total students and revenue
+          if (transaction.course.mentor_id) {
+            await prisma.mentorProfile.update({
+              where: { id: transaction.course.mentor_id },
+              data: { 
+                total_students: { increment: 1 },
+                total_revenue: { increment: transaction.total_amount },
               },
             });
-
-            // Update course total students
-            await prisma.course.update({
-              where: { id: transaction.course_id },
-              data: { total_students: { increment: 1 } },
-            });
-
-            // Update mentor total students if course has mentor
-            if (transaction.course.mentor_id) {
-              await prisma.mentorProfile.update({
-                where: { id: transaction.course.mentor_id },
-                data: { total_students: { increment: 1 } },
-              });
-            }
-
-            console.log('Enrollment created for user:', transaction.user_id, 'course:', transaction.course_id);
           }
+
+          console.log('Enrollment created via GET verification for user:', transaction.user_id);
         }
       }
     }
+
+    const isExpired = midtransStatus.transaction_status === 'expire';
+    const isSuccess = ['settlement', 'capture'].includes(midtransStatus.transaction_status);
+    const isFailed = ['deny', 'cancel'].includes(midtransStatus.transaction_status);
 
     return NextResponse.json({
       success: true,
       status: midtransStatus.transaction_status,
       order_id: orderId,
+      enrolled: isSuccess,
+      expired: isExpired,
+      failed: isFailed,
+      message: isExpired 
+        ? 'Waktu pembayaran habis. Silakan buat transaksi baru.' 
+        : isFailed 
+          ? 'Pembayaran gagal atau dibatalkan.'
+          : isSuccess 
+            ? 'Pembayaran berhasil!'
+            : 'Pembayaran masih pending.',
     });
   } catch (error) {
     console.error('Check payment status error:', error);

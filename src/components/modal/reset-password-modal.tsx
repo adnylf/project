@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { X, CheckCircle2, ArrowLeft, Lightbulb } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 
@@ -13,10 +14,17 @@ export const ResetPasswordSuccessModal: React.FC<ResetPasswordSuccessModalProps>
   onBackToLogin,
   isOpen,
 }) => {
-  if (!isOpen) return null;
+  const [mounted, setMounted] = useState(false);
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
+  useEffect(() => {
+    setMounted(true);
+    return () => setMounted(false);
+  }, []);
+
+  if (!mounted || !isOpen) return null;
+
+  const modalContent = (
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/40">
       <Card 
         className="relative w-full max-w-3xl rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 border-gray-200 dark:border-gray-700 overflow-hidden animate-fade-in max-h-[85vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
@@ -161,4 +169,6 @@ export const ResetPasswordSuccessModal: React.FC<ResetPasswordSuccessModalProps>
       </Card>
     </div>
   );
+
+  return createPortal(modalContent, document.body);
 };

@@ -184,7 +184,8 @@ export async function POST(request: NextRequest) {
         payment_method: 'MIDTRANS' as PaymentMethod,
         status: TransactionStatus.PENDING,
         payment_url: midtransResponse.redirect_url,
-        expired_at: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
+        // Don't set expired_at here - let Midtrans manage expiration per payment method
+        // Each payment method has different expiration (ShopeePay = 1 min, VA = 24h, etc)
         metadata: {
           token: midtransResponse.token,
           course_title: course.title,

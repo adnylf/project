@@ -69,7 +69,7 @@ export default function PurchaseSuccessPage() {
   }, []);
 
   useEffect(() => {
-    const checkEnrollment = async () => {
+    const verifyPaymentAndEnroll = async () => {
       try {
         setLoading(true);
         const token = getAuthToken();
@@ -79,34 +79,52 @@ export default function PurchaseSuccessPage() {
           return;
         }
 
-        // First, get transaction for this course and verify payment status with Midtrans
-        try {
-          const transactionsResponse = await fetch(`/api/payments`, {
-            headers: { Authorization: `Bearer ${token}` },
-          });
+        // First, get the transaction for this course to verify payment
+        const transactionResponse = await fetch(`/api/transactions/verify?course_id=${courseId}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (transactionResponse.ok) {
+          const transactionData = await transactionResponse.json();
           
-          if (transactionsResponse.ok) {
-            const transactionsData = await transactionsResponse.json();
-            const courseTransaction = transactionsData.transactions?.find(
-              (t: { course_id: string; status: string }) => t.course_id === courseId
-            );
+          // If there's a pending transaction with order_id, verify it from Midtrans
+          if (transactionData.transaction && transactionData.transaction.order_id) {
+            const orderId = transactionData.transaction.order_id;
             
-            // If there's a pending transaction, verify with Midtrans
-            if (courseTransaction && courseTransaction.status === 'PENDING') {
-              const orderId = courseTransaction.order_id;
-              // Call notification endpoint to verify and update payment status
-              await fetch(`/api/payments/notification?order_id=${orderId}`, {
-                headers: { Authorization: `Bearer ${token}` },
-              });
-              // Wait a moment for enrollment to be created
-              await new Promise(resolve => setTimeout(resolve, 500));
+            // Check payment status from Midtrans and update
+            const verifyResponse = await fetch(`/api/payments/notification?order_id=${orderId}`, {
+              headers: {
+                Authorization: `Bearer ${token}`,
+              },
+            });
+            
+            if (verifyResponse.ok) {
+              const verifyData = await verifyResponse.json();
+              console.log('Payment verification result:', verifyData);
+              
+              // If payment expired, show error and don't continue
+              if (verifyData.expired) {
+                setError('Waktu pembayaran sudah habis. Silakan lakukan pembelian kursus kembali.');
+                setLoading(false);
+                return;
+              }
+              
+              // If payment failed/cancelled, show error
+              if (verifyData.failed) {
+                setError('Pembayaran gagal atau dibatalkan. Silakan coba lagi.');
+                setLoading(false);
+                return;
+              }
             }
           }
-        } catch (err) {
-          console.log('Error verifying payment status:', err);
         }
 
-        // Check if user is enrolled
+        // Wait a moment for database to update
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
+        // Now check if user is enrolled
         const response = await fetch(`/api/users/enrollments`, {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -149,7 +167,7 @@ export default function PurchaseSuccessPage() {
       }
     };
 
-    checkEnrollment();
+    verifyPaymentAndEnroll();
   }, [courseId, getAuthToken, router]);
 
   if (loading) {

@@ -1,5 +1,6 @@
 // components/ui/confirmation-modal.tsx
-import React from "react";
+import React, { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
 interface ConfirmationModalProps {
   isOpen: boolean;
@@ -22,10 +23,17 @@ export default function ConfirmationModal({
   cancelText = "Batal",
   isLoading = false,
 }: ConfirmationModalProps) {
-  if (!isOpen) return null;
+  const [mounted, setMounted] = useState(false);
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+  useEffect(() => {
+    setMounted(true);
+    return () => setMounted(false);
+  }, []);
+
+  if (!mounted || !isOpen) return null;
+
+  const modalContent = (
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/50 backdrop-blur-sm">
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg w-full max-w-md mx-4 p-6 animate-fade-in-up border border-gray-200 dark:border-gray-700">
         <div className="flex items-center gap-3 mb-4">
           <div className="p-2 bg-red-100 dark:bg-red-900/30 rounded-lg">
@@ -92,4 +100,6 @@ export default function ConfirmationModal({
       </div>
     </div>
   );
+
+  return createPortal(modalContent, document.body);
 }

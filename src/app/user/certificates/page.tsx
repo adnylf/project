@@ -1,4 +1,4 @@
-"use client";
+  "use client";
 
 import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -149,11 +149,11 @@ export default function UserCertificatesPage() {
 
           {/* Stats */}
           <div className="grid grid-cols-3 gap-4">
-            <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 border-gray-200 dark:border-gray-700">
-              <CardContent className="p-4">
+            <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
+              <CardContent className="p-5">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-[#005EB8]/10">
-                    <Trophy className="h-5 w-5 text-[#005EB8]" />
+                  <div className="p-3 rounded-xl bg-[#005EB8]/10">
+                    <Trophy className="h-6 w-6 text-[#005EB8]" />
                   </div>
                   <div>
                     <p className="text-sm text-gray-500 dark:text-gray-400">Total</p>
@@ -162,28 +162,28 @@ export default function UserCertificatesPage() {
                 </div>
               </CardContent>
             </Card>
-            <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 border-gray-200 dark:border-gray-700">
-              <CardContent className="p-4">
+            <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
+              <CardContent className="p-5">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-[#008A00]/10">
-                    <CheckCircle className="h-5 w-5 text-[#008A00]" />
+                  <div className="p-3 rounded-xl bg-[#008A00]/10">
+                    <CheckCircle className="h-6 w-6 text-[#008A00]" />
                   </div>
                   <div>
                     <p className="text-sm text-gray-500 dark:text-gray-400">Tersedia</p>
-                    <p className="text-2xl font-bold text-[#008A00] dark:text-[#008A00]">{stats.issued}</p>
+                    <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.issued}</p>
                   </div>
                 </div>
               </CardContent>
             </Card>
-            <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 border-gray-200 dark:border-gray-700">
-              <CardContent className="p-4">
+            <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
+              <CardContent className="p-5">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-[#F4B400]/10">
-                    <Clock className="h-5 w-5 text-[#F4B400]" />
+                  <div className="p-3 rounded-xl bg-[#F4B400]/10">
+                    <Clock className="h-6 w-6 text-[#F4B400]" />
                   </div>
                   <div>
                     <p className="text-sm text-gray-500 dark:text-gray-400">Menunggu</p>
-                    <p className="text-2xl font-bold text-[#F4B400] dark:text-[#F4B400]">{stats.pending}</p>
+                    <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.pending}</p>
                   </div>
                 </div>
               </CardContent>
