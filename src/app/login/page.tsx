@@ -121,7 +121,8 @@ export default function LoginPage() {
       }
       
       // Extract user data - handle different possible response structures
-      let userData = null;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let userData: Record<string, any> | null = null;
       if (data.user) {
         userData = data.user;
       } else if (data.data?.user) {
