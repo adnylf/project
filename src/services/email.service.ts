@@ -1,11 +1,6 @@
 // services/emailService.ts
 import nodemailer from 'nodemailer';
 
-// Hanya eksekusi di lingkungan Node.js
-if (typeof window !== 'undefined') {
-  throw new Error('Email service can only be used on the server side');
-}
-
 // Get base URL - for emails we NEED absolute URLs
 // In production: MUST set NEXT_PUBLIC_APP_URL environment variable
 // In development: falls back to localhost:3000
@@ -21,43 +16,44 @@ function getBaseUrl(): string {
   if (process.env.NODE_ENV === 'development') {
     return 'http://localhost:3000';
   }
-  // Production without env var - return empty string, will be set at runtime
-  // Don't log during build phase to avoid build errors
-  if (process.env.NODE_ENV === 'production' && !process.env.NEXT_PHASE) {
-    console.warn('⚠️ WARNING: NEXT_PUBLIC_APP_URL is not set! Email links will not work correctly.');
-  }
+  // Production without env var - return empty string (will be set at runtime)
   return '';
 }
 
-// Lazy initialization - only compute BASE_URL when actually needed
-let _BASE_URL: string | null = null;
-function getBASE_URL(): string {
-  if (_BASE_URL === null) {
-    _BASE_URL = getBaseUrl();
+// Lazy initialization to avoid build-time errors
+let _baseUrl: string | null = null;
+function getLazyBaseUrl(): string {
+  if (_baseUrl === null) {
+    _baseUrl = getBaseUrl();
+    if (!_baseUrl && process.env.NODE_ENV === 'production') {
+      console.error('⚠️ WARNING: NEXT_PUBLIC_APP_URL is not set! Email links will not work correctly.');
+    }
   }
-  return _BASE_URL;
+  return _baseUrl;
 }
 
-// For backward compatibility, export BASE_URL but compute lazily
-const BASE_URL = getBaseUrl();
+// Konfigurasi SMTP dari environment variables (lazy loaded)
+const getSMTPConfig = () => ({
+  SMTP_USER: process.env.SMTP_USER || '',
+  SMTP_PASSWORD: process.env.SMTP_PASSWORD || '',
+  EMAIL_FROM: process.env.EMAIL_FROM || process.env.SMTP_USER || '',
+});
 
-// Konfigurasi SMTP dari environment variables
-const SMTP_USER = process.env.SMTP_USER || '';
-const SMTP_PASSWORD = process.env.SMTP_PASSWORD || '';
-const EMAIL_FROM = process.env.EMAIL_FROM || SMTP_USER;
+// Expose BASE_URL as a getter that uses lazy loading
+const get_BASE_URL = () => getLazyBaseUrl();
 
-// Only log during runtime, not during build
-if (process.env.NODE_ENV !== 'production' || !process.env.NEXT_PHASE) {
-  console.log('📧 Email Service Configuration:', {
-    SMTP_USER: SMTP_USER ? `${SMTP_USER.substring(0, 5)}...` : 'NOT SET',
-    EMAIL_FROM: EMAIL_FROM ? `${EMAIL_FROM.substring(0, 5)}...` : 'NOT SET',
-    BASE_URL: BASE_URL || 'NOT SET - Please set NEXT_PUBLIC_APP_URL',
-  });
-}
+// Use Object.defineProperty to create a constant-like getter for backwards compatibility
+// This allows existing code to use BASE_URL without changes
+const BASE_URL = { toString: () => getLazyBaseUrl(), valueOf: () => getLazyBaseUrl() };
+
+// Expose EMAIL_FROM as a getter function
+const get_EMAIL_FROM = () => getSMTPConfig().EMAIL_FROM;
 
 // Fungsi untuk membuat transporter secara lazy
 function createTransporter(): nodemailer.Transporter {
-  if (!SMTP_USER || !SMTP_PASSWORD) {
+  const config = getSMTPConfig();
+  
+  if (!config.SMTP_USER || !config.SMTP_PASSWORD) {
     console.error('❌ SMTP_USER atau SMTP_PASSWORD tidak dikonfigurasi!');
     console.error('📝 Tambahkan ke file .env:');
     console.error('   SMTP_USER=emailanda@gmail.com');
@@ -71,8 +67,8 @@ function createTransporter(): nodemailer.Transporter {
     port: 465,
     secure: true, // use SSL
     auth: {
-      user: SMTP_USER,
-      pass: SMTP_PASSWORD,
+      user: config.SMTP_USER,
+      pass: config.SMTP_PASSWORD,
     },
     tls: {
       // Abaikan validasi sertifikat (untuk mengatasi proxy/antivirus)
@@ -368,7 +364,7 @@ export async function sendEmail(options: EmailOptions): Promise<boolean> {
     const transporter = createTransporter();
 
     const mailOptions = {
-      from: `"E-Learning Platform" <${EMAIL_FROM}>`,
+      from: `"E-Learning Platform" <${get_EMAIL_FROM()}>`,
       to: options.to,
       subject: options.subject,
       html: options.html,
