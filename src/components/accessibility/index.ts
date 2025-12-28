@@ -5,5 +5,5 @@ export { SettingButton, SliderControl, SelectControl } from './setting-controls'
 export { default as VisualPanel } from './visual-panel';
 export { default as TextPanel } from './text-panel';
 export { default as NavigationPanel } from './navigation-panel';
-export { default as AudioPanel } from './AudioPanel';
+export { default as AudioPanel } from './audio-panel';
 export * from './types';

@@ -21,11 +21,24 @@ function getBaseUrl(): string {
   if (process.env.NODE_ENV === 'development') {
     return 'http://localhost:3000';
   }
-  // Production without env var - throw error to alert developer
-  console.error('⚠️ WARNING: NEXT_PUBLIC_APP_URL is not set! Email links will not work correctly.');
+  // Production without env var - return empty string, will be set at runtime
+  // Don't log during build phase to avoid build errors
+  if (process.env.NODE_ENV === 'production' && !process.env.NEXT_PHASE) {
+    console.warn('⚠️ WARNING: NEXT_PUBLIC_APP_URL is not set! Email links will not work correctly.');
+  }
   return '';
 }
 
+// Lazy initialization - only compute BASE_URL when actually needed
+let _BASE_URL: string | null = null;
+function getBASE_URL(): string {
+  if (_BASE_URL === null) {
+    _BASE_URL = getBaseUrl();
+  }
+  return _BASE_URL;
+}
+
+// For backward compatibility, export BASE_URL but compute lazily
 const BASE_URL = getBaseUrl();
 
 // Konfigurasi SMTP dari environment variables
@@ -33,12 +46,14 @@ const SMTP_USER = process.env.SMTP_USER || '';
 const SMTP_PASSWORD = process.env.SMTP_PASSWORD || '';
 const EMAIL_FROM = process.env.EMAIL_FROM || SMTP_USER;
 
-// Log konfigurasi saat startup (tanpa password)
-console.log('📧 Email Service Configuration:', {
-  SMTP_USER: SMTP_USER ? `${SMTP_USER.substring(0, 5)}...` : 'NOT SET',
-  EMAIL_FROM: EMAIL_FROM ? `${EMAIL_FROM.substring(0, 5)}...` : 'NOT SET',
-  BASE_URL: BASE_URL || 'NOT SET - Please set NEXT_PUBLIC_APP_URL',
-});
+// Only log during runtime, not during build
+if (process.env.NODE_ENV !== 'production' || !process.env.NEXT_PHASE) {
+  console.log('📧 Email Service Configuration:', {
+    SMTP_USER: SMTP_USER ? `${SMTP_USER.substring(0, 5)}...` : 'NOT SET',
+    EMAIL_FROM: EMAIL_FROM ? `${EMAIL_FROM.substring(0, 5)}...` : 'NOT SET',
+    BASE_URL: BASE_URL || 'NOT SET - Please set NEXT_PUBLIC_APP_URL',
+  });
+}
 
 // Fungsi untuk membuat transporter secara lazy
 function createTransporter(): nodemailer.Transporter {

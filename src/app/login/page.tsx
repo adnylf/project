@@ -152,7 +152,7 @@ export default function LoginPage() {
             router.push("/admin/dashboard");
           } else if (role && role.toUpperCase() === "MENTOR") {
             // Check if mentor is approved
-            const mentorProfile = userData.mentor_profile;
+            const mentorProfile = userData?.mentor_profile;
             if (mentorProfile && mentorProfile.status === "APPROVED") {
               router.push("/mentor/dashboard");
             } else {
