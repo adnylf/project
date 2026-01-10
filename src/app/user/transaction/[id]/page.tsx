@@ -174,14 +174,15 @@ export default function TransactionDetail() {
         <div className="space-y-8 max-w-4xl mx-auto">
           {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-3">
+            <div className="text-center md:text-left">
+              <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center justify-center md:justify-start gap-3">
                 <Receipt className="h-8 w-8 text-[#005EB8]" />
                 Detail Transaksi
               </h1>
               <p className="text-gray-600 dark:text-gray-400">Informasi lengkap transaksi Anda</p>
             </div>
-            <Button 
+            <div className="flex justify-center md:justify-end">
+              <Button 
               variant="outline" 
               asChild
               className="border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10 dark:border-[#005EB8] dark:text-[#005EB8]"
@@ -191,6 +192,7 @@ export default function TransactionDetail() {
                 Kembali
               </Link>
             </Button>
+            </div>
           </div>
 
           {/* Error Card */}
@@ -242,8 +244,8 @@ export default function TransactionDetail() {
                 <ArrowLeft className="h-5 w-5" />
               </Button>
             </Link>
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-1 flex items-center gap-3">
+            <div className="text-center md:text-left">
+              <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-1 flex items-center justify-center md:justify-start gap-3">
                 <Receipt className="h-8 w-8 text-[#005EB8]" />
                 Detail Transaksi
               </h1>
@@ -510,23 +512,23 @@ export default function TransactionDetail() {
 
           {/* Bottom Action Card with Gradient */}
           <Card className="rounded-lg border bg-gradient-to-r from-[#005EB8] to-[#004A93] text-white shadow-sm transition-all duration-300 hover:shadow-md border-[#005EB8]">
-            <CardContent className="p-8">
-              <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-                <div className="text-center md:text-left">
-                  <div className="flex items-center gap-2 mb-2 justify-center md:justify-start">
-                    <Sparkles className="h-5 w-5 text-white" />
-                    <h3 className="text-2xl font-bold text-white">
+            <CardContent className="p-6 sm:p-8">
+              <div className="flex flex-col md:flex-row items-center justify-between gap-4 md:gap-6">
+                <div className="text-center md:text-left w-full md:w-auto">
+                  <div className="flex items-center justify-center md:justify-start gap-2 mb-2">
+                    <Sparkles className="h-5 w-5 text-white flex-shrink-0" />
+                    <h3 className="text-lg sm:text-xl md:text-2xl font-bold text-white">
                       Jelajahi Lebih Banyak Kursus
                     </h3>
                   </div>
-                  <p className="text-white/90">
+                  <p className="text-white/90 text-sm sm:text-base">
                     Temukan ribuan kursus berkualitas untuk meningkatkan keterampilan Anda
                   </p>
                 </div>
-                <Link href="/courses">
+                <Link href="/courses" className="w-full sm:w-auto flex-shrink-0">
                   <Button
                     size="lg"
-                    className="bg-white text-[#005EB8] hover:bg-gray-100 font-semibold"
+                    className="w-full sm:w-auto bg-white text-[#005EB8] hover:bg-gray-100 font-semibold"
                   >
                     Lihat Semua Kursus
                     <ChevronRight className="h-4 w-4 ml-2" />

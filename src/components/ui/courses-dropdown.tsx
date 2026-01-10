@@ -8,6 +8,14 @@ import {
   DropdownCardContent,
 } from "@/components/ui/dropdown-card";
 import NeuButton from "@/components/ui/new-button";
+import { Loader2 } from "lucide-react";
+
+interface Course {
+  id: string;
+  title: string;
+  slug: string;
+  price: number;
+}
 
 interface CoursesDropdownProps {
   isOpen: boolean;
@@ -20,6 +28,38 @@ export default function CoursesDropdown({
 }: CoursesDropdownProps) {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [isClosing, setIsClosing] = useState(false);
+  const [freeCourses, setFreeCourses] = useState<Course[]>([]);
+  const [paidCourses, setPaidCourses] = useState<Course[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Fetch courses from API
+  useEffect(() => {
+    const fetchCourses = async () => {
+      try {
+        setLoading(true);
+        const response = await fetch('/api/courses?status=PUBLISHED&limit=12');
+        if (response.ok) {
+          const data = await response.json();
+          const courses = data.courses || data.data || [];
+          
+          // Separate free and paid courses
+          const free = courses.filter((c: Course) => c.price === 0).slice(0, 6);
+          const paid = courses.filter((c: Course) => c.price > 0).slice(0, 6);
+          
+          setFreeCourses(free);
+          setPaidCourses(paid);
+        }
+      } catch (error) {
+        console.error('Error fetching courses:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (isOpen) {
+      fetchCourses();
+    }
+  }, [isOpen]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -56,24 +96,6 @@ export default function CoursesDropdown({
   };
 
   if (!isOpen && !isClosing) return null;
-
-  const freeCourses = [
-    "HTML & CSS Dasar",
-    "JavaScript Pemula",
-    "Python untuk Pemula",
-    "UI/UX Fundamentals",
-    "Digital Marketing Basic",
-    "Data Analysis Intro",
-  ];
-
-  const paidCourses = [
-    "Full-Stack Web Development",
-    "Mobile App Development",
-    "Advanced Data Science",
-    "Machine Learning Professional",
-    "UI/UX Design Masterclass",
-    "Digital Marketing Expert",
-  ];
 
   return (
     <div
@@ -123,97 +145,111 @@ export default function CoursesDropdown({
 
             {/* Right Side - Courses List */}
             <div className="w-3/5 p-5">
-              {/* Free Courses Section */}
-              <div className="mb-5">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="w-2 h-6 bg-[#008A00] rounded-full"></div>
-                  <div>
-                    <h4 className="font-bold text-gray-900 dark:text-white text-base">
-                      Kursus Gratis
-                    </h4>
-                    <p className="text-xs text-gray-600 dark:text-gray-400">
-                      Mulai belajar tanpa biaya
-                    </p>
-                  </div>
+              {loading ? (
+                <div className="flex items-center justify-center h-full">
+                  <Loader2 className="h-8 w-8 animate-spin text-[#005EB8]" />
                 </div>
-
-                <div className="grid grid-cols-2 gap-2 mb-2">
-                  {freeCourses.map((course, index) => (
-                    <Link
-                      key={index}
-                      href={`/courses/free/${course
-                        .toLowerCase()
-                        .replace(/\s+/g, "-")}`}
-                      className="group relative overflow-hidden bg-gradient-to-r from-[#008A00]/5 to-[#008A00]/10 dark:from-[#008A00]/10 dark:to-[#008A00]/15 rounded-lg p-2 border border-[#008A00]/20 hover:border-[#008A00]/40 transition-all duration-300"
-                      onClick={handleClose}
-                    >
-                      <div className="flex items-center gap-2">
-                        <div className="w-1.5 h-1.5 bg-[#008A00] rounded-full"></div>
-                        <span className="text-xs font-medium text-gray-700 dark:text-gray-300 group-hover:text-[#008A00] transition-colors duration-300 line-clamp-1">
-                          {course}
-                        </span>
+              ) : (
+                <>
+                  {/* Free Courses Section */}
+                  <div className="mb-5">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="w-2 h-6 bg-[#008A00] rounded-full"></div>
+                      <div>
+                        <h4 className="font-bold text-gray-900 dark:text-white text-base">
+                          Kursus Gratis
+                        </h4>
+                        <p className="text-xs text-gray-600 dark:text-gray-400">
+                          Mulai belajar tanpa biaya
+                        </p>
                       </div>
-                    </Link>
-                  ))}
-                </div>
+                    </div>
 
-                <Link
-                  href="/courses/free"
-                  className="inline-flex items-center gap-1 text-xs font-semibold text-[#008A00] hover:text-[#006600] transition-all duration-300 group"
-                  onClick={handleClose}
-                >
-                  Lihat semua kursus gratis
-                  <span className="group-hover:translate-x-1 transition-transform duration-300">
-                    →
-                  </span>
-                </Link>
-              </div>
-
-              {/* Paid Courses Section */}
-              <div>
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="w-2 h-6 bg-[#005EB8] rounded-full"></div>
-                  <div>
-                    <h4 className="font-bold text-gray-900 dark:text-white text-base">
-                      Kursus Berbayar
-                    </h4>
-                    <p className="text-xs text-gray-600 dark:text-gray-400">
-                      Akses konten premium lengkap
-                    </p>
+                    {freeCourses.length > 0 ? (
+                      <>
+                        <div className="grid grid-cols-2 gap-2 mb-2">
+                          {freeCourses.map((course) => (
+                            <Link
+                              key={course.id}
+                              href={`/courses/${course.slug}`}
+                              className="group relative overflow-hidden bg-gradient-to-r from-[#008A00]/5 to-[#008A00]/10 dark:from-[#008A00]/10 dark:to-[#008A00]/15 rounded-lg p-2 border border-[#008A00]/20 hover:border-[#008A00]/40 transition-all duration-300"
+                              onClick={handleClose}
+                            >
+                              <div className="flex items-center gap-2">
+                                <div className="w-1.5 h-1.5 bg-[#008A00] rounded-full"></div>
+                                <span className="text-xs font-medium text-gray-700 dark:text-gray-300 group-hover:text-[#008A00] transition-colors duration-300 line-clamp-1">
+                                  {course.title}
+                                </span>
+                              </div>
+                            </Link>
+                          ))}
+                        </div>
+                        <Link
+                          href="/courses?price=free"
+                          className="inline-flex items-center gap-1 text-xs font-semibold text-[#008A00] hover:text-[#006600] transition-all duration-300 group"
+                          onClick={handleClose}
+                        >
+                          Lihat semua kursus gratis
+                          <span className="group-hover:translate-x-1 transition-transform duration-300">
+                            →
+                          </span>
+                        </Link>
+                      </>
+                    ) : (
+                      <p className="text-xs text-gray-500 dark:text-gray-400">Belum ada kursus gratis</p>
+                    )}
                   </div>
-                </div>
 
-                <div className="grid grid-cols-2 gap-2 mb-2">
-                  {paidCourses.map((course, index) => (
-                    <Link
-                      key={index}
-                      href={`/courses/paid/${course
-                        .toLowerCase()
-                        .replace(/\s+/g, "-")}`}
-                      className="group relative overflow-hidden bg-gradient-to-r from-[#005EB8]/5 to-[#005EB8]/10 dark:from-[#005EB8]/10 dark:to-[#005EB8]/15 rounded-lg p-2 border border-[#005EB8]/20 hover:border-[#005EB8]/40 transition-all duration-300"
-                      onClick={handleClose}
-                    >
-                      <div className="flex items-center gap-2">
-                        <div className="w-1.5 h-1.5 bg-[#005EB8] rounded-full"></div>
-                        <span className="text-xs font-medium text-gray-700 dark:text-gray-300 group-hover:text-[#005EB8] transition-colors duration-300 line-clamp-1">
-                          {course}
-                        </span>
+                  {/* Paid Courses Section */}
+                  <div>
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="w-2 h-6 bg-[#005EB8] rounded-full"></div>
+                      <div>
+                        <h4 className="font-bold text-gray-900 dark:text-white text-base">
+                          Kursus Berbayar
+                        </h4>
+                        <p className="text-xs text-gray-600 dark:text-gray-400">
+                          Akses konten premium lengkap
+                        </p>
                       </div>
-                    </Link>
-                  ))}
-                </div>
+                    </div>
 
-                <Link
-                  href="/courses/paid"
-                  className="inline-flex items-center gap-1 text-xs font-semibold text-[#005EB8] hover:text-[#004A93] transition-all duration-300 group"
-                  onClick={handleClose}
-                >
-                  Lihat semua kursus berbayar
-                  <span className="group-hover:translate-x-1 transition-transform duration-300">
-                    →
-                  </span>
-                </Link>
-              </div>
+                    {paidCourses.length > 0 ? (
+                      <>
+                        <div className="grid grid-cols-2 gap-2 mb-2">
+                          {paidCourses.map((course) => (
+                            <Link
+                              key={course.id}
+                              href={`/courses/${course.slug}`}
+                              className="group relative overflow-hidden bg-gradient-to-r from-[#005EB8]/5 to-[#005EB8]/10 dark:from-[#005EB8]/10 dark:to-[#005EB8]/15 rounded-lg p-2 border border-[#005EB8]/20 hover:border-[#005EB8]/40 transition-all duration-300"
+                              onClick={handleClose}
+                            >
+                              <div className="flex items-center gap-2">
+                                <div className="w-1.5 h-1.5 bg-[#005EB8] rounded-full"></div>
+                                <span className="text-xs font-medium text-gray-700 dark:text-gray-300 group-hover:text-[#005EB8] transition-colors duration-300 line-clamp-1">
+                                  {course.title}
+                                </span>
+                              </div>
+                            </Link>
+                          ))}
+                        </div>
+                        <Link
+                          href="/courses?price=paid"
+                          className="inline-flex items-center gap-1 text-xs font-semibold text-[#005EB8] hover:text-[#004A93] transition-all duration-300 group"
+                          onClick={handleClose}
+                        >
+                          Lihat semua kursus berbayar
+                          <span className="group-hover:translate-x-1 transition-transform duration-300">
+                            →
+                          </span>
+                        </Link>
+                      </>
+                    ) : (
+                      <p className="text-xs text-gray-500 dark:text-gray-400">Belum ada kursus berbayar</p>
+                    )}
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </DropdownCardContent>

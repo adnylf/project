@@ -162,14 +162,14 @@ export default function UserActivityLogs() {
         <div className="space-y-8">
           {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-3">
+            <div className="text-center md:text-left">
+              <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center justify-center md:justify-start gap-3">
                 <Activity className="h-8 w-8 text-[#005EB8]" />
                 Log Aktivitas
               </h1>
               <p className="text-gray-600 dark:text-gray-400">Riwayat aktivitas akun Anda</p>
             </div>
-            <Badge className="bg-[#005EB8] text-white border border-[#005EB8] pointer-events-none text-sm px-3 py-1">
+            <Badge className="bg-[#005EB8] text-white border border-[#005EB8] pointer-events-none text-sm px-3 py-1 mx-auto md:mx-0">
               {pagination.total} Aktivitas
             </Badge>
           </div>
@@ -183,7 +183,7 @@ export default function UserActivityLogs() {
           )}
 
           {/* Stats Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 border-gray-200 dark:border-gray-700">
               <CardContent className="p-5">
                 <div className="flex items-center gap-3">
@@ -259,8 +259,8 @@ export default function UserActivityLogs() {
                   />
                 </div>
                 <Select value={filterAction} onValueChange={setFilterAction}>
-                  <SelectTrigger className="w-full md:w-[240px]">
-                    <Filter className="h-4 w-4 mr-2" />
+                  <SelectTrigger className="w-full md:w-[240px] h-10 bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600">
+                    <Filter className="h-4 w-4 mr-2 text-gray-400" />
                     <SelectValue placeholder="Jenis Aktivitas" />
                   </SelectTrigger>
                   <SelectContent className="min-w-[240px]">

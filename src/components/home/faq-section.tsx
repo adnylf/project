@@ -6,11 +6,11 @@ import { useWindowSize } from "@/hooks/useWindowSize";
 import { Card, CardContent } from "@/components/ui/card";
 import { 
   HelpCircle,
-  Users,
-  Wrench,
-  ShieldCheck,
-  FileText,
-  Smartphone,
+  Volume2,
+  Monitor,
+  Type,
+  MousePointer,
+  Eye,
   LucideIcon
 } from "lucide-react";
 
@@ -26,50 +26,50 @@ interface FAQItem {
 const items: FAQItem[] = [
   {
     id: 1,
-    title: "Apa itu Aksesibilitas?",
-    Icon: HelpCircle,
+    title: "Apa itu Text-to-Speech?",
+    Icon: Volume2,
     imgSrc: "https://images.unsplash.com/photo-1553729459-efe14ef6055d?ixlib=rb-4.0.3&auto=format&fit=crop&w=1740&q=80",
-    description: "Aksesibilitas adalah praktik membuat produk dan layanan dapat digunakan oleh semua orang, termasuk penyandang disabilitas. Ini mencakup desain yang inklusif untuk tunanetra, tunarungu, disabilitas motorik, dan kognitif.",
+    description: "Text-to-Speech (TTS) adalah fitur yang membacakan teks secara otomatis. Anda dapat mengatur kecepatan bicara, volume, dan memilih suara yang diinginkan untuk membantu memahami konten.",
     color: "bg-[#005EB8]"
   },
   {
     id: 2,
-    title: "Siapa yang Membutuhkan?",
-    Icon: Users,
+    title: "Bagaimana Font Disleksia?",
+    Icon: Type,
     imgSrc: "https://images.unsplash.com/photo-1541532713592-79a0317b6b77?ixlib=rb-4.0.3&auto=format&fit=crop&w=688&q=80",
-    description: "Aksesibilitas dibutuhkan oleh penyandang disabilitas permanen, temporer, dan situasional. Ini termasuk tunanetra, tunarungu, disabilitas fisik, serta orang dengan kondisi sementara seperti lengan patah.",
+    description: "Font OpenDyslexic adalah font khusus yang dirancang untuk membantu pengguna disleksia membaca dengan lebih mudah. Bagian bawah huruf dibuat lebih tebal untuk membantu orientasi.",
     color: "bg-[#008A00]"
   },
   {
     id: 3,
-    title: "Fitur Apa Saja?",
-    Icon: Wrench,
+    title: "Pengaturan Visual?",
+    Icon: Monitor,
     imgSrc: "https://images.unsplash.com/photo-1578450671530-5b6a7c9f32a8?ixlib=rb-4.0.3&auto=format&fit=crop&w=870&q=80",
-    description: "Fitur aksesibilitas meliputi screen reader, navigasi keyboard, subtitle, transkrip, pengaturan kontras warna, ukuran teks yang dapat disesuaikan, dan desain yang konsisten.",
+    description: "Anda dapat menyesuaikan kecerahan, saturasi, kontras tampilan, mengaktifkan mode grayscale atau balik warna untuk kenyamanan penglihatan sesuai kebutuhan Anda.",
     color: "bg-[#F4B400]"
   },
   {
     id: 4,
-    title: "Mengapa Penting?",
-    Icon: ShieldCheck,
+    title: "Mode Kontras Tinggi?",
+    Icon: Eye,
     imgSrc: "https://images.unsplash.com/photo-1543286386-713bdd548da4?ixlib=rb-4.0.3&auto=format&fit=crop&w=1740&q=80",
-    description: "Aksesibilitas penting karena merupakan hak asasi manusia, meningkatkan pengalaman semua pengguna, memperluas jangkauan audiens, dan mencerminkan komitmen terhadap inklusi.",
+    description: "Mode kontras tinggi meningkatkan perbedaan warna antara teks dan latar belakang, membantu pengguna low vision untuk membaca konten dengan lebih jelas.",
     color: "bg-[#005EB8]"
   },
   {
     id: 5,
-    title: "Dokumentasi?",
-    Icon: FileText,
+    title: "Panduan Baca & Fokus?",
+    Icon: HelpCircle,
     imgSrc: "https://images.unsplash.com/photo-1581276879432-15e50529f34b?ixlib=rb-4.0.3&auto=format&fit=crop&w=1740&q=80",
-    description: "Kami menyediakan dokumentasi lengkap tentang cara menggunakan fitur aksesibilitas, termasuk panduan screen reader, tutorial navigasi keyboard, dan tips mengoptimalkan pengaturan.",
+    description: "Panduan Baca menampilkan garis horizontal yang mengikuti kursor untuk membantu membaca baris per baris. Mode Fokus memberikan highlight pada elemen yang sedang aktif.",
     color: "bg-[#008A00]"
   },
   {
     id: 6,
-    title: "Perangkat Mobile?",
-    Icon: Smartphone,
+    title: "Ukuran Kursor?",
+    Icon: MousePointer,
     imgSrc: "https://images.unsplash.com/photo-1512941937669-90a1b58e7e9c?ixlib=rb-4.0.3&auto=format&fit=crop&w=1740&q=80",
-    description: "Semua fitur aksesibilitas tersedia di perangkat mobile. Aplikasi kami mendukung gesture aksesibilitas, voice control, zoom teks, dan kompatibel dengan VoiceOver dan TalkBack.",
+    description: "Perbesar ukuran kursor menjadi Besar atau Ekstra Besar untuk memudahkan navigasi, terutama bagi pengguna dengan kesulitan motorik atau penglihatan terbatas.",
     color: "bg-[#F4B400]"
   }
 ];

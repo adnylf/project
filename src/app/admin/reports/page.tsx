@@ -161,14 +161,14 @@ export default function AdminReportsPage() {
         <div className="space-y-8">
           {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-3">
+            <div className="text-center md:text-left">
+              <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center justify-center md:justify-start gap-3">
                 <BarChart3 className="h-8 w-8 text-[#005EB8]" />
                 Laporan & Analitik
               </h1>
               <p className="text-gray-600 dark:text-gray-400">Pantau performa platform secara komprehensif</p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex justify-center md:justify-end gap-2">
               <Select value={period} onValueChange={setPeriod}>
                 <SelectTrigger className="w-[180px] border-gray-300 dark:border-gray-600 focus:border-[#005EB8] focus:ring-[#005EB8]">
                   <Calendar className="h-4 w-4 mr-2 text-gray-500" />
@@ -185,39 +185,39 @@ export default function AdminReportsPage() {
           </div>
 
           {/* Tabs */}
-          <div className="flex gap-2 border-b border-gray-200 dark:border-gray-700">
+          <div className="flex gap-1 md:gap-2 border-b border-gray-200 dark:border-gray-700">
             <button 
               onClick={() => setActiveTab("revenue")} 
-              className={`px-4 py-2 font-medium flex items-center gap-2 border-b-2 transition-colors ${
+              className={`flex-1 md:flex-none px-2 md:px-4 py-2 font-medium flex items-center justify-center md:justify-start gap-1 md:gap-2 border-b-2 transition-colors text-sm md:text-base ${
                 activeTab === "revenue" 
                   ? "border-[#005EB8] text-[#005EB8]" 
                   : "border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
               }`}
             >
               <DollarSign className="h-4 w-4" />
-              Pendapatan
+              <span className="hidden sm:inline">Pendapatan</span>
             </button>
             <button 
               onClick={() => setActiveTab("users")} 
-              className={`px-4 py-2 font-medium flex items-center gap-2 border-b-2 transition-colors ${
+              className={`flex-1 md:flex-none px-2 md:px-4 py-2 font-medium flex items-center justify-center md:justify-start gap-1 md:gap-2 border-b-2 transition-colors text-sm md:text-base ${
                 activeTab === "users" 
                   ? "border-[#005EB8] text-[#005EB8]" 
                   : "border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
               }`}
             >
               <Users className="h-4 w-4" />
-              Pengguna
+              <span className="hidden sm:inline">Pengguna</span>
             </button>
             <button 
               onClick={() => setActiveTab("courses")} 
-              className={`px-4 py-2 font-medium flex items-center gap-2 border-b-2 transition-colors ${
+              className={`flex-1 md:flex-none px-2 md:px-4 py-2 font-medium flex items-center justify-center md:justify-start gap-1 md:gap-2 border-b-2 transition-colors text-sm md:text-base ${
                 activeTab === "courses" 
                   ? "border-[#005EB8] text-[#005EB8]" 
                   : "border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
               }`}
             >
               <BookOpen className="h-4 w-4" />
-              Kursus
+              <span className="hidden sm:inline">Kursus</span>
             </button>
           </div>
 
@@ -242,7 +242,7 @@ export default function AdminReportsPage() {
               {activeTab === "revenue" && revenueReport && (
                 <div className="space-y-6">
                   {/* Stats Cards */}
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                     <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 border-gray-200 dark:border-gray-700">
                       <CardContent className="p-5">
                         <div className="flex items-center gap-3">
@@ -394,22 +394,24 @@ export default function AdminReportsPage() {
 
                   {/* Top Courses by Revenue */}
                   <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
-                    <CardHeader className="flex flex-row items-center justify-between pb-3 border-b">
-                      <div>
-                        <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-white text-xl font-bold">
-                          <ShoppingBag className="h-5 w-5 text-[#008A00]" />
-                          Kursus dengan Pendapatan Tertinggi
-                        </CardTitle>
-                        <CardDescription>Kursus dengan pendapatan terbesar</CardDescription>
+                    <CardHeader className="pb-3 border-b">
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                        <div>
+                          <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-white text-lg md:text-xl font-bold">
+                            <ShoppingBag className="h-5 w-5 text-[#008A00]" />
+                            Kursus dengan Pendapatan Tertinggi
+                          </CardTitle>
+                          <CardDescription>Kursus dengan pendapatan terbesar</CardDescription>
+                        </div>
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          className="border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10 dark:border-[#005EB8] dark:text-[#005EB8] w-full sm:w-auto"
+                        >
+                          <Eye className="h-4 w-4 mr-1" />
+                          Lihat Semua
+                        </Button>
                       </div>
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        className="border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10 dark:border-[#005EB8] dark:text-[#005EB8]"
-                      >
-                        <Eye className="h-4 w-4 mr-1" />
-                        Lihat Semua
-                      </Button>
                     </CardHeader>
                     <CardContent className="p-0">
                       {revenueReport.top_courses.length === 0 ? (
@@ -446,7 +448,7 @@ export default function AdminReportsPage() {
               {activeTab === "users" && usersReport && (
                 <div className="space-y-6">
                   {/* Stats Cards */}
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                     <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 border-gray-200 dark:border-gray-700">
                       <CardContent className="p-5">
                         <div className="flex items-center gap-3">
@@ -595,22 +597,24 @@ export default function AdminReportsPage() {
 
                   {/* Top Learners */}
                   <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
-                    <CardHeader className="flex flex-row items-center justify-between pb-3 border-b">
-                      <div>
-                        <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-white text-xl font-bold">
-                          <Crown className="h-5 w-5 text-[#F4B400]" />
-                          Top Learners
-                        </CardTitle>
-                        <CardDescription>Pengguna dengan enrollment terbanyak</CardDescription>
+                    <CardHeader className="pb-3 border-b">
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                        <div>
+                          <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-white text-lg md:text-xl font-bold">
+                            <Crown className="h-5 w-5 text-[#F4B400]" />
+                            Top Learners
+                          </CardTitle>
+                          <CardDescription>Pengguna dengan enrollment terbanyak</CardDescription>
+                        </div>
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          className="border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10 dark:border-[#005EB8] dark:text-[#005EB8] w-full sm:w-auto"
+                        >
+                          <Eye className="h-4 w-4 mr-1" />
+                          Lihat Semua
+                        </Button>
                       </div>
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        className="border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10 dark:border-[#005EB8] dark:text-[#005EB8]"
-                      >
-                        <Eye className="h-4 w-4 mr-1" />
-                        Lihat Semua
-                      </Button>
                     </CardHeader>
                     <CardContent className="p-0">
                       {usersReport.top_learners.length === 0 ? (
@@ -658,7 +662,7 @@ export default function AdminReportsPage() {
               {activeTab === "courses" && coursesReport && (
                 <div className="space-y-6">
                   {/* Stats Cards */}
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                     <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 border-gray-200 dark:border-gray-700">
                       <CardContent className="p-5">
                         <div className="flex items-center gap-3">

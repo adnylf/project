@@ -315,45 +315,47 @@ export default function UserProfile() {
         <div className="space-y-8">
           {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-3">
+            <div className="text-center md:text-left">
+              <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center justify-center md:justify-start gap-3">
                 <User className="h-8 w-8 text-[#005EB8]" />
                 Profil Saya
               </h1>
               <p className="text-gray-600 dark:text-gray-400">Kelola informasi pribadi Anda</p>
             </div>
-            {!isEditing ? (
-              <Button 
-                onClick={() => setIsEditing(true)} 
-                className="bg-[#005EB8] hover:bg-[#004A93] text-white"
-              >
-                <Edit3 className="h-4 w-4 mr-2" />
-                Edit Profil
-              </Button>
-            ) : (
-              <div className="flex gap-2">
+            <div className="flex justify-center md:justify-end">
+              {!isEditing ? (
                 <Button 
-                  variant="outline" 
-                  onClick={() => setIsEditing(false)} 
-                  disabled={saving}
-                  className="border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10 dark:border-[#005EB8] dark:text-[#005EB8]"
-                >
-                  Batal
-                </Button>
-                <Button 
-                  onClick={handleSave} 
-                  disabled={saving} 
+                  onClick={() => setIsEditing(true)} 
                   className="bg-[#005EB8] hover:bg-[#004A93] text-white"
                 >
-                  {saving ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <Save className="h-4 w-4 mr-2" />
-                  )}
-                  Simpan Perubahan
+                  <Edit3 className="h-4 w-4 mr-2" />
+                  Edit Profil
                 </Button>
-              </div>
-            )}
+              ) : (
+                <div className="flex gap-2">
+                  <Button 
+                    variant="outline" 
+                    onClick={() => setIsEditing(false)} 
+                    disabled={saving}
+                    className="border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10 dark:border-[#005EB8] dark:text-[#005EB8]"
+                  >
+                    Batal
+                  </Button>
+                  <Button 
+                    onClick={handleSave} 
+                    disabled={saving} 
+                    className="bg-[#005EB8] hover:bg-[#004A93] text-white"
+                  >
+                    {saving ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Save className="h-4 w-4 mr-2" />
+                    )}
+                    Simpan Perubahan
+                  </Button>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Alerts */}
@@ -464,14 +466,14 @@ export default function UserProfile() {
           <div className="grid md:grid-cols-2 gap-6">
             {/* Personal Info - Updated to match mentor style */}
             <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
-              <CardHeader>
+              <CardHeader className="pb-3 border-b">
                 <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-white text-xl font-bold">
                   <User className="h-5 w-5 text-[#005EB8]" />
                   Informasi Pribadi
                 </CardTitle>
                 <CardDescription>Data diri Anda</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="pt-6 space-y-4">
                 {isEditing ? (
                   // Edit Mode
                   <>
@@ -554,14 +556,14 @@ export default function UserProfile() {
 
             {/* Address & Bio - Updated to match mentor style */}
             <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
-              <CardHeader>
+              <CardHeader className="pb-3 border-b">
                 <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-white text-xl font-bold">
                   <MapPin className="h-5 w-5 text-[#005EB8]" />
                   Alamat & Bio
                 </CardTitle>
                 <CardDescription>Informasi lokasi dan tentang Anda</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="pt-6 space-y-4">
                 {isEditing ? (
                   // Edit Mode
                   <>
@@ -624,14 +626,14 @@ export default function UserProfile() {
 
           {/* Account Info */}
           <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-white">
+            <CardHeader className="pb-3 border-b">
+              <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-white text-xl font-bold">
                 <Shield className="h-5 w-5 text-[#005EB8]" />
                 Informasi Akun
               </CardTitle>
               <CardDescription>Detail akun Anda (tidak dapat diubah)</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="pt-6">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <Card className="rounded-lg border bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700">
                   <CardContent className="p-4">

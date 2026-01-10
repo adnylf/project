@@ -136,14 +136,15 @@ export default function EditReview() {
         <div className="space-y-8">
           {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-3">
+            <div className="text-center md:text-left">
+              <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center justify-center md:justify-start gap-3">
                 <Edit3 className="h-8 w-8 text-[#005EB8]" />
                 Edit Review
               </h1>
               <p className="text-gray-600 dark:text-gray-400">Perbarui review Anda</p>
             </div>
-            <Button 
+            <div className="flex justify-center md:justify-end">
+              <Button 
               variant="outline" 
               asChild
               className="border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10 dark:border-[#005EB8] dark:text-[#005EB8]"
@@ -153,6 +154,7 @@ export default function EditReview() {
                 Kembali
               </Link>
             </Button>
+            </div>
           </div>
 
           {/* Error Card */}
@@ -199,8 +201,8 @@ export default function EditReview() {
                 <ArrowLeft className="h-5 w-5" />
               </Button>
             </Link>
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-1 flex items-center gap-3">
+            <div className="text-center md:text-left">
+              <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-1 flex items-center justify-center md:justify-start gap-3">
                 <Edit3 className="h-8 w-8 text-[#005EB8]" />
                 Edit Review
               </h1>

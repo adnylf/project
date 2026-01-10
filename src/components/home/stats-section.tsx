@@ -1,3 +1,6 @@
+"use client";
+
+import { useState, useEffect } from "react";
 import { 
   Users, 
   BookOpen, 
@@ -8,6 +11,14 @@ import {
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 
+interface PlatformStats {
+  total_students: number;
+  total_courses: number;
+  total_certificates: number;
+  total_reviews: number;
+  average_rating: number;
+}
+
 interface Stat {
   icon: LucideIcon;
   value: string;
@@ -17,42 +28,64 @@ interface Stat {
   bgColor: string;
 }
 
-const stats: Stat[] = [
-  {
-    icon: Users,
-    value: '10,000+',
-    label: 'Siswa Aktif',
-    description: 'Bergabung dalam komunitas',
-    color: 'text-[#005EB8]',
-    bgColor: 'bg-[#005EB8]/10',
-  },
-  {
-    icon: BookOpen,
-    value: '500+',
-    label: 'Kursus Tersedia',
-    description: 'Berbagai topik & level',
-    color: 'text-[#008A00]',
-    bgColor: 'bg-[#008A00]/10',
-  },
-  {
-    icon: Award,
-    value: '8,500+',
-    label: 'Sertifikat',
-    description: 'Telah diterbitkan',
-    color: 'text-[#F4B400]',
-    bgColor: 'bg-[#F4B400]/10',
-  },
-  {
-    icon: Star,
-    value: '4.9/5',
-    label: 'Rating',
-    description: 'Dari ribuan ulasan',
-    color: 'text-[#005EB8]',
-    bgColor: 'bg-[#005EB8]/10',
-  },
-];
-
 export default function StatsSection() {
+  const [stats, setStats] = useState<PlatformStats>({
+    total_students: 0,
+    total_courses: 0,
+    total_certificates: 0,
+    total_reviews: 0,
+    average_rating: 0,
+  });
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const response = await fetch('/api/stats');
+        if (response.ok) {
+          const data = await response.json();
+          setStats(data);
+        }
+      } catch (error) {
+        console.error('Error fetching stats:', error);
+      }
+    };
+    fetchStats();
+  }, []);
+
+  const displayStats: Stat[] = [
+    {
+      icon: Users,
+      value: `${stats.total_students.toLocaleString('id-ID')}+`,
+      label: 'Siswa Aktif',
+      description: 'Bergabung dalam komunitas',
+      color: 'text-[#005EB8]',
+      bgColor: 'bg-[#005EB8]/10',
+    },
+    {
+      icon: BookOpen,
+      value: `${stats.total_courses}+`,
+      label: 'Kursus Tersedia',
+      description: 'Berbagai topik & level',
+      color: 'text-[#008A00]',
+      bgColor: 'bg-[#008A00]/10',
+    },
+    {
+      icon: Award,
+      value: `${stats.total_certificates.toLocaleString('id-ID')}+`,
+      label: 'Sertifikat',
+      description: 'Telah diterbitkan',
+      color: 'text-[#F4B400]',
+      bgColor: 'bg-[#F4B400]/10',
+    },
+    {
+      icon: Star,
+      value: `${stats.average_rating.toFixed(1)}/5`,
+      label: 'Rating',
+      description: `Dari ${stats.total_reviews.toLocaleString('id-ID')} ulasan`,
+      color: 'text-[#005EB8]',
+      bgColor: 'bg-[#005EB8]/10',
+    },
+  ];
   return (
     <section className="py-16 lg:py-20 bg-gray-50 dark:bg-gray-800/50">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
@@ -72,7 +105,7 @@ export default function StatsSection() {
 
         {/* Stats Grid */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
-          {stats.map((stat, index) => (
+          {displayStats.map((stat, index) => (
             <Card
               key={index}
               className="rounded-lg border bg-white dark:bg-gray-800 shadow-sm hover:shadow-md transition-all duration-300 border-gray-200 dark:border-gray-700 text-center group"

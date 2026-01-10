@@ -5,7 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Play, Search, Filter, Clock, CheckCircle, Star, Loader2, BookOpen, GraduationCap, ArrowUpRight, Sparkles } from "lucide-react";
+import { Play, Search, Filter, Clock, CheckCircle, Star, Loader2, BookOpen, GraduationCap, ArrowUpRight, Sparkles, ArrowUpDown } from "lucide-react";
 import Link from "next/link";
 import UserLayout from "@/components/user/user-layout";
 import {
@@ -181,8 +181,8 @@ export default function UserCourses() {
       <UserLayout>
         <div className="space-y-8 max-w-6xl mx-auto">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-3">
+            <div className="text-center md:text-left">
+              <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center justify-center md:justify-start gap-3">
                 <GraduationCap className="h-8 w-8 text-[#005EB8]" />
                 Kursus Saya
               </h1>
@@ -190,7 +190,7 @@ export default function UserCourses() {
                 Kelola dan lanjutkan pembelajaran Anda
               </p>
             </div>
-            <Badge className="bg-[#005EB8] text-white border border-[#005EB8] pointer-events-none text-sm px-3 py-1">
+            <Badge className="bg-[#005EB8] text-white border border-[#005EB8] pointer-events-none text-sm px-3 py-1 mx-auto md:mx-0">
               {enrollments.length} Kursus Terdaftar
             </Badge>
           </div>
@@ -221,8 +221,8 @@ export default function UserCourses() {
                     value={filterCategory}
                     onValueChange={setFilterCategory}
                   >
-                    <SelectTrigger className="w-[180px]">
-                      <Filter className="h-4 w-4 mr-2" />
+                    <SelectTrigger className="w-full md:w-[180px] h-10 bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600">
+                      <Filter className="h-4 w-4 mr-2 text-gray-400" />
                       <SelectValue placeholder="Kategori" />
                     </SelectTrigger>
                     <SelectContent>
@@ -236,7 +236,8 @@ export default function UserCourses() {
                   </Select>
 
                   <Select value={sortBy} onValueChange={setSortBy}>
-                    <SelectTrigger className="w-[180px]">
+                    <SelectTrigger className="w-full md:w-[180px] h-10 bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600">
+                      <ArrowUpDown className="h-4 w-4 mr-2 text-gray-400" />
                       <SelectValue placeholder="Urutkan" />
                     </SelectTrigger>
                     <SelectContent>
@@ -377,23 +378,23 @@ export default function UserCourses() {
 
           {/* Card Jelajahi Lebih Banyak Kursus */}
           <Card className="rounded-lg border bg-gradient-to-r from-[#005EB8] to-[#004A93] text-white shadow-sm transition-all duration-300 hover:shadow-md border-[#005EB8]">
-            <CardContent className="p-8">
-              <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-                <div className="text-center md:text-left">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Sparkles className="h-5 w-5 text-white" />
-                    <h3 className="text-2xl font-bold text-white">
+            <CardContent className="p-6 sm:p-8">
+              <div className="flex flex-col md:flex-row items-center justify-between gap-4 md:gap-6">
+                <div className="text-center md:text-left w-full md:w-auto">
+                  <div className="flex items-center justify-center md:justify-start gap-2 mb-2">
+                    <Sparkles className="h-5 w-5 text-white flex-shrink-0" />
+                    <h3 className="text-lg sm:text-xl md:text-2xl font-bold text-white">
                       Jelajahi Lebih Banyak Kursus
                     </h3>
                   </div>
-                  <p className="text-white/90">
+                  <p className="text-white/90 text-sm sm:text-base">
                     Temukan ribuan kursus berkualitas untuk meningkatkan keterampilan Anda
                   </p>
                 </div>
-                <Link href="/courses">
+                <Link href="/courses" className="w-full sm:w-auto flex-shrink-0">
                   <Button
                     size="lg"
-                    className="bg-white text-[#005EB8] hover:bg-gray-100 font-semibold"
+                    className="w-full sm:w-auto bg-white text-[#005EB8] hover:bg-gray-100 font-semibold"
                   >
                     Lihat Semua Kursus
                     <ArrowUpRight className="h-4 w-4 ml-2" />

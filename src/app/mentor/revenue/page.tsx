@@ -144,8 +144,8 @@ export default function RevenuePage() {
         <div className="space-y-8">
           {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-2 flex items-center gap-3">
+            <div className="text-center md:text-left">
+              <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2 flex items-center justify-center md:justify-start gap-3">
                 <DollarSign className="h-8 w-8 text-[#005EB8]" />
                 Pendapatan
               </h1>
@@ -153,19 +153,21 @@ export default function RevenuePage() {
                 Pantau dan kelola pendapatan dari kursus Anda
               </p>
             </div>
-            <Select value={selectedYear} onValueChange={setSelectedYear}>
-              <SelectTrigger className="w-40 border-gray-300 focus:border-[#005EB8] focus:ring-[#005EB8]">
-                <Calendar className="h-4 w-4 mr-2 text-gray-400" />
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {availableYears.map((year) => (
-                  <SelectItem key={year} value={year}>
-                    Tahun {year}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="flex justify-center md:justify-end">
+              <Select value={selectedYear} onValueChange={setSelectedYear}>
+                <SelectTrigger className="w-40 border-gray-300 focus:border-[#005EB8] focus:ring-[#005EB8]">
+                  <Calendar className="h-4 w-4 mr-2 text-gray-400" />
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableYears.map((year) => (
+                    <SelectItem key={year} value={year}>
+                      Tahun {year}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           {/* Error */}
@@ -176,7 +178,7 @@ export default function RevenuePage() {
           )}
 
           {/* Stats Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* Total Revenue */}
             <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 border-gray-200 dark:border-gray-700">
               <CardContent className="p-5">
@@ -258,7 +260,7 @@ export default function RevenuePage() {
 
           {/* Chart */}
           <Card className="border rounded-xl">
-            <CardHeader>
+            <CardHeader className="pb-3 border-b">
               <CardTitle className="flex items-center gap-2 text-gray-900 text-xl font-bold">
                 <BarChart3 className="h-5 w-5 text-[#005EB8]" />
                 Grafik Pendapatan Bulanan
@@ -313,7 +315,7 @@ export default function RevenuePage() {
                   </div>
 
                   {/* Summary */}
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-6 border-t border-gray-200">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-6 border-t border-gray-200">
                     <Card className="border rounded-xl bg-white">
                       <CardContent className="p-4 text-center">
                         <p className="text-sm text-gray-500">Total Tahun {selectedYear}</p>
@@ -354,8 +356,11 @@ export default function RevenuePage() {
 
           {/* Monthly Breakdown Table */}
           <Card className="border rounded-xl">
-            <CardHeader>
-              <CardTitle className="text-gray-900 text-xl font-bold">Rincian Pendapatan Bulanan</CardTitle>
+            <CardHeader className="pb-3 border-b">
+              <CardTitle className="flex items-center gap-2 text-gray-900 text-xl font-bold">
+                <Receipt className="h-5 w-5 text-[#005EB8]" />
+                Rincian Pendapatan Bulanan
+              </CardTitle>
               <CardDescription>Detail pendapatan per bulan</CardDescription>
             </CardHeader>
             <CardContent>

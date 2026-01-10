@@ -363,8 +363,8 @@ export default function AdminUsers() {
         <div className="space-y-8">
           {/* Header Section */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-3">
+            <div className="text-center md:text-left">
+              <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center justify-center md:justify-start gap-3">
                   <Users className="h-8 w-8 text-[#005EB8]" />
                 Kelola Pengguna
               </h1>
@@ -372,7 +372,7 @@ export default function AdminUsers() {
                 Manajemen akun pengguna (aktifkan, tangguhkan, hapus)
               </p>
             </div>
-            <Badge className="bg-[#005EB8] text-white border border-[#005EB8] pointer-events-none text-sm px-3 py-1">
+            <Badge className="bg-[#005EB8] text-white border border-[#005EB8] pointer-events-none text-sm px-3 py-1 mx-auto md:mx-0">
               {stats.total} Pengguna
             </Badge>
           </div>
@@ -392,7 +392,7 @@ export default function AdminUsers() {
           )}
 
           {/* Stats Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 border-gray-200 dark:border-gray-700">
               <CardContent className="p-5">
                 <div className="flex items-center gap-3">
@@ -503,6 +503,7 @@ export default function AdminUsers() {
                     setPagination(prev => ({ ...prev, page: 1 }));
                   }}>
                     <SelectTrigger className="w-full md:w-[160px] h-10 bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600">
+                      <Shield className="h-4 w-4 mr-2 text-gray-400" />
                       <SelectValue placeholder="Role" />
                     </SelectTrigger>
                     <SelectContent>
@@ -515,125 +516,236 @@ export default function AdminUsers() {
                 </div>
               </div>
 
-              {/* Table */}
+              {/* Table - Desktop / Cards - Mobile & Tablet */}
               {isLoading ? (
                 <div className="flex flex-col items-center justify-center py-12">
                   <Loader2 className="h-12 w-12 animate-spin text-[#005EB8] mb-4" />
                   <span className="text-gray-600 dark:text-gray-400">Memuat data pengguna...</span>
                 </div>
               ) : users.length > 0 ? (
-                <div className="overflow-x-auto">
-                  <Table className="min-w-full">
-                    <TableHeader>
-                      <TableRow className="bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                        <TableHead className="font-semibold text-gray-700 dark:text-gray-300 px-4 py-3">Nama</TableHead>
-                        <TableHead className="font-semibold text-gray-700 dark:text-gray-300 px-4 py-3">Email</TableHead>
-                        <TableHead className="font-semibold text-gray-700 dark:text-gray-300 px-4 py-3">Role</TableHead>
-                        <TableHead className="font-semibold text-gray-700 dark:text-gray-300 px-4 py-3">Bergabung</TableHead>
-                        <TableHead className="font-semibold text-gray-700 dark:text-gray-300 px-4 py-3">Login Terakhir</TableHead>
-                        <TableHead className="font-semibold text-gray-700 dark:text-gray-300 px-4 py-3 text-center">Kursus</TableHead>
-                        <TableHead className="font-semibold text-gray-700 dark:text-gray-300 px-4 py-3 text-center">Sertifikat</TableHead>
-                        <TableHead className="font-semibold text-gray-700 dark:text-gray-300 px-4 py-3 text-center">Status</TableHead>
-                        <TableHead className="font-semibold text-gray-700 dark:text-gray-300 px-4 py-3 text-center">Aksi</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {users.map((user) => (
-                        <TableRow key={user.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors">
-                          <TableCell className="px-4 py-3">
-                            <div>
-                              <p className="font-medium text-gray-900 dark:text-white">
+                <>
+                  {/* Mobile & Tablet View - Cards */}
+                  <div className="block lg:hidden p-4 space-y-4">
+                    {users.map((user) => (
+                      <Card key={user.id} className="rounded-lg border bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
+                        <CardContent className="p-4">
+                          {/* Header: Name, Role, Status, Action */}
+                          <div className="flex items-start justify-between mb-3">
+                            <div className="flex-1 min-w-0">
+                              <p className="font-semibold text-gray-900 dark:text-white truncate">
                                 {user.full_name || '-'}
                               </p>
                               {user.disability_type && (
-                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                                   {user.disability_type}
                                 </p>
                               )}
                             </div>
-                          </TableCell>
-                          <TableCell className="px-4 py-3">
-                            <div className="text-sm">
-                              <p className="text-gray-900 dark:text-white">{user.email}</p>
-                              {user.email_verified && (
-                                <span className="inline-flex items-center gap-1 text-xs text-[#008A00] dark:text-[#008A00] mt-1">
-                                  <Shield className="h-3 w-3" />
-                                  Terverifikasi
-                                </span>
-                              )}
+                            <div className="flex items-center gap-2 ml-2">
+                              {getStatusBadge(user.status)}
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button 
+                                    variant="outline" 
+                                    size="sm"
+                                    className="h-8 w-8 p-0 border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10 dark:border-[#005EB8] dark:text-[#005EB8] dark:hover:bg-[#005EB8]/20 flex-shrink-0"
+                                  >
+                                    <MoreHorizontal className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+                                  <DropdownMenuItem className="text-[#005EB8] hover:text-[#004A93] dark:text-[#005EB8] dark:hover:text-[#004A93]">
+                                    <Eye className="h-4 w-4 mr-2" />
+                                    Lihat Detail
+                                  </DropdownMenuItem>
+                                  <DropdownMenuSeparator />
+                                  {user.status === 'ACTIVE' ? (
+                                    <DropdownMenuItem 
+                                      onClick={() => handleSuspendUser(user.id)}
+                                      className="text-[#F4B400] hover:text-[#E6A800] dark:text-[#F4B400] dark:hover:text-[#E6A800]"
+                                      disabled={isSubmitting}
+                                    >
+                                      <UserMinus className="h-4 w-4 mr-2" />
+                                      Tangguhkan
+                                    </DropdownMenuItem>
+                                  ) : (
+                                    <DropdownMenuItem 
+                                      onClick={() => handleActivateUser(user.id)}
+                                      className="text-[#008A00] hover:text-[#007800] dark:text-[#008A00] dark:hover:text-[#007800]"
+                                      disabled={isSubmitting}
+                                    >
+                                      <UserCheck className="h-4 w-4 mr-2" />
+                                      Aktifkan
+                                    </DropdownMenuItem>
+                                  )}
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem 
+                                    onClick={() => openDeleteDialog(user.id)}
+                                    className="text-[#D93025] hover:text-[#C02920] dark:text-[#D93025] dark:hover:text-[#C02920]"
+                                    disabled={isSubmitting}
+                                  >
+                                    <Trash2 className="h-4 w-4 mr-2" />
+                                    Hapus
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
                             </div>
-                          </TableCell>
-                          <TableCell className="px-4 py-3">{getRoleBadge(user.role)}</TableCell>
-                          <TableCell className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
-                            {formatDate(user.created_at)}
-                          </TableCell>
-                          <TableCell className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
-                            {formatDate(user.last_login)}
-                          </TableCell>
-                          <TableCell className="px-4 py-3 text-center">
-                            <span className="font-medium text-gray-900 dark:text-white">
-                              {user._count?.enrollments || 0}
-                            </span>
-                          </TableCell>
-                          <TableCell className="px-4 py-3 text-center">
-                            <span className="font-medium text-gray-900 dark:text-white">
-                              {user._count?.certificates || 0}
-                            </span>
-                          </TableCell>
-                          <TableCell className="px-4 py-3 text-center">{getStatusBadge(user.status)}</TableCell>
-                          <TableCell className="px-4 py-3 text-center">
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button 
-                                  variant="outline" 
-                                  size="sm"
-                                  className="h-8 w-8 p-0 border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10 dark:border-[#005EB8] dark:text-[#005EB8] dark:hover:bg-[#005EB8]/20"
-                                >
-                                  <MoreHorizontal className="h-4 w-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end" className="w-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
-                                <DropdownMenuItem className="text-[#005EB8] hover:text-[#004A93] dark:text-[#005EB8] dark:hover:text-[#004A93]">
-                                  <Eye className="h-4 w-4 mr-2" />
-                                  Lihat Detail
-                                </DropdownMenuItem>
-                                <DropdownMenuSeparator />
-                                {user.status === 'ACTIVE' ? (
-                                  <DropdownMenuItem 
-                                    onClick={() => handleSuspendUser(user.id)}
-                                    className="text-[#F4B400] hover:text-[#E6A800] dark:text-[#F4B400] dark:hover:text-[#E6A800]"
-                                    disabled={isSubmitting}
-                                  >
-                                    <UserMinus className="h-4 w-4 mr-2" />
-                                    Tangguhkan
-                                  </DropdownMenuItem>
-                                ) : (
-                                  <DropdownMenuItem 
-                                    onClick={() => handleActivateUser(user.id)}
-                                    className="text-[#008A00] hover:text-[#007800] dark:text-[#008A00] dark:hover:text-[#007800]"
-                                    disabled={isSubmitting}
-                                  >
-                                    <UserCheck className="h-4 w-4 mr-2" />
-                                    Aktifkan
-                                  </DropdownMenuItem>
-                                )}
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem 
-                                  onClick={() => openDeleteDialog(user.id)}
-                                  className="text-[#D93025] hover:text-[#C02920] dark:text-[#D93025] dark:hover:text-[#C02920]"
-                                  disabled={isSubmitting}
-                                >
-                                  <Trash2 className="h-4 w-4 mr-2" />
-                                  Hapus
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </TableCell>
+                          </div>
+
+                          {/* Email */}
+                          <div className="mb-3">
+                            <p className="text-sm text-gray-600 dark:text-gray-400 break-all">{user.email}</p>
+                            {user.email_verified && (
+                              <span className="inline-flex items-center gap-1 text-xs text-[#008A00] dark:text-[#008A00] mt-1">
+                                <Shield className="h-3 w-3" />
+                                Terverifikasi
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Role Badge */}
+                          <div className="mb-3">
+                            {getRoleBadge(user.role)}
+                          </div>
+
+                          {/* Info Grid */}
+                          <div className="grid grid-cols-2 gap-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+                            <div>
+                              <p className="text-xs text-gray-500 dark:text-gray-400">Bergabung</p>
+                              <p className="text-sm font-medium text-gray-900 dark:text-white">{formatDate(user.created_at)}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-500 dark:text-gray-400">Login Terakhir</p>
+                              <p className="text-sm font-medium text-gray-900 dark:text-white">{formatDate(user.last_login)}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-500 dark:text-gray-400">Kursus</p>
+                              <p className="text-sm font-medium text-gray-900 dark:text-white">{user._count?.enrollments || 0}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-500 dark:text-gray-400">Sertifikat</p>
+                              <p className="text-sm font-medium text-gray-900 dark:text-white">{user._count?.certificates || 0}</p>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+
+                  {/* Desktop View - Table */}
+                  <div className="hidden lg:block overflow-x-auto">
+                    <Table className="min-w-full">
+                      <TableHeader>
+                        <TableRow className="bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                          <TableHead className="font-semibold text-gray-700 dark:text-gray-300 px-4 py-3">Nama</TableHead>
+                          <TableHead className="font-semibold text-gray-700 dark:text-gray-300 px-4 py-3">Email</TableHead>
+                          <TableHead className="font-semibold text-gray-700 dark:text-gray-300 px-4 py-3">Role</TableHead>
+                          <TableHead className="font-semibold text-gray-700 dark:text-gray-300 px-4 py-3">Bergabung</TableHead>
+                          <TableHead className="font-semibold text-gray-700 dark:text-gray-300 px-4 py-3">Login Terakhir</TableHead>
+                          <TableHead className="font-semibold text-gray-700 dark:text-gray-300 px-4 py-3 text-center">Kursus</TableHead>
+                          <TableHead className="font-semibold text-gray-700 dark:text-gray-300 px-4 py-3 text-center">Sertifikat</TableHead>
+                          <TableHead className="font-semibold text-gray-700 dark:text-gray-300 px-4 py-3 text-center">Status</TableHead>
+                          <TableHead className="font-semibold text-gray-700 dark:text-gray-300 px-4 py-3 text-center">Aksi</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
+                      </TableHeader>
+                      <TableBody>
+                        {users.map((user) => (
+                          <TableRow key={user.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors">
+                            <TableCell className="px-4 py-3">
+                              <div>
+                                <p className="font-medium text-gray-900 dark:text-white">
+                                  {user.full_name || '-'}
+                                </p>
+                                {user.disability_type && (
+                                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                    {user.disability_type}
+                                  </p>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell className="px-4 py-3">
+                              <div className="text-sm">
+                                <p className="text-gray-900 dark:text-white">{user.email}</p>
+                                {user.email_verified && (
+                                  <span className="inline-flex items-center gap-1 text-xs text-[#008A00] dark:text-[#008A00] mt-1">
+                                    <Shield className="h-3 w-3" />
+                                    Terverifikasi
+                                  </span>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell className="px-4 py-3">{getRoleBadge(user.role)}</TableCell>
+                            <TableCell className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
+                              {formatDate(user.created_at)}
+                            </TableCell>
+                            <TableCell className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
+                              {formatDate(user.last_login)}
+                            </TableCell>
+                            <TableCell className="px-4 py-3 text-center">
+                              <span className="font-medium text-gray-900 dark:text-white">
+                                {user._count?.enrollments || 0}
+                              </span>
+                            </TableCell>
+                            <TableCell className="px-4 py-3 text-center">
+                              <span className="font-medium text-gray-900 dark:text-white">
+                                {user._count?.certificates || 0}
+                              </span>
+                            </TableCell>
+                            <TableCell className="px-4 py-3 text-center">{getStatusBadge(user.status)}</TableCell>
+                            <TableCell className="px-4 py-3 text-center">
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button 
+                                    variant="outline" 
+                                    size="sm"
+                                    className="h-8 w-8 p-0 border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10 dark:border-[#005EB8] dark:text-[#005EB8] dark:hover:bg-[#005EB8]/20"
+                                  >
+                                    <MoreHorizontal className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+                                  <DropdownMenuItem className="text-[#005EB8] hover:text-[#004A93] dark:text-[#005EB8] dark:hover:text-[#004A93]">
+                                    <Eye className="h-4 w-4 mr-2" />
+                                    Lihat Detail
+                                  </DropdownMenuItem>
+                                  <DropdownMenuSeparator />
+                                  {user.status === 'ACTIVE' ? (
+                                    <DropdownMenuItem 
+                                      onClick={() => handleSuspendUser(user.id)}
+                                      className="text-[#F4B400] hover:text-[#E6A800] dark:text-[#F4B400] dark:hover:text-[#E6A800]"
+                                      disabled={isSubmitting}
+                                    >
+                                      <UserMinus className="h-4 w-4 mr-2" />
+                                      Tangguhkan
+                                    </DropdownMenuItem>
+                                  ) : (
+                                    <DropdownMenuItem 
+                                      onClick={() => handleActivateUser(user.id)}
+                                      className="text-[#008A00] hover:text-[#007800] dark:text-[#008A00] dark:hover:text-[#007800]"
+                                      disabled={isSubmitting}
+                                    >
+                                      <UserCheck className="h-4 w-4 mr-2" />
+                                      Aktifkan
+                                    </DropdownMenuItem>
+                                  )}
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem 
+                                    onClick={() => openDeleteDialog(user.id)}
+                                    className="text-[#D93025] hover:text-[#C02920] dark:text-[#D93025] dark:hover:text-[#C02920]"
+                                    disabled={isSubmitting}
+                                  >
+                                    <Trash2 className="h-4 w-4 mr-2" />
+                                    Hapus
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </>
               ) : (
                 <div className="text-center py-12">
                   <div className="flex flex-col items-center gap-4">

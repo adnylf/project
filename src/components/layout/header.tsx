@@ -2,16 +2,26 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useRef } from "react";
-import { Menu, X, BookOpen, ChevronDown } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { Menu, X, BookOpen, ChevronDown, Loader2 } from "lucide-react";
 import CoursesDropdown from "@/components/ui/courses-dropdown";
 import { AnimatedThemeToggler } from "@/components/ui/animated-theme-toggler";
 import DrawOutlineButton from "@/components/ui/draw-outline-button";
+
+interface Course {
+  id: string;
+  title: string;
+  slug: string;
+  price: number;
+}
 
 export default function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [coursesDropdownOpen, setCoursesDropdownOpen] = useState(false);
   const dropdownTriggerRef = useRef<HTMLButtonElement>(null);
+  const [freeCourses, setFreeCourses] = useState<Course[]>([]);
+  const [paidCourses, setPaidCourses] = useState<Course[]>([]);
+  const [loadingCourses, setLoadingCourses] = useState(false);
 
   const handleCoursesToggle = () => {
     setCoursesDropdownOpen(!coursesDropdownOpen);
@@ -22,19 +32,34 @@ export default function Header() {
     setCoursesDropdownOpen(false);
   };
 
-  const freeCourses = [
-    "HTML & CSS Dasar",
-    "JavaScript Pemula",
-    "Python untuk Pemula",
-    "UI/UX Fundamentals",
-  ];
+  // Fetch courses when mobile menu opens
+  useEffect(() => {
+    const fetchCourses = async () => {
+      try {
+        setLoadingCourses(true);
+        const response = await fetch('/api/courses?status=PUBLISHED&limit=8');
+        if (response.ok) {
+          const data = await response.json();
+          const courses = data.courses || data.data || [];
+          
+          // Separate free and paid courses
+          const free = courses.filter((c: Course) => c.price === 0).slice(0, 4);
+          const paid = courses.filter((c: Course) => c.price > 0).slice(0, 4);
+          
+          setFreeCourses(free);
+          setPaidCourses(paid);
+        }
+      } catch (error) {
+        console.error('Error fetching courses:', error);
+      } finally {
+        setLoadingCourses(false);
+      }
+    };
 
-  const paidCourses = [
-    "Full-Stack Web Development",
-    "Mobile App Development",
-    "Advanced Data Science",
-    "Machine Learning Professional",
-  ];
+    if (mobileMenuOpen) {
+      fetchCourses();
+    }
+  }, [mobileMenuOpen]);
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-gray-200 dark:border-gray-700 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80 dark:bg-gray-900/95 dark:supports-[backdrop-filter]:bg-gray-900/80">
@@ -59,9 +84,9 @@ export default function Header() {
                 <button
                   ref={dropdownTriggerRef}
                   onClick={handleCoursesToggle}
-                  className="flex items-center gap-1 px-3 py-2 font-medium text-gray-700 dark:text-gray-300 hover:text-[#005EB8] dark:hover:text-[#005EB8] transition-colors duration-200 group"
+                  className="px-4 py-2 font-medium text-[#005EB8] text-sm transition-colors duration-200 hover:text-[#004A93] flex items-center gap-1"
                 >
-                  Kursus
+                  <span>Kursus</span>
                   <ChevronDown
                     className={`h-4 w-4 transition-transform duration-200 ${
                       coursesDropdownOpen ? "rotate-180" : ""
@@ -97,7 +122,7 @@ export default function Header() {
             </Link>
 
             <Link href="/register">
-              <DrawOutlineButton className="bg-[#005EB8] text-white border-[#005EB8] text-sm hover:bg-[#004A93] hover:border-[#004A93]">
+              <DrawOutlineButton className="bg-[#005EB8] text-white border-[#005EB8] text-sm hover:bg-white hover:text-[#005EB8] hover:border-[#005EB8]">
                 Daftar
               </DrawOutlineButton>
             </Link>
@@ -139,28 +164,38 @@ export default function Header() {
                       </p>
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-2 ml-4">
-                    {freeCourses.map((course, index) => (
+                  {loadingCourses ? (
+                    <div className="flex justify-center py-4">
+                      <Loader2 className="h-5 w-5 animate-spin text-[#008A00]" />
+                    </div>
+                  ) : freeCourses.length > 0 ? (
+                    <>
+                      <div className="grid grid-cols-2 gap-2 ml-4">
+                        {freeCourses.map((course) => (
+                          <Link
+                            key={course.id}
+                            href={`/courses/${course.slug}`}
+                            className="bg-[#008A00]/5 dark:bg-[#008A00]/10 rounded-lg p-2 border border-[#008A00]/20 text-xs font-medium text-gray-700 dark:text-gray-300 hover:text-[#008A00] transition-colors"
+                            onClick={handleMobileLinkClick}
+                          >
+                            <div className="flex items-center gap-1.5">
+                              <div className="w-1 h-1 bg-[#008A00] rounded-full"></div>
+                              <span className="line-clamp-1">{course.title}</span>
+                            </div>
+                          </Link>
+                        ))}
+                      </div>
                       <Link
-                        key={index}
-                        href={`/courses`}
-                        className="bg-[#008A00]/5 dark:bg-[#008A00]/10 rounded-lg p-2 border border-[#008A00]/20 text-xs font-medium text-gray-700 dark:text-gray-300 hover:text-[#008A00] transition-colors"
+                        href="/courses?price=free"
+                        className="block text-xs font-medium text-[#008A00] hover:text-[#006600] ml-4 transition-colors"
                         onClick={handleMobileLinkClick}
                       >
-                        <div className="flex items-center gap-1.5">
-                          <div className="w-1 h-1 bg-[#008A00] rounded-full"></div>
-                          <span className="line-clamp-1">{course}</span>
-                        </div>
+                        Lihat semua kursus gratis →
                       </Link>
-                    ))}
-                  </div>
-                  <Link
-                    href="/courses"
-                    className="block text-xs font-medium text-[#008A00] hover:text-[#006600] ml-4 transition-colors"
-                    onClick={handleMobileLinkClick}
-                  >
-                    Lihat semua kursus gratis →
-                  </Link>
+                    </>
+                  ) : (
+                    <p className="text-xs text-gray-500 dark:text-gray-400 ml-4">Belum ada kursus gratis</p>
+                  )}
                 </div>
 
                 {/* Paid Courses Mobile */}
@@ -176,28 +211,38 @@ export default function Header() {
                       </p>
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-2 ml-4">
-                    {paidCourses.map((course, index) => (
+                  {loadingCourses ? (
+                    <div className="flex justify-center py-4">
+                      <Loader2 className="h-5 w-5 animate-spin text-[#005EB8]" />
+                    </div>
+                  ) : paidCourses.length > 0 ? (
+                    <>
+                      <div className="grid grid-cols-2 gap-2 ml-4">
+                        {paidCourses.map((course) => (
+                          <Link
+                            key={course.id}
+                            href={`/courses/${course.slug}`}
+                            className="bg-[#005EB8]/5 dark:bg-[#005EB8]/10 rounded-lg p-2 border border-[#005EB8]/20 text-xs font-medium text-gray-700 dark:text-gray-300 hover:text-[#005EB8] transition-colors"
+                            onClick={handleMobileLinkClick}
+                          >
+                            <div className="flex items-center gap-1.5">
+                              <div className="w-1 h-1 bg-[#005EB8] rounded-full"></div>
+                              <span className="line-clamp-1">{course.title}</span>
+                            </div>
+                          </Link>
+                        ))}
+                      </div>
                       <Link
-                        key={index}
-                        href={`/courses`}
-                        className="bg-[#005EB8]/5 dark:bg-[#005EB8]/10 rounded-lg p-2 border border-[#005EB8]/20 text-xs font-medium text-gray-700 dark:text-gray-300 hover:text-[#005EB8] transition-colors"
+                        href="/courses?price=paid"
+                        className="block text-xs font-medium text-[#005EB8] hover:text-[#004A93] ml-4 transition-colors"
                         onClick={handleMobileLinkClick}
                       >
-                        <div className="flex items-center gap-1.5">
-                          <div className="w-1 h-1 bg-[#005EB8] rounded-full"></div>
-                          <span className="line-clamp-1">{course}</span>
-                        </div>
+                        Lihat semua kursus berbayar →
                       </Link>
-                    ))}
-                  </div>
-                  <Link
-                    href="/courses"
-                    className="block text-xs font-medium text-[#005EB8] hover:text-[#004A93] ml-4 transition-colors"
-                    onClick={handleMobileLinkClick}
-                  >
-                    Lihat semua kursus berbayar →
-                  </Link>
+                    </>
+                  ) : (
+                    <p className="text-xs text-gray-500 dark:text-gray-400 ml-4">Belum ada kursus berbayar</p>
+                  )}
                 </div>
               </div>
 
@@ -217,7 +262,7 @@ export default function Header() {
                 </Link>
 
                 <Link href="/register" onClick={handleMobileLinkClick}>
-                  <DrawOutlineButton className="w-full bg-[#005EB8] text-white border-[#005EB8] text-sm hover:bg-[#004A93] hover:border-[#004A93]">
+                  <DrawOutlineButton className="w-full bg-[#005EB8] text-white border-[#005EB8] text-sm hover:bg-white hover:text-[#005EB8] hover:border-[#005EB8]">
                     Daftar
                   </DrawOutlineButton>
                 </Link>

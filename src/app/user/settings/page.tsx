@@ -144,8 +144,8 @@ export default function UserSettings() {
         <div className="space-y-8">
           {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 animate-fadeIn">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-3">
+            <div className="text-center md:text-left">
+              <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center justify-center md:justify-start gap-3">
                 <Settings className="h-8 w-8 text-[#005EB8]" />
                 Pengaturan
               </h1>
@@ -157,14 +157,14 @@ export default function UserSettings() {
             {/* Password Change Form */}
             <div className="lg:col-span-2">
               <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 animate-scaleIn">
-                <CardHeader>
+                <CardHeader className="pb-3 border-b">
                   <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-white text-xl font-bold">
                     <Key className="h-5 w-5 text-[#005EB8]" />
                     Ubah Password
                   </CardTitle>
                   <CardDescription className="text-gray-600 dark:text-gray-400">Pastikan password baru Anda kuat dan mudah diingat</CardDescription>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="pt-6">
                   <form onSubmit={handleChangePassword} className="space-y-6">
                     {/* Alerts */}
                     {error && (
@@ -327,13 +327,13 @@ export default function UserSettings() {
             <div className="space-y-6">
               {/* Password Criteria */}
               <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 animate-scaleIn delay-100">
-                <CardHeader>
+                <CardHeader className="pb-3 border-b">
                   <CardTitle className="text-base flex items-center gap-2 text-gray-900 dark:text-white">
                     <Shield className="h-5 w-5 text-[#005EB8]" />
                     Kriteria Password
                   </CardTitle>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="pt-6">
                   <div className="space-y-3">
                     {passwordCriteria.map((criteria, index) => (
                       <div key={index} className="flex items-center gap-2">
@@ -353,13 +353,13 @@ export default function UserSettings() {
 
               {/* Security Tips */}
               <Card className="rounded-lg border bg-gradient-to-br from-[#005EB8]/10 to-[#004A93]/10 text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-[#005EB8]/20 animate-scaleIn delay-200">
-                <CardHeader>
+                <CardHeader className="pb-3 border-b">
                   <CardTitle className="text-base flex items-center gap-2 text-gray-900 dark:text-white">
                     <Info className="h-5 w-5 text-[#005EB8]" />
                     Tips Keamanan
                   </CardTitle>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="pt-6">
                   <ul className="space-y-3 text-sm">
                     <li className="flex items-start gap-2">
                       <div className="p-1 bg-[#005EB8]/20 rounded">

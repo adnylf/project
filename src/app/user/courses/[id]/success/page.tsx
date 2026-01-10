@@ -245,7 +245,7 @@ export default function PurchaseSuccessPage() {
                     </CardTitle>
                     <CardDescription>Kursus yang baru saja Anda daftarkan</CardDescription>
                   </CardHeader>
-                  <CardContent className="p-6">
+                  <CardContent className="pt-6">
                     <div className="flex flex-col sm:flex-row gap-6">
                       <div className="w-full sm:w-40 h-28 rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-800 flex-shrink-0 border border-gray-200 dark:border-gray-700">
                         {enrollment.course.thumbnail ? (
@@ -304,7 +304,7 @@ export default function PurchaseSuccessPage() {
                     </CardTitle>
                     <CardDescription>Saran agar pembelajaran Anda lebih efektif</CardDescription>
                   </CardHeader>
-                  <CardContent className="p-6">
+                  <CardContent className="pt-6">
                     <div className="space-y-4">
                       <div className="flex items-start gap-4">
                         <div className="p-2 rounded-lg bg-[#008A00]/10 flex-shrink-0">
@@ -353,7 +353,7 @@ export default function PurchaseSuccessPage() {
                       Aksi Cepat
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="p-4 space-y-3">
+                  <CardContent className="pt-6 space-y-3">
                     <Link href="/user/enrollments" className="block">
                       <Button variant="outline" className="w-full justify-start h-11 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800">
                         <BookOpen className="h-4 w-4 mr-3 text-[#005EB8]" />

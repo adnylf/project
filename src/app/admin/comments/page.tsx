@@ -317,8 +317,8 @@ export default function AdminCommentsPage() {
         <div className="space-y-8">
           {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-3">
+            <div className="text-center md:text-left">
+              <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center justify-center md:justify-start gap-3">
                 <MessageSquare className="h-8 w-8 text-[#005EB8]" />
                 Manajemen Komentar
               </h1>
@@ -329,7 +329,7 @@ export default function AdminCommentsPage() {
           </div>
 
           {/* Stats Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 border-gray-200 dark:border-gray-700">
               <CardContent className="p-5">
                 <div className="flex items-center gap-3">
@@ -428,7 +428,6 @@ export default function AdminCommentsPage() {
                 </div>
               </div>
 
-              {/* Table */}
               {loading && comments.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-16">
                   <Loader2 className="h-12 w-12 animate-spin text-[#005EB8] mb-4" />
@@ -454,7 +453,101 @@ export default function AdminCommentsPage() {
                   )}
                 </div>
               ) : (
-                <div className="overflow-x-auto">
+                <>
+                  {/* Mobile & Tablet View - Cards */}
+                  <div className="block lg:hidden p-4 space-y-4">
+                    {comments.map((comment) => (
+                      <Card key={comment.id} className="rounded-lg border bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
+                        <CardContent className="p-4">
+                          {/* Header: User Info */}
+                          <div className="flex items-start justify-between mb-3">
+                            <div className="flex items-center gap-3">
+                              {comment.user.avatar_url ? (
+                                <img
+                                  src={comment.user.avatar_url}
+                                  alt={comment.user.full_name}
+                                  className="w-10 h-10 rounded-full object-cover border border-gray-200 dark:border-gray-700"
+                                />
+                              ) : (
+                                <div className="w-10 h-10 rounded-full bg-[#005EB8] flex items-center justify-center text-white font-bold">
+                                  {comment.user.full_name.charAt(0).toUpperCase()}
+                                </div>
+                              )}
+                              <div className="min-w-0">
+                                <p className="font-medium text-sm text-gray-900 dark:text-white truncate">
+                                  {comment.user.full_name}
+                                </p>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                                  {comment.user.email}
+                                </p>
+                              </div>
+                            </div>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-8 w-8 p-0 border-[#D93025] text-[#D93025] hover:bg-[#D93025]/10"
+                              onClick={() => handleDeleteClick(comment)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+
+                          {/* Comment Content */}
+                          <div className="mb-3">
+                            <p className="text-sm text-gray-700 dark:text-gray-300" title={comment.content}>
+                              {truncateText(comment.content, 150)}
+                            </p>
+                            {comment.parent && (
+                              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 flex items-center gap-1">
+                                <Reply className="h-3 w-3" />
+                                Balasan dari: {truncateText(comment.parent.content, 50)}
+                              </p>
+                            )}
+                          </div>
+
+                          {/* Course Link */}
+                          <div className="mb-3">
+                            <Link
+                              href={`/courses/${comment.material.section.course.slug}`}
+                              className="text-sm text-[#005EB8] hover:underline font-medium"
+                            >
+                              {comment.material.section.course.title}
+                            </Link>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                              {comment.material.title}
+                            </p>
+                          </div>
+
+                          {/* Footer: Badges & Date */}
+                          <div className="flex items-center justify-between pt-3 border-t border-gray-200 dark:border-gray-700">
+                            <div className="flex flex-wrap items-center gap-1">
+                              {comment.is_edited && (
+                                <Badge className="bg-[#F4B400]/10 text-[#F4B400] border border-[#F4B400]/20 pointer-events-none text-xs">
+                                  <Edit3 className="h-3 w-3 mr-1" />Diedit
+                                </Badge>
+                              )}
+                              {comment.parent && (
+                                <Badge className="bg-[#D93025]/10 text-[#D93025] border border-[#D93025]/20 pointer-events-none text-xs">
+                                  <Reply className="h-3 w-3 mr-1" />Reply
+                                </Badge>
+                              )}
+                              {comment._count.replies > 0 && (
+                                <Badge className="bg-[#005EB8] text-white border border-[#005EB8] pointer-events-none text-xs">
+                                  {comment._count.replies}
+                                </Badge>
+                              )}
+                            </div>
+                            <span className="text-xs text-gray-500 dark:text-gray-400">
+                              {formatDate(comment.created_at)}
+                            </span>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+
+                  {/* Desktop View - Table */}
+                  <div className="hidden lg:block overflow-x-auto">
                   <Table className="min-w-full">
                     <TableHeader>
                       <TableRow className="bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-50 dark:hover:bg-gray-800/50">
@@ -573,8 +666,9 @@ export default function AdminCommentsPage() {
                         </TableRow>
                       ))}
                     </TableBody>
-                  </Table>
-                </div>
+                </Table>
+                  </div>
+                </>
               )}
             </CardContent>
           </Card>

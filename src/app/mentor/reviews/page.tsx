@@ -201,8 +201,8 @@ export default function MentorReviewsPage() {
         <div className="space-y-8">
           {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-3">
+            <div className="text-center md:text-left">
+              <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center justify-center md:justify-start gap-3">
                   <Star className="h-8 w-8 text-[#005EB8]" />
                 Ulasan Kursus
               </h1>
@@ -213,7 +213,7 @@ export default function MentorReviewsPage() {
           </div>
 
           {/* Stats Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 border-gray-200 dark:border-gray-700">
               <CardContent className="p-5">
                 <div className="flex items-center gap-3">
@@ -369,7 +369,87 @@ export default function MentorReviewsPage() {
                   )}
                 </div>
               ) : (
-                <div className="overflow-x-auto">
+                <>
+                  {/* Mobile & Tablet View - Cards */}
+                  <div className="block lg:hidden p-4 space-y-4">
+                    {filteredReviews.map((review) => (
+                      <Card key={review.id} className="rounded-lg border bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
+                        <CardContent className="p-4">
+                          {/* Header: User & Rating */}
+                          <div className="flex items-start justify-between mb-3">
+                            <div className="flex items-center gap-3">
+                              <div className="flex-shrink-0">
+                                {review.is_anonymous ? (
+                                  <div className="w-10 h-10 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
+                                    <User className="h-5 w-5 text-gray-500 dark:text-gray-400" />
+                                  </div>
+                                ) : review.user.avatar_url ? (
+                                  <div className="relative w-10 h-10 rounded-full overflow-hidden">
+                                    <Image
+                                      src={review.user.avatar_url.startsWith("/") ? `/api${review.user.avatar_url}` : review.user.avatar_url}
+                                      alt={review.user.full_name}
+                                      fill
+                                      className="object-cover"
+                                    />
+                                  </div>
+                                ) : (
+                                  <div className="w-10 h-10 rounded-full bg-[#005EB8] flex items-center justify-center text-white font-semibold">
+                                    {review.user.full_name.charAt(0).toUpperCase()}
+                                  </div>
+                                )}
+                              </div>
+                              <div className="min-w-0">
+                                <p className="font-medium text-gray-900 dark:text-white truncate">
+                                  {review.is_anonymous ? "Anonim" : review.user.full_name}
+                                </p>
+                                {review.is_anonymous && (
+                                  <Badge className="bg-[#F4B400]/10 text-[#F4B400] border border-[#F4B400]/20 pointer-events-none text-xs">
+                                    Anonim
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+                            <RatingStars rating={review.rating} size="sm" />
+                          </div>
+
+                          {/* Course */}
+                          <div className="mb-3">
+                            <p className="text-xs text-gray-500 dark:text-gray-400">Kursus</p>
+                            <p className="text-sm text-gray-900 dark:text-white truncate">
+                              {review.course.title}
+                            </p>
+                          </div>
+
+                          {/* Comment */}
+                          <div className="mb-3">
+                            {review.comment ? (
+                              <p className="text-sm text-gray-700 dark:text-gray-300 line-clamp-3">
+                                {review.comment}
+                              </p>
+                            ) : (
+                              <p className="text-sm text-gray-400 dark:text-gray-500 italic">
+                                Tidak ada komentar
+                              </p>
+                            )}
+                          </div>
+
+                          {/* Footer: Helpful & Date */}
+                          <div className="flex items-center justify-between pt-3 border-t border-gray-200 dark:border-gray-700">
+                            <div className="flex items-center gap-1 text-sm text-gray-600 dark:text-gray-400">
+                              <ThumbsUp className="h-4 w-4" />
+                              <span>{review.helpful_count} helpful</span>
+                            </div>
+                            <span className="text-xs text-gray-500 dark:text-gray-400">
+                              {formatDate(review.created_at)}
+                            </span>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+
+                  {/* Desktop View - Table */}
+                  <div className="hidden lg:block overflow-x-auto">
                   <Table className="min-w-full">
                     <TableHeader>
                       <TableRow className="bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-50 dark:hover:bg-gray-800/50">
@@ -466,8 +546,9 @@ export default function MentorReviewsPage() {
                         </TableRow>
                       ))}
                     </TableBody>
-                  </Table>
-                </div>
+                </Table>
+                  </div>
+                </>
               )}
 
               {/* Pagination */}

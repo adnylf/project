@@ -17,6 +17,7 @@ import {
   Loader2,
   ExternalLink,
   Sparkles,
+  ArrowUpDown,
 } from "lucide-react";
 import Link from "next/link";
 import UserLayout from "@/components/user/user-layout";
@@ -307,8 +308,8 @@ export default function UserWishlist() {
         <div className="space-y-8">
           {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-2">
+            <div className="text-center md:text-left">
+              <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center justify-center md:justify-start gap-2">
                 <Heart className="h-8 w-8 text-[#005EB8]" />
                 Wishlist Saya
               </h1>
@@ -364,7 +365,8 @@ export default function UserWishlist() {
                   />
                 </div>
                 <Select value={sortBy} onValueChange={setSortBy}>
-                  <SelectTrigger className="w-[200px]">
+                  <SelectTrigger className="w-full md:w-[200px] h-10 bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600">
+                    <ArrowUpDown className="h-4 w-4 mr-2 text-gray-400" />
                     <SelectValue placeholder="Urutkan" />
                   </SelectTrigger>
                   <SelectContent>

@@ -310,7 +310,7 @@ export default function NavbarMentor({ toggleSidebar }: NavbarMentorProps) {
                         <DropdownMenuItem
                           key={item.label}
                           asChild
-                          className="focus:bg-gray-100 dark:focus:bg-gray-700 cursor-pointer px-3 py-2 text-sm text-gray-700 dark:text-gray-300"
+                          className="cursor-pointer px-3 py-2 text-sm text-gray-700 dark:text-gray-300 focus:!bg-[#005EB8] focus:!text-white"
                         >
                           <Link
                             href={item.link}
@@ -330,7 +330,7 @@ export default function NavbarMentor({ toggleSidebar }: NavbarMentorProps) {
                   <DropdownMenuItem
                     onClick={confirmLogout}
                     disabled={isLoggingOut}
-                    className="flex items-center gap-3 cursor-pointer text-[#D93025] dark:text-red-400 focus:bg-red-50 dark:focus:bg-red-900/20 px-3 py-2"
+                    className="flex items-center gap-3 cursor-pointer text-[#D93025] dark:text-red-400 focus:!bg-red-50 dark:focus:!bg-red-900/20 focus:!text-[#D93025] dark:focus:!text-red-400 px-3 py-2"
                   >
                     {isLoggingOut ? (
                       <>

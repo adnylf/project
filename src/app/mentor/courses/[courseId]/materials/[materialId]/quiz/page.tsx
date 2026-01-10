@@ -367,14 +367,14 @@ export default function QuizBuilderPage() {
                   <ArrowLeft className="h-5 w-5" />
                 </Button>
               </Link>
-              <div>
-                <h1 className="text-3xl font-bold text-gray-900 mb-2 flex items-center gap-3">
+              <div className="text-center md:text-left">
+                <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center justify-center md:justify-start gap-3">
                   <HelpCircle className="h-8 w-8 text-[#005EB8]" />
                   Quiz Builder
                 </h1>
               </div>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex justify-center md:justify-end flex-wrap gap-2">
               <Button 
                 variant="outline" 
                 onClick={() => setSettingsOpen(true)}

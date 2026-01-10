@@ -243,8 +243,8 @@ export default function AdminTransactions() {
       <div className="space-y-8">
         {/* Header Section */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-3">
+          <div className="text-center md:text-left">
+            <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center justify-center md:justify-start gap-3">
               <CreditCard className="h-8 w-8 text-[#005EB8]" />
               Transaksi
             </h1>
@@ -255,7 +255,7 @@ export default function AdminTransactions() {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
           <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 border-gray-200 dark:border-gray-700">
             <CardContent className="p-5">
               <div className="flex items-center gap-3">
@@ -374,7 +374,7 @@ export default function AdminTransactions() {
               </div>
             </div>
 
-            {/* Table */}
+            {/* Table - Desktop / Cards - Mobile & Tablet */}
             {loading ? (
               <div className="flex items-center justify-center py-12">
                 <div className="text-center">
@@ -383,7 +383,66 @@ export default function AdminTransactions() {
                 </div>
               </div>
             ) : filteredTransactions.length > 0 ? (
-              <div className="overflow-x-auto">
+              <>
+                {/* Mobile & Tablet View - Cards */}
+                <div className="block lg:hidden p-4 space-y-4">
+                  {filteredTransactions.map((transaction) => (
+                    <Card key={transaction.id} className="rounded-lg border bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
+                      <CardContent className="p-4">
+                        {/* Header: Order ID & Status */}
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="font-mono text-xs text-gray-600 dark:text-gray-400" title={transaction.order_id}>
+                            {transaction.order_id}
+                          </div>
+                          {getStatusBadge(transaction.status)}
+                        </div>
+
+                        {/* User Info */}
+                        <div className="mb-3">
+                          <p className="font-medium text-gray-900 dark:text-white text-sm">
+                            {transaction.user?.full_name || '-'}
+                          </p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">
+                            {transaction.user?.email || '-'}
+                          </p>
+                        </div>
+
+                        {/* Course */}
+                        <div className="mb-3">
+                          <p className="text-sm text-gray-900 dark:text-white">
+                            {transaction.course?.title || '-'}
+                          </p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">
+                            {transaction.course?.mentor?.user?.full_name || 'Mentor'}
+                          </p>
+                        </div>
+
+                        {/* Info Grid */}
+                        <div className="grid grid-cols-2 gap-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+                          <div>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">Tanggal</p>
+                            <p className="text-sm font-medium text-gray-900 dark:text-white">{formatDate(transaction.created_at)}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">Metode</p>
+                            <Badge className="bg-gray-100 text-gray-800 border border-gray-300 pointer-events-none dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600 text-xs px-2 py-0.5 mt-0.5">
+                              {getPaymentMethodLabel(transaction.payment_method)}
+                            </Badge>
+                          </div>
+                          <div className="col-span-2">
+                            <p className="text-xs text-gray-500 dark:text-gray-400">Total</p>
+                            <p className="text-lg font-bold text-[#005EB8]">
+                              {formatCurrency(transaction.total_amount).replace('Rp', 'Rp ')}
+                            </p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+
+                {/* Desktop View - Table */}
+                <div className="hidden lg:block overflow-x-auto">
                 <Table className="min-w-full">
                   <TableHeader>
                     <TableRow className="bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-50 dark:hover:bg-gray-800/50">
@@ -461,7 +520,8 @@ export default function AdminTransactions() {
                     ))}
                   </TableBody>
                 </Table>
-              </div>
+                </div>
+              </>
             ) : (
               <div className="p-12 text-center">
                 <div className="flex flex-col items-center gap-4">

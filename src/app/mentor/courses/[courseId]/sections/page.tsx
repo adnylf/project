@@ -746,8 +746,8 @@ export default function SectionsPage() {
                   <ArrowLeft className="h-5 w-5" />
                 </Button>
               </Link>
-              <div>
-                <h1 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
+              <div className="text-center md:text-left">
+                <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center justify-center md:justify-start gap-3">
                   <Layers className="h-8 w-8 text-[#005EB8]" />
                   Kelola Konten
                 </h1>
@@ -756,7 +756,7 @@ export default function SectionsPage() {
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center justify-center md:justify-end gap-3">
               {!isEditable && (
                 <Badge className="bg-[#F4B400] text-[#1A1A1A] border border-[#F4B400] pointer-events-none">
                   <AlertCircle className="h-3 w-3 mr-1" />

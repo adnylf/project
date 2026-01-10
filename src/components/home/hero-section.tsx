@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import NeuButton from "@/components/ui/new-button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -14,7 +15,43 @@ import {
 } from "lucide-react";
 import { NumberTicker } from "@/components/ui/number-ticker";
 
+interface PlatformStats {
+  total_students: number;
+  total_courses: number;
+  total_certificates: number;
+  total_reviews: number;
+  average_rating: number;
+}
+
 export default function HeroSection() {
+  const [stats, setStats] = useState<PlatformStats>({
+    total_students: 0,
+    total_courses: 0,
+    total_certificates: 0,
+    total_reviews: 0,
+    average_rating: 0,
+  });
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const response = await fetch('/api/stats');
+        if (response.ok) {
+          const data = await response.json();
+          setStats(data);
+        }
+      } catch (error) {
+        console.error('Error fetching stats:', error);
+      }
+    };
+    fetchStats();
+  }, []);
+
+  // Calculate satisfaction percentage from rating (5 = 100%)
+  const satisfactionPercent = stats.average_rating > 0 
+    ? Math.round((stats.average_rating / 5) * 100) 
+    : 0;
+
   return (
     <section className="relative overflow-hidden bg-gradient-to-b from-gray-50 to-white dark:from-gray-900 dark:to-gray-900">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-12 lg:py-16">
@@ -78,19 +115,19 @@ export default function HeroSection() {
             <div className="grid grid-cols-3 gap-4 pt-6 border-t border-gray-200 dark:border-gray-700">
               <div className="text-center">
                 <div className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
-                  <NumberTicker value={10000} />+
+                  <NumberTicker value={stats.total_students} />+
                 </div>
                 <p className="text-sm text-gray-500 dark:text-gray-400">Siswa Aktif</p>
               </div>
               <div className="text-center">
                 <div className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
-                  <NumberTicker value={500} />+
+                  <NumberTicker value={stats.total_courses} />+
                 </div>
                 <p className="text-sm text-gray-500 dark:text-gray-400">Kursus</p>
               </div>
               <div className="text-center">
                 <div className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
-                  <NumberTicker value={95} />%
+                  <NumberTicker value={satisfactionPercent} />%
                 </div>
                 <p className="text-sm text-gray-500 dark:text-gray-400">Kepuasan</p>
               </div>
@@ -130,7 +167,7 @@ export default function HeroSection() {
                       Komunitas Aktif
                     </p>
                     <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                      10,000+ pelajar
+                      {stats.total_students.toLocaleString('id-ID')}+ pelajar
                     </p>
                   </div>
                 </div>

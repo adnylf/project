@@ -216,7 +216,7 @@ export default function UserDashboard() {
           </Card>
 
           {/* Stats Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* Total Kursus - Primary */}
             <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
               <CardContent className="p-5">
@@ -526,7 +526,7 @@ export default function UserDashboard() {
               <CardDescription>Kelola akun dan pembelajaran Anda</CardDescription>
             </CardHeader>
             <CardContent className="pt-6">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <Card className="rounded-lg border bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 transition-colors cursor-pointer">
                   <CardContent className="p-4">
                     <Link href="/user/enrollments" className="flex flex-col items-center text-center">

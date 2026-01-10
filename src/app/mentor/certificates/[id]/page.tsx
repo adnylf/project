@@ -199,8 +199,8 @@ export default function MentorCertificateDetailPage() {
                   <ArrowLeft className="h-5 w-5" />
                 </Button>
               </Link>
-              <div>
-                <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-1 flex items-center gap-3">
+              <div className="text-center md:text-left">
+                <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-1 flex items-center justify-center md:justify-start gap-3">
                   <Award className="h-8 w-8 text-[#005EB8]" />
                   Detail Sertifikat
                 </h1>
@@ -209,7 +209,7 @@ export default function MentorCertificateDetailPage() {
                 </p>
               </div>
             </div>
-            <div className="flex gap-3">
+            <div className="flex justify-center md:justify-end gap-3">
               <Button 
                 variant="outline" 
                 onClick={handlePreview}

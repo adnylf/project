@@ -519,8 +519,8 @@ export default function AdminCourses() {
         <div className="space-y-8">
           {/* Header Section */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-3">
+            <div className="text-center md:text-left">
+              <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center justify-center md:justify-start gap-3">
                   <BookOpen className="h-8 w-8 text-[#005EB8]" />
                 Manajemen Kursus
               </h1>
@@ -528,7 +528,7 @@ export default function AdminCourses() {
                 Manajemen dan approval kursus dari mentor
               </p>
             </div>
-            <Badge className="bg-[#005EB8] text-white border border-[#005EB8] pointer-events-none text-sm px-3 py-1">
+            <Badge className="bg-[#005EB8] text-white border border-[#005EB8] pointer-events-none text-sm px-3 py-1 mx-auto md:mx-0">
               {pagination.total} Kursus
             </Badge>
           </div>
@@ -548,7 +548,7 @@ export default function AdminCourses() {
           )}
 
           {/* Stats Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
             <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 border-gray-200 dark:border-gray-700">
               <CardContent className="p-5">
                 <div className="flex items-center gap-3">
@@ -674,6 +674,7 @@ export default function AdminCourses() {
                     setPagination(prev => ({ ...prev, page: 1 }));
                   }}>
                     <SelectTrigger className="w-full md:w-[160px] h-10 bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600">
+                      <Filter className="h-4 w-4 mr-2 text-gray-400" />
                       <SelectValue placeholder="Kategori" />
                     </SelectTrigger>
                     <SelectContent>
@@ -686,14 +687,110 @@ export default function AdminCourses() {
                 </div>
               </div>
 
-              {/* Table */}
+              {/* Table - Desktop / Cards - Mobile & Tablet */}
               {loading && courses.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12">
                   <Loader2 className="h-12 w-12 animate-spin text-[#005EB8] mb-4" />
                   <span className="text-gray-600 dark:text-gray-400">Memuat data kursus...</span>
                 </div>
               ) : filteredCourses.length > 0 ? (
-                <div className="overflow-x-auto">
+                <>
+                  {/* Mobile & Tablet View - Cards */}
+                  <div className="block lg:hidden p-4 space-y-4">
+                    {filteredCourses.map((course) => (
+                      <Card key={course.id} className="rounded-lg border bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
+                        <CardContent className="p-4">
+                          {/* Header: Title & Status */}
+                          <div className="flex items-start justify-between mb-3">
+                            <div className="flex-1 min-w-0 pr-2">
+                              <p className="font-semibold text-gray-900 dark:text-white truncate" title={course.title}>
+                                {course.title}
+                              </p>
+                              <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                                {course.mentor.user.full_name}
+                              </p>
+                            </div>
+                            {getStatusBadge(course.status)}
+                          </div>
+
+                          {/* Category */}
+                          <div className="mb-3">
+                            <Badge className="bg-[#005EB8]/10 text-[#005EB8] border border-[#005EB8]/20 pointer-events-none text-xs">
+                              {course.category?.name || 'Tanpa Kategori'}
+                            </Badge>
+                          </div>
+
+                          {/* Stats Grid */}
+                          <div className="grid grid-cols-3 gap-3 mb-3">
+                            <div className="text-center p-2 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                              <p className="text-xs text-gray-500 dark:text-gray-400">Siswa</p>
+                              <p className="text-lg font-bold text-gray-900 dark:text-white">
+                                {formatNumber(course._count?.enrollments || course.total_students || 0)}
+                              </p>
+                            </div>
+                            <div className="text-center p-2 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                              <p className="text-xs text-gray-500 dark:text-gray-400">Rating</p>
+                              <div className="flex items-center justify-center gap-1">
+                                <Star className="h-4 w-4 text-[#F4B400] fill-[#F4B400]" />
+                                <span className="font-bold text-gray-900 dark:text-white">
+                                  {course.average_rating?.toFixed(1) || '0.0'}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="text-center p-2 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                              <p className="text-xs text-gray-500 dark:text-gray-400">Harga</p>
+                              {course.is_free ? (
+                                <Badge className="bg-[#008A00]/10 text-[#008A00] border border-[#008A00]/20 pointer-events-none text-xs">
+                                  Gratis
+                                </Badge>
+                              ) : (
+                                <p className="text-sm font-bold text-gray-900 dark:text-white">
+                                  {formatCurrency(course.price).replace('Rp', 'Rp ')}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Actions */}
+                          <div className="flex items-center gap-2 pt-3 border-t border-gray-200 dark:border-gray-700">
+                            <Link href={`/courses/${course.slug || course.id}`} className="flex-1">
+                              <Button 
+                                variant="outline" 
+                                size="sm"
+                                className="w-full h-8 border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10 dark:border-[#005EB8] dark:text-[#005EB8]"
+                              >
+                                <Eye className="h-4 w-4 mr-1" />
+                                Detail
+                              </Button>
+                            </Link>
+                            {course.status === 'PENDING_REVIEW' && (
+                              <>
+                                <Button 
+                                  size="sm"
+                                  onClick={() => handleApproveCourse(course.id)}
+                                  className="h-8 px-3 bg-[#008A00] hover:bg-[#007000] text-white"
+                                  disabled={actionLoading === course.id}
+                                >
+                                  <CheckCircle className="h-4 w-4" />
+                                </Button>
+                                <Button 
+                                  size="sm"
+                                  onClick={() => openRejectDialog(course.id)}
+                                  className="h-8 px-3 bg-[#D93025] hover:bg-[#C02920] text-white"
+                                  disabled={actionLoading === course.id}
+                                >
+                                  <XCircle className="h-4 w-4" />
+                                </Button>
+                              </>
+                            )}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+
+                  {/* Desktop View - Table */}
+                  <div className="hidden lg:block overflow-x-auto">
                   <Table className="min-w-full">
                     <TableHeader>
                       <TableRow className="bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-50 dark:hover:bg-gray-800/50">
@@ -839,8 +936,9 @@ export default function AdminCourses() {
                         </TableRow>
                       ))}
                     </TableBody>
-                  </Table>
-                </div>
+                </Table>
+                  </div>
+                </>
               ) : (
                 <div className="text-center py-12">
                   <div className="flex flex-col items-center gap-4">

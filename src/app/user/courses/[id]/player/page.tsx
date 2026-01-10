@@ -788,16 +788,18 @@ export default function CoursePlayer() {
         <div className="space-y-6 max-w-6xl mx-auto">
           {/* Header */}
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div>
-              {/* Button Kembali - Style diubah seperti button Lihat Semua di dashboard */}
-              <Button 
-                variant="outline" 
-                size="icon"
-                onClick={() => window.history.back()} 
-                className="border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10 dark:border-[#005EB8] dark:text-[#005EB8]"
-              >
-                <ArrowLeft className="h-5 w-5" />
-              </Button>
+            <div className="text-center md:text-left">
+              {/* Button Kembali */}
+              <div className="flex justify-center md:justify-start mb-2">
+                <Button 
+                  variant="outline" 
+                  size="icon"
+                  onClick={() => window.history.back()} 
+                  className="border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10 dark:border-[#005EB8] dark:text-[#005EB8]"
+                >
+                  <ArrowLeft className="h-5 w-5" />
+                </Button>
+              </div>
               <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-1">
                 {course.title}
               </h1>
@@ -806,8 +808,8 @@ export default function CoursePlayer() {
                 {course.sections.reduce((acc, s) => acc + s.materials.length, 0)} pelajaran
               </p>
             </div>
-            <div className="flex items-center gap-4">
-              <div className="text-right">
+            <div className="flex items-center justify-center md:justify-end gap-4">
+              <div className="text-center md:text-right">
                 <p className="text-sm text-gray-600 dark:text-gray-400">Progress</p>
                 <p className="text-2xl font-bold text-[#005EB8]">{progress}%</p>
               </div>

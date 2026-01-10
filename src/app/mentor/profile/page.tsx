@@ -408,8 +408,8 @@ export default function MentorProfilePage() {
         <MentorLayout>
           <div className="space-y-8">
             {/* Header */}
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-3">
+            <div className="text-center md:text-left">
+              <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center justify-center md:justify-start gap-3">
                 <User className="h-8 w-8 text-[#005EB8]" />
                 Daftar Sebagai Mentor
               </h1>
@@ -450,7 +450,7 @@ export default function MentorProfilePage() {
             </Card>
             {/* Apply Form */}
             <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
-              <CardHeader>
+              <CardHeader className="pb-3 border-b">
                 <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-white text-xl font-bold">
                   <Briefcase className="h-5 w-5 text-[#005EB8]" />
                   Informasi Mentor
@@ -650,47 +650,49 @@ export default function MentorProfilePage() {
         <div className="space-y-8">
           {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-3">
+            <div className="text-center md:text-left">
+              <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center justify-center md:justify-start gap-3">
                 <User className="h-8 w-8 text-[#005EB8]" />
                 Profil Mentor
               </h1>
               <p className="text-gray-600 dark:text-gray-400">Kelola profil mentor Anda</p>
             </div>
             {profile?.status === "APPROVED" && (
-              !isEditing ? (
-                <Button 
-                  onClick={() => setIsEditing(true)} 
-                  className="bg-[#005EB8] hover:bg-[#004A93] text-white"
-                >
-                  <Edit3 className="h-4 w-4 mr-2" />
-                  Edit Profil
-                </Button>
-              ) : (
-                <div className="flex gap-2">
-                  {/* Button Batal - Style diubah seperti button Lihat Semua di dashboard */}
+              <div className="flex justify-center md:justify-end">
+                {!isEditing ? (
                   <Button 
-                    variant="outline" 
-                    onClick={() => setIsEditing(false)} 
-                    disabled={saving}
-                    className="border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10 dark:border-[#005EB8] dark:text-[#005EB8]"
-                  >
-                    Batal
-                  </Button>
-                  <Button 
-                    onClick={handleSave} 
-                    disabled={saving} 
+                    onClick={() => setIsEditing(true)} 
                     className="bg-[#005EB8] hover:bg-[#004A93] text-white"
                   >
-                    {saving ? (
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    ) : (
-                      <Save className="h-4 w-4 mr-2" />
-                    )}
-                    Simpan
+                    <Edit3 className="h-4 w-4 mr-2" />
+                    Edit Profil
                   </Button>
-                </div>
-              )
+                ) : (
+                  <div className="flex gap-2">
+                    {/* Button Batal - Style diubah seperti button Lihat Semua di dashboard */}
+                    <Button 
+                      variant="outline" 
+                      onClick={() => setIsEditing(false)} 
+                      disabled={saving}
+                      className="border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10 dark:border-[#005EB8] dark:text-[#005EB8]"
+                    >
+                      Batal
+                    </Button>
+                    <Button 
+                      onClick={handleSave} 
+                      disabled={saving} 
+                      className="bg-[#005EB8] hover:bg-[#004A93] text-white"
+                    >
+                      {saving ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <Save className="h-4 w-4 mr-2" />
+                      )}
+                      Simpan
+                    </Button>
+                  </div>
+                )}
+              </div>
             )}
           </div>
           {/* Alerts */}

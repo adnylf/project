@@ -66,7 +66,7 @@ export default function PaymentFailedPage() {
                     Kemungkinan Penyebab
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="p-6">
+                <CardContent className="pt-6">
                   <div className="space-y-4">
                     <div className="flex items-start gap-3">
                       <div className="p-1.5 rounded bg-red-100 dark:bg-red-900/30 flex-shrink-0">
@@ -117,7 +117,7 @@ export default function PaymentFailedPage() {
                   </CardTitle>
                   <CardDescription>Pilih tindakan yang ingin Anda lakukan</CardDescription>
                 </CardHeader>
-                <CardContent className="p-6">
+                <CardContent className="pt-6">
                   <div className="space-y-4">
                     <Link href={`/checkout/${courseId}`} className="block">
                       <Button className="w-full h-14 bg-[#005EB8] hover:bg-[#004A93] text-white text-lg font-semibold shadow-lg hover:shadow-xl transition-all">
@@ -155,7 +155,7 @@ export default function PaymentFailedPage() {
                     Butuh Bantuan?
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="p-4">
+                <CardContent className="pt-6">
                   <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
                     Jika masalah berlanjut, tim support kami siap membantu Anda.
                   </p>
@@ -176,7 +176,7 @@ export default function PaymentFailedPage() {
                     Tips Pembayaran
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="p-4">
+                <CardContent className="pt-6">
                   <ul className="space-y-3 text-sm text-gray-600 dark:text-gray-400">
                     <li className="flex items-start gap-2">
                       <div className="w-1.5 h-1.5 bg-[#005EB8] rounded-full mt-2 flex-shrink-0"></div>

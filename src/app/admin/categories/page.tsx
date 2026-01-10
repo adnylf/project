@@ -494,8 +494,8 @@ export default function AdminCategories() {
         <div className="space-y-8">
           {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-3">
+            <div className="text-center md:text-left">
+              <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center justify-center md:justify-start gap-3">
                   <FolderTree className="h-8 w-8 text-[#005EB8]" />
                 Manajemen Kategori
               </h1>
@@ -503,7 +503,7 @@ export default function AdminCategories() {
                 Kelola kategori kursus platform
               </p>
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center justify-center md:justify-end gap-4">
               <Button
                 onClick={openCreateDialog}
                 className="bg-[#005EB8] hover:bg-[#004A93] text-white"
@@ -529,7 +529,7 @@ export default function AdminCategories() {
           )}
 
           {/* Stats Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 border-gray-200 dark:border-gray-700">
               <CardContent className="p-5">
                 <div className="flex items-center gap-3">
@@ -620,14 +620,107 @@ export default function AdminCategories() {
                 </div>
               </div>
 
-              {/* Table */}
               {loading && categories.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12">
                   <Loader2 className="h-12 w-12 animate-spin text-[#005EB8] mb-4" />
                   <span className="text-gray-600 dark:text-gray-400">Memuat data kategori...</span>
                 </div>
               ) : filteredCategories.length > 0 ? (
-                <div className="overflow-x-auto">
+                <>
+                  {/* Mobile & Tablet View - Cards */}
+                  <div className="block lg:hidden p-4 space-y-4">
+                    {filteredCategories.map((category) => (
+                      <Card key={category.id} className="rounded-lg border bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
+                        <CardContent className="p-4">
+                          {/* Header: Name & Status */}
+                          <div className="flex items-start justify-between mb-3">
+                            <div className="flex items-center gap-2">
+                              {category.parent_id && (
+                                <ChevronRight className="h-4 w-4 text-gray-400" />
+                              )}
+                              <div>
+                                <p className="font-medium text-gray-900 dark:text-white">
+                                  {category.name}
+                                </p>
+                                {category.description && (
+                                  <p className="text-xs text-gray-500 dark:text-gray-400 truncate max-w-[200px]">
+                                    {category.description}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => toggleActive(category)}
+                              className={`h-8 w-8 p-0 ${
+                                category.is_active
+                                  ? "border-[#008A00] text-[#008A00] hover:bg-[#008A00]/10"
+                                  : "border-[#D93025] text-[#D93025] hover:bg-[#D93025]/10"
+                              }`}
+                            >
+                              {category.is_active ? (
+                                <Eye className="h-4 w-4" />
+                              ) : (
+                                <EyeOff className="h-4 w-4" />
+                              )}
+                            </Button>
+                          </div>
+
+                          {/* Info */}
+                          <div className="grid grid-cols-2 gap-3 mb-3">
+                            <div>
+                              <p className="text-xs text-gray-500 dark:text-gray-400">Slug</p>
+                              <code className="text-xs bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded border dark:border-gray-700">
+                                {category.slug}
+                              </code>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-500 dark:text-gray-400">Kursus</p>
+                              <Badge className="bg-[#005EB8]/10 text-[#005EB8] border border-[#005EB8]/20 pointer-events-none">
+                                {category._count?.courses || 0}
+                              </Badge>
+                            </div>
+                          </div>
+
+                          {/* Parent */}
+                          {category.parent && (
+                            <div className="mb-3">
+                              <p className="text-xs text-gray-500 dark:text-gray-400">Parent</p>
+                              <Badge className="bg-[#005EB8]/10 text-[#005EB8] border border-[#005EB8]/20 pointer-events-none">
+                                {category.parent.name}
+                              </Badge>
+                            </div>
+                          )}
+
+                          {/* Actions */}
+                          <div className="flex items-center gap-2 pt-3 border-t border-gray-200 dark:border-gray-700">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => openEditDialog(category)}
+                              className="flex-1 h-8 border-[#005EB8] text-[#005EB8] hover:bg-[#005EB8]/10"
+                            >
+                              <Edit className="h-4 w-4 mr-1" />
+                              Edit
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-8 px-3 border-[#D93025] text-[#D93025] hover:bg-[#D93025]/10"
+                              onClick={() => openDeleteDialog(category)}
+                              disabled={(category._count?.courses || 0) > 0}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+
+                  {/* Desktop View - Table */}
+                  <div className="hidden lg:block overflow-x-auto">
                   <Table className="min-w-full">
                     <TableHeader>
                       <TableRow className="bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-50 dark:hover:bg-gray-800/50">
@@ -723,8 +816,9 @@ export default function AdminCategories() {
                         </TableRow>
                       ))}
                     </TableBody>
-                  </Table>
-                </div>
+                </Table>
+                  </div>
+                </>
               ) : (
                 <div className="text-center py-12">
                   <FolderTree className="h-16 w-16 text-gray-400 dark:text-gray-600 mx-auto mb-4" />

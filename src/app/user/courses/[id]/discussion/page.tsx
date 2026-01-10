@@ -289,19 +289,17 @@ export default function CourseDiscussion() {
                   <ArrowLeft className="h-5 w-5" />
                 </Button>
               </Link>
-              <div>
-                <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-3">
+              <div className="text-center md:text-left">
+                <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center justify-center md:justify-start gap-3">
                   <MessageSquare className="h-8 w-8 text-[#005EB8]" />
                   Diskusi Kursus
                 </h1>
                 <p className="text-gray-600 dark:text-gray-400">{course?.title || "Memuat..."}</p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <Badge className="bg-[#005EB8] text-white border border-[#005EB8] pointer-events-none text-sm px-3 py-1">
-                {comments.length} Diskusi
-              </Badge>
-            </div>
+            <Badge className="bg-[#005EB8] text-white border border-[#005EB8] pointer-events-none text-sm px-3 py-1 mx-auto md:mx-0">
+              {comments.length} Diskusi
+            </Badge>
           </div>
 
           {error && (

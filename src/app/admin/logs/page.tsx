@@ -260,8 +260,8 @@ export default function AdminLogsPage() {
         <div className="space-y-8">
           {/* Header */}
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-3">
+            <div className="text-center md:text-left">
+              <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center justify-center md:justify-start gap-3">
                 <Activity className="h-8 w-8 text-[#005EB8]" />
                 Activity Logs
               </h1>
@@ -269,7 +269,7 @@ export default function AdminLogsPage() {
                 Pantau semua aktivitas pengguna dalam sistem
               </p>
             </div>
-            <Badge className="bg-[#005EB8] text-white border border-[#005EB8] pointer-events-none text-sm px-3 py-1">
+            <Badge className="bg-[#005EB8] text-white border border-[#005EB8] pointer-events-none text-sm px-3 py-1 mx-auto md:mx-0">
               {pagination.total} Aktivitas
             </Badge>
           </div>
@@ -287,7 +287,7 @@ export default function AdminLogsPage() {
           )}
 
           {/* Stats Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 border-gray-200 dark:border-gray-700">
               <CardContent className="p-5">
                 <div className="flex items-center gap-3">
@@ -381,22 +381,98 @@ export default function AdminLogsPage() {
 
           {/* Logs List */}
           {Object.keys(groupedLogs).length > 0 ? (
-            <div className="space-y-8">
+            <div className="space-y-6">
               {Object.entries(groupedLogs).map(([date, dayLogs]) => (
                 <div key={date}>
                   <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700 mb-4">
                     <CardContent className="p-3">
                       <div className="flex items-center gap-2">
                         <Calendar className="h-5 w-5 text-[#005EB8]" />
-                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{date}</h3>
-                        <Badge className="bg-gray-100 text-gray-800 border border-gray-300 pointer-events-none ml-2 dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600">
+                        <h3 className="text-base md:text-lg font-semibold text-gray-900 dark:text-white">{date}</h3>
+                        <Badge className="bg-gray-100 text-gray-800 border border-gray-300 pointer-events-none ml-auto md:ml-2 dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600">
                           {dayLogs.length} aktivitas
                         </Badge>
                       </div>
                     </CardContent>
                   </Card>
                   
-                  <div className="space-y-4 pl-6 border-l-2 border-gray-200 dark:border-gray-700">
+                  {/* Mobile/Tablet View - Cards */}
+                  <div className="block lg:hidden space-y-4">
+                    {dayLogs.map((log) => {
+                      const config = getActionConfig(log.action);
+                      const ActionIcon = config.icon;
+                      
+                      return (
+                        <Card key={log.id} className="rounded-lg border bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
+                          <CardContent className="p-4">
+                            {/* Header: User Name, Action Icon, Time */}
+                            <div className="flex items-start justify-between mb-3">
+                              <div className="flex items-center gap-3 flex-1 min-w-0">
+                                <div className={`p-2 rounded-lg ${config.bgColor} flex-shrink-0`}>
+                                  <ActionIcon className={`h-5 w-5 ${config.color}`} />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="font-semibold text-gray-900 dark:text-white truncate">
+                                    {log.user.full_name}
+                                  </p>
+                                  <p className="text-sm text-gray-600 dark:text-gray-400">{config.label}</p>
+                                </div>
+                              </div>
+                              <div className="text-right flex-shrink-0 ml-2">
+                                <p className="text-sm font-medium text-gray-900 dark:text-white">
+                                  {formatTime(log.created_at)}
+                                </p>
+                              </div>
+                            </div>
+
+                            {/* Email */}
+                            <div className="mb-3">
+                              <p className="text-sm text-gray-600 dark:text-gray-400 break-all">{log.user.email}</p>
+                            </div>
+
+                            {/* Entity Badge */}
+                            {log.entity_type && (
+                              <div className="mb-3">
+                                <Badge className="bg-gray-100 text-gray-800 border border-gray-300 pointer-events-none dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600 text-xs">
+                                  {log.entity_type}
+                                  {log.entity_id && (
+                                    <span className="text-gray-500 ml-1">
+                                      #{log.entity_id.slice(0, 8)}
+                                    </span>
+                                  )}
+                                </Badge>
+                              </div>
+                            )}
+
+                            {/* Info Grid */}
+                            <div className="grid grid-cols-2 gap-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+                              {log.ip_address && (
+                                <div>
+                                  <p className="text-xs text-gray-500 dark:text-gray-400">IP Address</p>
+                                  <p className="text-sm font-medium text-gray-900 dark:text-white flex items-center gap-1">
+                                    <Globe className="h-3 w-3" />
+                                    {log.ip_address}
+                                  </p>
+                                </div>
+                              )}
+                              {log.user_agent && (
+                                <div>
+                                  <p className="text-xs text-gray-500 dark:text-gray-400">Device</p>
+                                  <p className="text-sm font-medium text-gray-900 dark:text-white flex items-center gap-1">
+                                    <Monitor className="h-3 w-3" />
+                                    {parseUserAgent(log.user_agent)}
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                  </div>
+
+                  {/* Desktop View - Timeline */}
+                  <div className="hidden lg:block space-y-4 pl-6 border-l-2 border-gray-200 dark:border-gray-700">
                     {dayLogs.map((log) => {
                       const config = getActionConfig(log.action);
                       const ActionIcon = config.icon;

@@ -291,8 +291,8 @@ export default function AdminSettings() {
         <div className="space-y-8">
           {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-3">
+            <div className="text-center md:text-left">
+              <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center justify-center md:justify-start gap-3">
                 <Settings className="h-8 w-8 text-[#005EB8]" />
                 Pengaturan Admin
               </h1>
@@ -323,14 +323,14 @@ export default function AdminSettings() {
             <div className="grid lg:grid-cols-3 gap-6">
               <div className="lg:col-span-2">
                 <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
-                  <CardHeader>
+                  <CardHeader className="pb-3 border-b">
                     <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-white text-xl font-bold">
                       <Key className="h-5 w-5 text-[#005EB8]" />
                       Ubah Password
                     </CardTitle>
                     <CardDescription>Pastikan password baru Anda kuat dan mudah diingat</CardDescription>
                   </CardHeader>
-                  <CardContent>
+                  <CardContent className="pt-6">
                     <form onSubmit={handleChangePassword} className="space-y-6">
                       {passwordError && (
                         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 flex items-center gap-3">
@@ -443,13 +443,13 @@ export default function AdminSettings() {
 
               <div className="space-y-6">
                 <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
-                  <CardHeader>
+                  <CardHeader className="pb-3 border-b">
                     <CardTitle className="text-base flex items-center gap-2 text-gray-900 dark:text-white text-xl font-bold">
                       <Shield className="h-5 w-5 text-[#005EB8]" />
                       Kriteria Password
                     </CardTitle>
                   </CardHeader>
-                  <CardContent>
+                  <CardContent className="pt-6">
                     <div className="space-y-3">
                       {passwordCriteria.map((criteria, index) => (
                         <div key={index} className="flex items-center gap-2">
@@ -468,13 +468,13 @@ export default function AdminSettings() {
                 </Card>
 
                 <Card className="rounded-lg border bg-[#005EB8]/5 text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-[#005EB8]">
-                  <CardHeader>
+                  <CardHeader className="pb-3 border-b">
                     <CardTitle className="text-base flex items-center gap-2 text-gray-900 dark:text-white text-xl font-bold">
                       <Info className="h-5 w-5 text-[#005EB8]" />
                       Tips Admin
                     </CardTitle>
                   </CardHeader>
-                  <CardContent>
+                  <CardContent className="pt-6">
                     <ul className="space-y-2 text-sm text-gray-700 dark:text-gray-300">
                       <li className="flex items-start gap-2">
                         <span className="text-[#005EB8]">•</span>
@@ -518,7 +518,7 @@ export default function AdminSettings() {
 
               {/* Add New Setting */}
               <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
-                <CardHeader>
+                <CardHeader className="pb-3 border-b">
                   <CardTitle className="text-base flex items-center gap-2 text-gray-900 dark:text-white text-xl font-bold">
                     <Plus className="h-5 w-5 text-[#005EB8]" />
                     Tambah Setting Baru
@@ -595,7 +595,7 @@ export default function AdminSettings() {
               ) : (
                 Object.entries(groupedSettings).map(([category, categorySettings]) => (
                   <Card key={category} className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-md border-gray-200 dark:border-gray-700">
-                    <CardHeader>
+                    <CardHeader className="pb-3 border-b">
                       <CardTitle className="text-base flex items-center gap-2 text-gray-900 dark:text-white text-xl font-bold capitalize">
                         {getCategoryIcon(category)}
                         {category}

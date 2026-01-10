@@ -214,8 +214,8 @@ export default function StudentsEnrolledPage() {
       <MentorLayout>
         <div className="space-y-8">
           {/* Header */}
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-3">
+          <div className="text-center md:text-left">
+            <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center justify-center md:justify-start gap-3">
                 <Users className="h-8 w-8 text-[#005EB8]" />
               Siswa Terdaftar
             </h1>
@@ -225,7 +225,7 @@ export default function StudentsEnrolledPage() {
           </div>
 
           {/* Stats Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <Card className="rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 border-gray-200 dark:border-gray-700">
               <CardContent className="p-5">
                 <div className="flex items-center gap-3">
@@ -362,7 +362,91 @@ export default function StudentsEnrolledPage() {
                   )}
                 </div>
               ) : (
-                <div className="overflow-x-auto">
+                <>
+                  {/* Mobile & Tablet View - Cards */}
+                  <div className="block lg:hidden p-4 space-y-4">
+                    {filteredStudents.map((student) => (
+                      <Card key={student.id} className="rounded-lg border bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
+                        <CardContent className="p-4">
+                          {/* Header: Student Info & Status */}
+                          <div className="flex items-start justify-between mb-3">
+                            <div className="flex items-center gap-3">
+                              <div className="relative flex-shrink-0">
+                                {student.user.avatar_url ? (
+                                  <img
+                                    src={student.user.avatar_url}
+                                    alt={student.user.full_name}
+                                    className="w-10 h-10 rounded-full object-cover"
+                                  />
+                                ) : (
+                                  <div className="w-10 h-10 rounded-full bg-[#005EB8] flex items-center justify-center text-white font-semibold">
+                                    {student.user.full_name.charAt(0).toUpperCase()}
+                                  </div>
+                                )}
+                                {student.progress >= 100 && (
+                                  <div className="absolute -bottom-1 -right-1 bg-[#008A00] rounded-full p-0.5">
+                                    <GraduationCap className="h-3 w-3 text-white" />
+                                  </div>
+                                )}
+                              </div>
+                              <div className="min-w-0">
+                                <p className="font-medium text-gray-900 dark:text-white truncate">
+                                  {student.user.full_name}
+                                </p>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                                  {student.user.email}
+                                </p>
+                              </div>
+                            </div>
+                            {getStatusBadge(student.progress)}
+                          </div>
+
+                          {/* Course */}
+                          <div className="mb-3">
+                            <p className="text-xs text-gray-500 dark:text-gray-400">Kursus</p>
+                            <p className="text-sm text-gray-900 dark:text-white truncate">
+                              {student.course.title}
+                            </p>
+                          </div>
+
+                          {/* Progress */}
+                          <div className="mb-3">
+                            <div className="flex items-center justify-between mb-1">
+                              <p className="text-xs text-gray-500 dark:text-gray-400">Progress</p>
+                              <span className="text-sm font-medium text-gray-900 dark:text-white">
+                                {student.progress}%
+                              </span>
+                            </div>
+                            <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                              <div
+                                className={`h-full ${getProgressColor(student.progress)} transition-all`}
+                                style={{ width: `${student.progress}%` }}
+                              />
+                            </div>
+                          </div>
+
+                          {/* Footer: Dates */}
+                          <div className="grid grid-cols-2 gap-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+                            <div>
+                              <p className="text-xs text-gray-500 dark:text-gray-400">Terdaftar</p>
+                              <p className="text-sm text-gray-900 dark:text-white">
+                                {formatDate(student.created_at)}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-500 dark:text-gray-400">Terakhir Aktif</p>
+                              <p className="text-sm text-gray-900 dark:text-white">
+                                {formatTimeAgo(student.last_accessed_at)}
+                              </p>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+
+                  {/* Desktop View - Table */}
+                  <div className="hidden lg:block overflow-x-auto">
                   <Table className="min-w-full">
                     <TableHeader>
                       <TableRow className="bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-50 dark:hover:bg-gray-800/50">
@@ -464,8 +548,9 @@ export default function StudentsEnrolledPage() {
                         </TableRow>
                       ))}
                     </TableBody>
-                  </Table>
-                </div>
+                </Table>
+                  </div>
+                </>
               )}
 
               {/* Pagination - Diganti dengan komponen Pagination */}

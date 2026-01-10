@@ -19,6 +19,8 @@ import {
   CheckCircle,
   ListTodo,
   Star,
+  Filter,
+  ArrowUpDown,
 } from 'lucide-react';
 import Link from 'next/link';
 import MentorLayout from '@/components/mentor/mentor-layout';
@@ -472,8 +474,8 @@ export default function MentorCourses() {
 
         <div className="space-y-8">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-3">
+            <div className="text-center md:text-left">
+              <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center justify-center md:justify-start gap-3">
                 <BookOpen className="h-8 w-8 text-[#005EB8]" />
                 Kursus Saya
               </h1>
@@ -481,12 +483,14 @@ export default function MentorCourses() {
                 Kelola semua kursus yang Anda buat
               </p>
             </div>
-            <Link href="/mentor/courses/create">
-              <Button size="lg" className="bg-[#005EB8] hover:bg-[#004A93] text-white">
-                <Plus className="h-5 w-5 mr-2" />
-                Buat Kursus Baru
-              </Button>
-            </Link>
+            <div className="flex justify-center md:justify-end">
+              <Link href="/mentor/courses/create">
+                <Button size="lg" className="bg-[#005EB8] hover:bg-[#004A93] text-white">
+                  <Plus className="h-5 w-5 mr-2" />
+                  Buat Kursus Baru
+                </Button>
+              </Link>
+            </div>
           </div>
 
           {/* Stats Cards */}
@@ -566,7 +570,8 @@ export default function MentorCourses() {
                   <Select value={filterStatus} onValueChange={(value) => {
                     setFilterStatus(value);
                   }}>
-                    <SelectTrigger className="w-[180px]">
+                    <SelectTrigger className="w-full md:w-[180px] h-10 bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600">
+                      <Filter className="h-4 w-4 mr-2 text-gray-400" />
                       <SelectValue placeholder="Status" />
                     </SelectTrigger>
                     <SelectContent>
@@ -579,7 +584,8 @@ export default function MentorCourses() {
                   </Select>
 
                   <Select value={sortBy} onValueChange={setSortBy}>
-                    <SelectTrigger className="w-[180px]">
+                    <SelectTrigger className="w-full md:w-[180px] h-10 bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600">
+                      <ArrowUpDown className="h-4 w-4 mr-2 text-gray-400" />
                       <SelectValue placeholder="Urutkan" />
                     </SelectTrigger>
                     <SelectContent>
